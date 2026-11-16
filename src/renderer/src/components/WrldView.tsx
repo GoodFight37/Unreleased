@@ -309,7 +309,9 @@ export default function WrldView(): JSX.Element {
   // The Widgets layout puts the desktop's player, playlist and clock in place of WRLD's own player and lyrics, in or
   // out of fullscreen. Those are hidden with display rather than unmounted, so switching back doesn't restart the
   // lyric scroll or refetch anything.
-  const wrldWidgets = useVizStore(s => s.wrldWidgets)
+  const developerMode = useStore(s => s.developerMode)
+  const savedWrldWidgets = useVizStore(s => s.wrldWidgets)
+  const wrldWidgets = developerMode && savedWrldWidgets
   const hideForViz = wrldWidgets ? { display: 'none' } : undefined
 
   const textIsDark = useArtTextContrast(artSrc, artError, isDarkSkin, radioFmActive, useThemeBackground ? !isDarkSkin : null)
@@ -547,8 +549,8 @@ export default function WrldView(): JSX.Element {
           // Keyed for the same reason as ProgressiveCover: reusing the element
           // across a track change leaves the old cover painted until the new
           // one decodes.
-          ? <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]} alt="Album art" className="w-full h-full object-cover" onError={() => setArtError(true)} />
-          : <ProgressiveCover src={artSrc} alt="Album art" className="w-full h-full object-cover" onError={() => setArtError(true)} />
+          ? <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]} alt="Album art" className="w-full h-full object-contain" onError={() => setArtError(true)} />
+          : <ProgressiveCover src={artSrc} alt="Album art" className="w-full h-full object-contain" onError={() => setArtError(true)} />
       ) : radioFmActive ? (
         <div className="w-full h-full bg-gradient-to-br from-red-900/60 to-black flex flex-col items-center justify-center gap-2">
           <Radio className={`text-red-400 opacity-70 ${mobile ? 'w-6 h-6' : 'w-16 h-16'}`} />
@@ -811,7 +813,7 @@ export default function WrldView(): JSX.Element {
                 )}
                 {rawLyrics && (
                   <button
-                    onClick={() => setShowLyricsSettings(true)}
+                    onClick={() => developerMode ? setShowLyricsSettings(true) : useStore.getState().openSettings('lyrics')}
                     title="Customize lyrics"
                     className="p-1.5 rounded-full transition-colors hover:bg-white/10"
                     style={{ color: textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)' }}

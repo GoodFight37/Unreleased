@@ -42,9 +42,10 @@ export default function AccountSettings({ page, setPage, openMainView }: {
   openMainView: (view: ViewType) => void
 }): JSX.Element {
   const { account, logoutAccount, setShowUserAuth } = useStorePick('account', 'logoutAccount', 'setShowUserAuth')
+  const developerMode = useStore((s) => s.developerMode)
   const pageRef = useRef<HTMLDivElement>(null)
   // The chat page only exists for chat members; fall back to the menu.
-  const shown: AccountPage = page === 'chat' && account && !hasChatAccess(account) ? 'home' : page
+  const shown: AccountPage = (page === 'developer' && !developerMode) || (page === 'chat' && account && !hasChatAccess(account)) ? 'home' : page
   useContentMotion(pageRef, shown)
 
   if (!account) {
@@ -87,7 +88,7 @@ export default function AccountSettings({ page, setPage, openMainView }: {
               <SettingsLink icon={MessageSquare} color="#7c3aed" label="Chat" sub="Online status, read receipts and devices" onClick={() => setPage('chat')} />
             )}
             <SettingsLink icon={Upload} color="#db2777" label="Your uploads" sub="Cover art, remixes & edits and CDN nodes" onClick={() => setPage('uploads')} />
-            <SettingsLink icon={Code2} color="#4b5563" label="Developer" sub="API keys and your auth token" onClick={() => setPage('developer')} />
+            {developerMode && <SettingsLink icon={Code2} color="#4b5563" label="Developer" sub="API keys and your auth token" onClick={() => setPage('developer')} />}
           </Group>
           <div className="glass-pane rounded-2xl">
             <button
@@ -119,7 +120,7 @@ export default function AccountSettings({ page, setPage, openMainView }: {
             <>
               <Group title="Cover art"><MyCoverArt /></Group>
               <Group title="Remixes & edits"><MyCommunityEdits /></Group>
-              <Group title="CDN nodes"><MyCdnNodes /></Group>
+              {developerMode && <Group title="CDN nodes"><MyCdnNodes /></Group>}
             </>
           )}
           {shown === 'developer' && <DeveloperPage />}

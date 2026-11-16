@@ -125,6 +125,7 @@ let appSettings = {
   // visible strip or the overflow — the user pins it via Taskbar settings).
   minimizeTo: 'taskbar',
   startupView: 'api-tracker',
+  startWithWindows: false,
   discordRpcEnabled: true,
   // What the "Listening to X" header in Discord's Rich Presence shows —
   // 'app' leaves it unset (falls back to the app's own registered name,
@@ -2113,7 +2114,14 @@ ipcMain.handle('clear-image-cache', async () => {
 })
 
 // ── IPC: app settings ─────────────────────────────────────────────────────────
-ipcMain.handle('get-app-settings', () => appSettings)
+ipcMain.handle('get-app-settings', () => {
+  const startupAvailable = process.platform === 'win32' && app.isPackaged
+  return {
+    ...appSettings,
+    startupAvailable,
+    startWithWindows: startupAvailable && app.getLoginItemSettings().openAtLogin,
+  }
+})
 
 const ALLOWED_SETTING_KEYS = new Set([
   'downloadPath',
@@ -2121,6 +2129,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'minimizeToTray',
   'minimizeTo',
   'startupView',
+  'startWithWindows',
   'discordRpcEnabled',
   'discordRpcLabel',
   'miniPlayerHidesWindows',
@@ -2131,6 +2140,13 @@ const ALLOWED_SETTING_KEYS = new Set([
 
 ipcMain.handle('set-app-setting', (_, key, value) => {
   if (typeof key !== 'string' || !ALLOWED_SETTING_KEYS.has(key)) return false
+  if (key === 'startWithWindows') {
+    if (typeof value !== 'boolean' || process.platform !== 'win32' || !app.isPackaged) return false
+    try {
+      app.setLoginItemSettings({ openAtLogin: value })
+      if (app.getLoginItemSettings().openAtLogin !== value) return false
+    } catch { return false }
+  }
   appSettings[key] = value
   // Turning the option off drops what was recorded, so windows go straight back
   // to their built-in default sizes instead of silently keeping the old ones.

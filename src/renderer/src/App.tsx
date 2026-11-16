@@ -65,6 +65,8 @@ function getViewFromPath(pathname: string): ViewType {
 }
 
 import Sidebar from './components/Sidebar'
+import CollectionNavigation from './components/CollectionNavigation'
+import './components/Coffre.css'
 import AmbientBackdrop from './components/AmbientBackdrop'
 import AutoHideNav, { NAV_PILL_EVENT } from './components/AutoHideNav'
 import BottomNav from './components/BottomNav'
@@ -201,13 +203,13 @@ function renderView(v: ViewType): JSX.Element {
       : v === 'api-files' ? <ApiFilesView />
       : v === 'contributor-profile' ? <ContributorProfileView />
       : v === 'admin' ? <AdminPage />
-      : v === 'liked' ? <LikedSongsView />
+      : v === 'liked' ? <div className="collection-page"><CollectionNavigation /><LikedSongsView /></div>
       : v === 'shared-playlist' ? <SharedPlaylistView />
       : v === 'track' ? <TrackView />
       : v === 'thanks' ? <ThankYouView />
       : v === 'editor-profile' ? <EditorProfileView />
       : v === 'docs' ? <DocsPage />
-      : v === 'albums' ? <AlbumsView />
+      : v === 'albums' ? <div className="collection-page"><CollectionNavigation /><AlbumsView /></div>
       : v === 'news' ? <NewsView />
       : v === 'heardle' ? <HeardleView />
       : v === 'wordle' ? <WordleView />
@@ -216,7 +218,7 @@ function renderView(v: ViewType): JSX.Element {
       : v === 'statistics' ? <StatisticsView />
       : v === 'public-profile' ? <PublicProfileView />
       : v === 'terminal' ? <TerminalPage />
-      : v === 'library' ? <LibraryTab />
+      : v === 'library' ? <div className="collection-page"><CollectionNavigation /><LibraryTab /></div>
       : v === 'local-editor' ? <LocalEditorPage />
       : v === 'not-found' ? <NotFoundView />
       : <ApiTrackerView />
@@ -245,8 +247,12 @@ export default function App(): JSX.Element {
     }
   }, [])
   const showRecognition = useStore((s) => s.showRecognition)
-  const { showNowPlaying, showQueue, showSettings, setShowSettings, showDiagnostics, setShowDiagnostics, activeView, sidebarPosition, navStyle, appMenuPosition, loadAccount, completeDiscordLogin, showUserAuth, setShowUserAuth, loadLibrary, wrldFullscreen, loadOfflineLibrary, syncOfflinePlaylists, libraryAutoRefresh, libraryFolders, scanLibrary, prefetchApiData, refreshPlaylists, previousView, autoHideNav, showNotifications, setShowNotifications } = useStorePick(
+  const { showNowPlaying, showQueue, showSettings, setShowSettings, showDiagnostics, setShowDiagnostics, activeView, sidebarPosition, navStyle: configuredNavStyle, appMenuPosition: configuredMenuPosition, loadAccount, completeDiscordLogin, showUserAuth, setShowUserAuth, loadLibrary, wrldFullscreen, loadOfflineLibrary, syncOfflinePlaylists, libraryAutoRefresh, libraryFolders, scanLibrary, prefetchApiData, refreshPlaylists, previousView, autoHideNav: configuredAutoHide, showNotifications, setShowNotifications } = useStorePick(
     'showNowPlaying', 'showQueue', 'showSettings', 'setShowSettings', 'showDiagnostics', 'setShowDiagnostics', 'activeView', 'sidebarPosition', 'navStyle', 'appMenuPosition', 'loadAccount', 'completeDiscordLogin', 'showUserAuth', 'setShowUserAuth', 'loadLibrary', 'wrldFullscreen', 'loadOfflineLibrary', 'syncOfflinePlaylists', 'libraryAutoRefresh', 'libraryFolders', 'scanLibrary', 'prefetchApiData', 'refreshPlaylists', 'previousView', 'autoHideNav', 'showNotifications', 'setShowNotifications')
+  const developerMode = useStore((s) => s.developerMode)
+  const navStyle = developerMode ? configuredNavStyle : 'pill'
+  const appMenuPosition = developerMode ? configuredMenuPosition : 'sidebar'
+  const autoHideNav = developerMode && configuredAutoHide
   // Opening the terminal from a view that holds unsaved local state (the song
   // editor's draft, a half-filled submission, an open playlist...) must not
   // unmount it - closing the terminal would otherwise remount it empty. Derived
@@ -569,7 +575,7 @@ export default function App(): JSX.Element {
                 {v === 'editor' ? <EditorPage />
                   : v === 'contributor' ? <ContributorPage />
                   : v === 'albums-admin' ? <AlbumsAdminView />
-                  : v === 'playlists' ? <PlaylistsView />
+                  : v === 'playlists' ? <div className="collection-page"><CollectionNavigation /><PlaylistsView /></div>
                   : <ChatView />}
               </ViewFade>
             ))}

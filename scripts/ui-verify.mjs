@@ -285,6 +285,8 @@ async function runLayoutSensors(page, scenario) {
         : [darkTheme ? [28, 30, 42] : [235, 238, 245]]
       const mTitle = modal.querySelector('h1, h2')
       const mMuted = Array.from(modal.querySelectorAll('p.text-text-muted, span.text-text-muted')).find((el) => el.textContent?.trim() && rectOf(el))
+      const soundPanelLink = Array.from(modal.querySelectorAll('button')).find((el) => el.textContent?.trim() === 'Open sound panel')
+      if (soundPanelLink) measureElContrast('settings-sound-panel', soundPanelLink, modalBgs, 4.5)
       measureElContrast('modal-title', mTitle, modalBgs, 4.5)
       measureElContrast('modal-muted', mMuted, modalBgs, 4.5)
     }
@@ -649,7 +651,7 @@ async function main() {
     const menuBtn = win.locator('button[title="Menu"] >> visible=true').first()
     await menuBtn.click()
     await win.waitForSelector('.app-menu-glass[role="menu"]', { timeout: 5_000 })
-    for (const tabName of ['Edit', 'View', 'Controls', 'Tools', 'Help', 'File']) {
+    for (const tabName of ['Around Juice', 'Create', 'App']) {
       await win.locator(`.app-menu-glass [role="tab"]:has-text("${tabName}")`).click()
     }
     await win.waitForTimeout(200)
@@ -804,6 +806,56 @@ async function main() {
     await win.waitForTimeout(300)
     const settingsLightReport = await runLayoutSensors(win, 'settings-light')
     scenes.push(settingsDarkReport, settingsLightReport)
+    const coffreChecks = []
+    const navLabels = await win.locator('.app-sidebar [data-indicator-key]').allTextContents()
+    coffreChecks.push({ name: 'three-primary-destinations', labels: navLabels, pass: navLabels.length === 3 && ['Discover', 'Catalogue', 'Collection'].every((name) => navLabels.some((label) => label.includes(name))) })
+    await win.evaluate(() => window.__store.getState().openSettings('appearance'))
+    await win.waitForTimeout(300)
+    const appearanceText = await win.locator('.settings-content').innerText()
+    coffreChecks.push({ name: 'simple-appearance', pass: ['Theme', 'Liquid Glass & animations', 'App text size'].every((name) => appearanceText.includes(name)) && !['Accent color', 'App font', 'Custom fonts', 'App gradients', 'Navigation style'].some((name) => appearanceText.includes(name)) })
+    await win.locator('.settings-shell').getByRole('button', { name: 'Advanced', exact: true }).click()
+    await win.waitForTimeout(250)
+    const advanced = await win.locator('.settings-content').evaluate((el) => ({ text: el.textContent, scroll: el.scrollHeight, height: el.clientHeight }))
+    coffreChecks.push({ name: 'advanced-one-screen', ...advanced, pass: advanced.scroll <= advanced.height + 2 && ['Start with Windows', 'Global shortcuts', 'Keyboard shortcuts', 'Developer options'].every((name) => advanced.text.includes(name)) && !['Pop-out windows', 'Diagnostic logs', 'API servers', 'Screen-edge light'].some((name) => advanced.text.includes(name)) })
+    const settingsSearch = win.locator('.settings-shell input[placeholder="Search settings"]')
+    await settingsSearch.fill('cache')
+    await win.locator('.settings-content h3').filter({ hasText: 'No results' }).waitFor({ timeout: 3000 })
+    const cacheSearch = await win.locator('.settings-content').innerText()
+    coffreChecks.push({ name: 'technical-settings-not-searchable', text: cacheSearch, pass: cacheSearch.includes('No results') && !cacheSearch.includes('Clear cache') })
+    await settingsSearch.fill('Lyrics alignment')
+    await win.waitForTimeout(100)
+    await win.locator('.settings-content button').filter({ hasText: 'Lyrics alignment' }).first().click()
+    await win.waitForTimeout(200)
+    const lyricsText = await win.locator('.settings-content').innerText()
+    coffreChecks.push({ name: 'search-opens-visible-setting', pass: lyricsText.includes('Lyrics alignment') && !lyricsText.includes('Lyrics font') && !lyricsText.includes('Lyric colors') })
+    await settingsSearch.fill('Global shortcuts')
+    await win.locator('.settings-content button').filter({ hasText: 'Global shortcuts' }).first().click()
+    await win.waitForTimeout(250)
+    coffreChecks.push({ name: 'global-shortcuts-search-opens-switch', pass: await win.getByRole('switch', { name: 'Global shortcuts', exact: true }).isVisible() && await win.getByRole('switch', { name: 'Start with Windows', exact: true }).isVisible() && await win.getByRole('switch', { name: 'Developer options', exact: true }).isVisible() })
+    await settingsSearch.fill('Audio quality')
+    await win.locator('.settings-content button').filter({ hasText: 'Audio quality' }).first().click()
+    await win.waitForTimeout(250)
+    const audioText = await win.locator('.settings-content').innerText()
+    coffreChecks.push({ name: 'audio-quality-search-opens-visible-row', pass: audioText.includes('Audio quality') && audioText.includes('Equalizer') && !audioText.includes('Remember queue and now playing') })
+    for (const theme of ['glass-dark', 'glass-light']) {
+      await win.evaluate((value) => window.__store.getState().setTheme(value), theme)
+      await win.waitForTimeout(350)
+      const scenario = `settings-playback-${theme === 'glass-dark' ? 'dark' : 'light'}`
+      scenes.push(await runLayoutSensors(win, scenario))
+    }
+    await settingsSearch.fill('Equalizer')
+    await win.locator('.settings-content button').filter({ hasText: 'Equalizer' }).first().click()
+    await win.getByRole('button', { name: 'Open sound panel', exact: true }).click()
+    await win.waitForTimeout(400)
+    const soundPanelOpen = await win.evaluate(() => window.__store.getState().showEqPanel && !window.__store.getState().showSettings)
+    coffreChecks.push({ name: 'equalizer-search-opens-sound-panel', pass: soundPanelOpen && await win.getByText('Equalizer', { exact: true }).first().isVisible() })
+    await win.evaluate(() => window.__store.getState().setShowEqPanel(false))
+    await win.evaluate(() => window.__store.getState().setActiveView('wrld'))
+    await win.waitForTimeout(400)
+    coffreChecks.push({ name: 'wrld-hides-technical-controls', pass: await win.getByRole('button', { name: 'Show widgets', exact: true }).count() === 0 && await win.getByRole('button', { name: 'Focus on music', exact: true }).count() === 0 && await win.getByRole('button', { name: 'Visualizer settings', exact: true }).count() === 0 && await win.getByRole('button', { name: /Turn (on|off) 999 FM/ }).count() > 0 })
+    await win.evaluate(() => window.__store.getState().openSettings('appearance'))
+    await win.waitForTimeout(150)
+
     await win.evaluate(() => window.__store.setState({ showSettings: false, theme: 'glass-dark' }))
     await win.waitForTimeout(200)
 
@@ -1216,8 +1268,11 @@ async function main() {
         return r ? { left: Math.round(r.left), width: Math.round(r.width) } : null
       })
     }
+    await win.evaluate(() => window.__store.getState().setDeveloperMode(true))
+    await win.waitForTimeout(200)
     const inDetail = await toolbarRect('Detailed view')
     const inList = await toolbarRect('List view')
+    await win.evaluate(() => window.__store.getState().setDeveloperMode(false))
     lot1Checks.push({ name: 'tracker-toolbar-stable', inDetail, inList, pass: !!inDetail && !!inList && inDetail.left === inList.left && inDetail.width === inList.width })
     await win.evaluate(() => window.__store.setState({ showSettings: true }))
     await win.waitForTimeout(60)
@@ -1249,6 +1304,7 @@ async function main() {
     await win.waitForTimeout(200)
 
     const blockingFailures = []
+    for (const check of coffreChecks) if (!check.pass) blockingFailures.push({ kind: 'coffre', ...check })
     for (const check of lot1Checks) {
       if (!check.pass) blockingFailures.push({ type: 'lot1-regression', ...check })
     }
@@ -1427,14 +1483,33 @@ async function main() {
       await win.evaluate(() => window.__store.setState({ showSettings: true }))
       await win.waitForTimeout(350)
       await shot('settings-dark.png')
+      await win.locator('.settings-shell').getByRole('button', { name: 'Advanced', exact: true }).click()
+      await win.waitForTimeout(250)
+      await shot('settings-advanced-dark.png')
+      await win.evaluate(() => window.__store.getState().openSettings('appearance'))
+      await win.waitForTimeout(200)
       await win.evaluate(() => window.__store.getState().setTheme('glass-light'))
       await win.waitForTimeout(350)
       await shot('settings-light.png')
+      await win.evaluate(() => window.__store.getState().openSettings('playback'))
+      await win.waitForTimeout(250)
+      await shot('settings-playback-light.png')
+      await win.evaluate(() => window.__store.getState().setTheme('glass-dark'))
+      await win.waitForTimeout(350)
+      await shot('settings-playback-dark.png')
       await win.evaluate(() => window.__store.setState({ showSettings: false, sidebarPosition: 'top', isPlaying: false, theme: 'glass-dark' }))
       await win.waitForTimeout(250)
 
       await win.evaluate(() => window.__store.getState().setActiveView('library'))
       await win.waitForTimeout(300)
+      await win.evaluate(() => window.__store.getState().setActiveView('home'))
+      await win.waitForTimeout(400)
+      await shot('home-dark.png')
+      await win.evaluate(() => window.__store.getState().setTheme('glass-light'))
+      await win.waitForTimeout(300)
+      await shot('home-light.png')
+      await win.evaluate(() => { window.__store.getState().setTheme('glass-dark'); window.__store.getState().setActiveView('library') })
+      await win.waitForTimeout(250)
       await shot('library-player-dark.png')
 
       await win.locator('button[title="Menu"] >> visible=true').first().click()
@@ -1488,6 +1563,7 @@ async function main() {
       commandPaletteCheck,
       pixelContrastReport,
       lot1Checks,
+      coffreChecks,
       trackerInspect,
       navPillOverlaps,
       offOnDiffs,

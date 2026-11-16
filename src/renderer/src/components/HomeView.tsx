@@ -5,6 +5,7 @@ import { AlbumArtThumbnail } from './AlbumArtThumbnail'
 import { ProgressiveCover } from './ProgressiveCover'
 import { Tile } from './Tile'
 import HomeHero from './HomeHero'
+import CoffreHome from './CoffreHome'
 import OnThisDayTile from './OnThisDayTile'
 import { useHomeData, HOME_ALBUMS_SHOWN, type GameCard, type HomePlaylistCard, type HomeAlbumCard } from '../hooks/useHomeData'
 import { useElementSize } from '../hooks/useElementSize'
@@ -466,11 +467,13 @@ function SyncToolCard(): JSX.Element {
 }
 
 export default function HomeView(): JSX.Element {
+  const data = useHomeData()
+  const developerMode = useStore((s) => s.developerMode)
   const {
     account, likedTrackIds, radioFmIsLive, radioFmNowPlaying, setActiveView,
     showSection, recent, newsItems, games, playlistRow, albumRow, albumsPending,
     openTrack, openNewsItem, openRadioFm,
-  } = useHomeData()
+  } = data
   const { playTrack, playNext } = useStorePick('playTrack', 'playNext')
   const canEdit = useCanEdit()
   const [ctxMenu, setCtxMenu] = useState<SongContextMenuState | null>(null)
@@ -500,6 +503,8 @@ export default function HomeView(): JSX.Element {
     showTools && 'tools',
   ] as const).filter((s): s is MainSection => !!s)
   const spans = bentoSpans(mainSections, mainWidth >= BENTO_MIN_WIDTH)
+
+  if (!developerMode) return <CoffreHome data={data} />
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto glass-scroll pb-player">

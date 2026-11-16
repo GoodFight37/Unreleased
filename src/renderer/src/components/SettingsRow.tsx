@@ -102,14 +102,15 @@ export function Row({ icon: Icon, iconColor, label, sub, labelExtra, children }:
   )
 }
 
-export function Toggle({ on, onClick, locked, lockedReason = 'Locked off while the Pill navigation style is selected' }: {
-  on: boolean; onClick: () => void; locked?: boolean; lockedReason?: string
+export function Toggle({ on, onClick, label, locked, lockedReason = 'Locked off while the Pill navigation style is selected' }: {
+  on: boolean; onClick: () => void; label?: string; locked?: boolean; lockedReason?: string
 }): JSX.Element {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
+      aria-label={label}
       onClick={onClick}
       disabled={locked}
       title={locked ? lockedReason : undefined}

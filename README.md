@@ -4,16 +4,19 @@ An alternative look for **[Unreleased](https://github.com/Juice-WRLD-API/Unrelea
 the desktop player for Juice WRLD's unreleased catalogue built on the
 [Juice WRLD API](https://juicewrldapi.com).
 
-Same player, same catalogue, same accounts and community features: this fork
-only changes how it looks and feels. It's a different take on the interface,
-built around a soft "liquid glass" style and themes drawn from the albums.
+Same player, same catalogue, same accounts and community features, with a
+different layout built around the music: fewer controls, larger covers,
+"liquid glass" on floating controls and themes drawn from the albums.
 It isn't meant to replace the original app; both can run side by side.
 
 All credit for the player, the API and the catalogue goes to the Unreleased
 team. For the full feature list, see the
 [original README](https://github.com/Juice-WRLD-API/Unreleased#readme).
 
-![Tracker in the Dark theme](docs/screenshots/tracker-dark.png)
+![Discover in the Dark theme](docs/screenshots/home.png)
+
+Screenshots use a local verification track in the player; catalogue titles
+and cover artwork come from the API.
 
 ---
 
@@ -36,12 +39,20 @@ team. For the full feature list, see the
 ![Tracker with the Goodbye & Good Riddance theme](docs/screenshots/tracker-album-theme.png)
 
 **Layout**
-- **Fixed top bar** with the current page named in it.
-- **Settings in six pages** (Appearance, Playback & sound, Lyrics & WRLD,
-  Library & downloads, Accounts, Advanced). Developer and staff tools only
-  show once Developer mode is turned on.
-- **Eras row in the Tracker**: every era in release order, with its own
-  artwork, colour and song count, one click to filter.
+- **Three main destinations:** Discover, Catalogue and Collection. Playlists,
+  liked songs and albums sit together inside Collection.
+- **A cover-led home:** resume listening, find unreleased tracks and browse
+  Juice WRLD's eras through their artwork and playable song counts.
+- **A quieter Catalogue:** search and filters stay close; sections and named
+  version groups open when needed. Detailed layout controls stay in Developer mode.
+- **One animated menu** for settings, shortcuts, community features and
+  creative tools, without repeating settings across several menus.
+- **Simple settings in six pages:** theme, effects, audio output, equalizer,
+  lyrics, music folders, downloads and accounts. Technical controls and detailed
+  customization remain available through Developer mode. Settings always open
+  large inside the main window.
+- **Start with Windows** for installed Windows builds; source builds explain
+  why that switch is unavailable.
 - **Audio quality tag** next to the artist in the player (for example
   `FLAC 24/96`, `MP3 320`).
 - **Command palette** (`Ctrl+K`) to jump to any page, tool or theme.
@@ -49,6 +60,8 @@ team. For the full feature list, see the
   16:9 and other formats.
 
 ![Settings](docs/screenshots/settings.png)
+
+![Catalogue in the Dark theme](docs/screenshots/tracker-dark.png)
 
 **Under the hood**
 - Its own app ID and data folder, so it installs and runs next to the

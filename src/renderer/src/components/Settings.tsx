@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, ReactNode, ElementType, CSSProperties } from 'react'
 import {
-  X, Brush, Palette, Volume2, Zap, Clock, Github, MessageCircle, PenLine, BookOpen, Eye, EyeOff, ChevronDown, Globe, RefreshCw, DownloadCloud, FolderOpen, FolderPlus, Monitor, BellOff, Minus, Loader2, Plus, AlignLeft, FileText, Trash2, Wrench, FlaskConical, PanelLeft, PanelTop, Waves, Keyboard, RotateCcw, AppWindow, PictureInPicture2, Minimize2, ListOrdered, GripVertical, CloudUpload, Type, AlignCenter, Menu, Upload, ScrollText, ShieldCheck, Disc, Images, Search, Server, Home, AudioLines, SlidersHorizontal, Bell, Bug, House, Heart, User, Check,
+  ArrowLeft, ArrowRight, X, Brush, Palette, Volume2, Zap, Clock, Github, MessageCircle, PenLine, BookOpen, Eye, EyeOff, ChevronDown, Globe, RefreshCw, DownloadCloud, FolderOpen, FolderPlus, Monitor, BellOff, Minus, Loader2, Plus, AlignLeft, FileText, Trash2, Wrench, FlaskConical, PanelLeft, PanelTop, Waves, Keyboard, RotateCcw, AppWindow, PictureInPicture2, Minimize2, ListOrdered, GripVertical, CloudUpload, Type, AlignCenter, Menu, Upload, ScrollText, ShieldCheck, Disc, Images, Search, Server, Home, AudioLines, SlidersHorizontal, Bell, Bug, House, Heart, User, Check,
   Activity, Headphones,
 } from 'lucide-react'
 import { DebugAnonymousToggle, DebugLogOpenButton, DebugRecordButton } from './DebugRecorder'
 import { ADDRESSES as DONATION_ADDRESSES, AddressRow as DonationAddressRow } from './DonationNotice'
 import VizControls from './VizControls'
+import { audioQualityLabel } from '../lib/audioQuality'
+import { showAppToast } from '../lib/appToast'
 import { useVizStore } from '../store/vizStore'
 import AccountSettings, { type AccountPage } from './AccountSettings'
 import { useStore, useStorePick, type AppMenuPosition, type PopoutWindowKind } from '../store/useStore'
@@ -112,7 +114,7 @@ function tabFromLink(t: string): Tab {
 // the same gates the rows themselves are rendered behind, so a search never
 // offers to jump somewhere the tab doesn't actually exist.
 // `page` is the Account sub-page a match lives on.
-const SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOnly?: boolean; devOnly?: boolean; page?: AccountPage }[] = [
+const ALL_SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOnly?: boolean; devOnly?: boolean; page?: AccountPage }[] = [
   // Account
   { tab: 'account', label: 'Display name' },
   { tab: 'account', label: 'Profile photo' },
@@ -216,7 +218,7 @@ const SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOn
   { tab: 'app', label: 'Solo mini player', electronOnly: true },
   { tab: 'connections', label: 'Show Discord Status', sub: 'Discord Rich Presence', electronOnly: true },
   { tab: 'connections', label: 'Discord status header', sub: 'Artist, song name or Unreleased', electronOnly: true },
-  { tab: 'app', label: 'Developer options', sub: 'Shows developer tools: Glass Lab, diagnostics, logs, cache and API servers', electronOnly: true },
+  { tab: 'app', label: 'Developer options', sub: 'Show technical tools and detailed preferences', electronOnly: true },
   { tab: 'app', label: 'Pop-out windows', sub: 'Which panels open in their own window', electronOnly: true },
   { tab: 'app', label: 'Equalizer as pop-out', sub: 'Open the equalizer in its own window instead of an in-app panel', electronOnly: true },
   // Developer
@@ -240,6 +242,21 @@ const SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOn
   { tab: 'about', label: 'Become a Contributor' },
   { tab: 'about', label: 'FAQ', sub: 'What is this? Who are you? Why did you build this? Technical stuff?' },
 ]
+const FAN_SETTINGS_LABELS = new Set([
+  'Theme', 'Liquid Glass & animations', 'App text size', 'Audio output', 'Equalizer', 'Audio quality',
+  'Pause when headphones disconnect', 'Lyrics sync', 'Lyrics text size', 'Lyrics alignment',
+  'Library folders', 'Download folder', 'Offline songs folder', 'Offline downloads',
+  'Display name', 'Profile photo', 'Bio', 'Show listening history', 'Show public playlists',
+  "Share what you're listening to", 'Username', 'Password', 'Two-factor authentication', 'Passkeys',
+  'Chat online status and read receipts', 'Last.fm scrobbling', 'Show Discord Status', 'Log out',
+  'Start with Windows', 'Keyboard shortcuts', 'Global shortcuts', 'Developer options', 'About', 'Feedback',
+])
+const SETTINGS_SEARCH_INDEX = ALL_SETTINGS_SEARCH_INDEX.concat([
+  { tab: 'playback' as Tab, label: 'Equalizer', sub: 'Open the sound panel and presets' },
+  { tab: 'playback' as Tab, label: 'Audio quality', sub: 'Original file format and bitrate' },
+  { tab: 'app' as Tab, label: 'Start with Windows', electronOnly: true },
+]).map((row) => ({ ...row, devOnly: row.devOnly || !FAN_SETTINGS_LABELS.has(row.label) || row.page === 'developer' }))
+
 
 // One line of the "Lyric colors" setting: presets + a custom picker, with
 // "Auto" (value === null) meaning "leave it to the surface's own colors" —
@@ -457,6 +474,8 @@ interface AppSettings {
   minimizeToTray: boolean
   minimizeTo: 'taskbar' | 'tray'
   startupView: string
+  startWithWindows: boolean
+  startupAvailable: boolean
   discordRpcEnabled: boolean
   discordRpcLabel: 'app' | 'artist' | 'song'
   offlineLibraryPath: string
@@ -694,6 +713,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     minimizeToTray: false,
     minimizeTo: 'taskbar',
     startupView: 'api-tracker',
+    startWithWindows: false,
+    startupAvailable: false,
     discordRpcEnabled: true,
     discordRpcLabel: 'artist',
     offlineLibraryPath: '',
@@ -746,6 +767,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     return () => window.removeEventListener('keydown', onKey, true)
   }, [recording, setHotkeyBinding, setGlobalHotkeyBinding])
 
+  const [detailPage, setDetailPage] = useState<'shortcuts' | 'about' | null>(() => settingsTab === 'shortcuts' || settingsTab === 'about' ? settingsTab : null)
+  const playingInfo = useStore((s) => s.currentTrackFull)
   const [tab, setTab] = useState<Tab>(settingsTab ? TAB_GROUP[tabFromLink(settingsTab)] ?? 'appearance' : 'appearance')
   const { containerRef: categoryRef, indicatorRef: categoryIndicatorRef } = useSlidingIndicator<HTMLDivElement>(tab)
   const { containerRef: mobileCategoryRef, indicatorRef: mobileCategoryIndicatorRef } = useSlidingIndicator<HTMLDivElement>(tab)
@@ -760,7 +783,12 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     { id: 'account', label: 'Accounts', icon: User, color: '#64748b', gap: true },
     { id: 'app', label: 'Advanced', icon: SlidersHorizontal, color: '#6b7280' },
   ]
-  const shows = (section: Tab): boolean => TAB_GROUP[section] === tab
+  const shows = (section: Tab): boolean => {
+    if (TAB_GROUP[section] !== tab) return false
+    if (developerMode) return true
+    if (tab === 'app') return detailPage ? section === detailPage : section === 'app'
+    return !['general', 'navigation', 'desktop', 'developer'].includes(section)
+  }
 
 
   // ── Settings search — a flat filter over SETTINGS_SEARCH_INDEX rather than
@@ -773,9 +801,9 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
   const searchResults = settingsQueryTrimmed
     ? SETTINGS_SEARCH_INDEX.filter((r) =>
         (!r.electronOnly || isElectron) &&
-        (!r.devOnly || developerMode || !isElectron) &&
+        (!r.devOnly || developerMode) &&
         (r.label.toLowerCase().includes(settingsQueryTrimmed) || r.sub?.toLowerCase().includes(settingsQueryTrimmed))
-      )
+      ).map((row) => row.label === 'Global shortcuts' && !developerMode ? { ...row, tab: 'app' as Tab } : row)
     : []
   // A page holds several sections, so a search hit or deep link also scrolls to its section.
   const [jumpSection, setJumpSection] = useState<Tab | null>(settingsTab ? tabFromLink(settingsTab) : null)
@@ -789,6 +817,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
   }, [jumpSection, tab])
   const jumpToResult = (t: Tab, page?: AccountPage): void => {
     setTab(TAB_GROUP[t] ?? t)
+    setDetailPage(t === 'shortcuts' || t === 'about' ? t : null)
     if (TAB_GROUP[t] === 'account') setAccountPage(t === 'account' ? page ?? 'home' : 'home')
     setSettingsQuery('')
     setJumpSection(t)
@@ -800,6 +829,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
   useEffect(() => {
     if (!settingsTab) return
     setTab(TAB_GROUP[tabFromLink(settingsTab)] ?? 'appearance')
+    setDetailPage(settingsTab === 'shortcuts' || settingsTab === 'about' ? settingsTab : null)
     setJumpSection(tabFromLink(settingsTab))
     setSettingsTab(null)
   }, [settingsTab, setSettingsTab])
@@ -855,7 +885,12 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
   const setSetting = async (key: keyof AppSettings, value: unknown) => {
     if (!el) return
     setAppSettings((prev) => ({ ...prev, [key]: value }))
-    await el.setAppSetting(key, value)
+    try {
+      if (await el.setAppSetting(key, value) === false) throw new Error('This setting could not be saved')
+    } catch (error) {
+      setAppSettings((prev) => ({ ...prev, [key]: appSettings[key] }))
+      showAppToast(error instanceof Error ? error.message : 'This setting could not be saved')
+    }
   }
 
   // ── Beta channel — join needs a valid access code (verified in main.js
@@ -997,7 +1032,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             <button
               key={t.id}
               data-indicator-key={t.id}
-              onClick={() => { setTab(t.id); setSettingsQuery('') }}
+              onClick={() => { setTab(t.id); setDetailPage(null); setSettingsQuery('') }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
                 tab === t.id ? 'text-accent' : 'text-text-muted hover:text-text-primary bg-[var(--surface-overlay)]'
               }`}
@@ -1017,7 +1052,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
               <button
                 key={t.id}
                 data-indicator-key={t.id}
-                onClick={() => { setTab(t.id); if (t.id === 'account') setAccountPage('home'); setSettingsQuery('') }}
+                onClick={() => { setTab(t.id); setDetailPage(null); if (t.id === 'account') setAccountPage('home'); setSettingsQuery('') }}
                 className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl text-sm font-medium transition-colors mb-0.5 ${t.gap && i > 0 ? 'mt-3' : ''} ${
                   tab === t.id ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-[var(--fill)]'
                 }`}
@@ -1196,7 +1231,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       })}
                     </div>
                   </div>
-                  <div className="py-3 border-b border-[var(--border)] last:border-b-0">
+                  {developerMode && (<div className="py-3 border-b border-[var(--border)] last:border-b-0">
                     <div className="flex items-center gap-2.5 mb-2.5">
                       <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: '#ec4899' }}>
                         <Palette size={13} className="text-white" strokeWidth={2.25} />
@@ -1224,29 +1259,29 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         pipette
                       />
                     </div>
-                  </div>
+                  </div>)}
                 </SettingsGroup>
                 <SettingsGroup title="Effects">
                   <Row icon={Waves} iconColor="#8b5cf6" label="Liquid Glass & animations" sub="On by default. Follow system for accessibility, or reduce effects to save resources.">
                     <ThemedSelect value={effectsMode} onChange={v => setEffectsMode(v as EffectsMode)} options={[{value:'on',label:'On'}, {value:'system',label:'Follow system'}, {value:'reduced',label:'Reduced'}]} title="Liquid Glass and animations" className="min-w-[140px]" />
                   </Row>
-                  <Row
+                  {developerMode && (<Row
                     icon={Waves}
                     iconColor="#8b5cf6"
                     label="App gradients"
                     sub="Accent-tinted gradients behind the app and sidebar"
                   >
                     <Toggle on={gradientsEnabled} onClick={() => setGradientsEnabled(!gradientsEnabled)} />
-                  </Row>
-                  <Row
+                  </Row>)}
+                  {developerMode && (<Row
                     icon={Waves}
                     iconColor="#8b5cf6"
                     label="Control gradients"
                     sub="Accent-tinted gradients on the player bar, toggle groups, search bars, badges, and menus"
                   >
                     <Toggle on={surfaceGradientsEnabled} onClick={() => setSurfaceGradientsEnabled(!surfaceGradientsEnabled)} />
-                  </Row>
-                  <Row
+                  </Row>)}
+                  {developerMode && (<Row
                     icon={Images}
                     iconColor="#8b5cf6"
                     label="Playlist header art"
@@ -1261,10 +1296,10 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       const heroOn = getSkin(theme).dark ? playlistHeroEnabledDark : playlistHeroEnabledLight
                       return <Toggle on={heroOn} onClick={() => setPlaylistHeroEnabled(!heroOn)} />
                     })()}
-                  </Row>
+                  </Row>)}
                 </SettingsGroup>
                 <SettingsGroup title="Text">
-                  <div className="py-3 border-b border-[var(--border)] last:border-b-0">
+                  {developerMode && (<div className="py-3 border-b border-[var(--border)] last:border-b-0">
                     <div className="flex items-center gap-2.5 mb-2.5">
                       <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: '#7c3aed' }}>
                         <Type size={13} className="text-white" strokeWidth={2.25} />
@@ -1303,7 +1338,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         )
                       })}
                     </div>
-                  </div>
+                  </div>)}
                   <div className="py-3 border-b border-[var(--border)] last:border-b-0">
                     <div className="flex items-center gap-2.5 mb-2.5">
                       <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: '#ca8a04' }}>
@@ -1333,7 +1368,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       })}
                     </div>
                   </div>
-                  <div className="py-3 border-b border-[var(--border)] last:border-b-0">
+                  {developerMode && (<div className="py-3 border-b border-[var(--border)] last:border-b-0">
                     <div className="flex items-center gap-2.5 mb-2.5">
                       <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: '#0d9488' }}>
                         <Type size={13} className="text-white" strokeWidth={2.25} />
@@ -1405,7 +1440,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         </div>
                       )}
                     </div>
-                  </div>
+                  </div>)}
                 </SettingsGroup>
               </div>
             )}
@@ -1711,28 +1746,29 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
               <div>
                 <SettingsTitle>Playback</SettingsTitle>
                 <SettingsGroup title="Playback">
-                  <Row
+                  {developerMode && (<Row
                     icon={ListOrdered}
                     iconColor="#7c3aed"
                     label="Remember queue and now playing"
                     sub="Restore your queue, current track and position on this device when you reopen. Playback stays paused."
                   >
                     <Toggle on={rememberQueue} onClick={() => setRememberQueue(!rememberQueue)} />
-                  </Row>
-                  {devices.length > 0 && (
+                  </Row>)}
+                  {(
+
                     <Row icon={Volume2} iconColor="#2563eb" label="Audio output">
                       <ThemedSelect
                         value={audioOutput}
                         onChange={setAudioOutput}
                         options={[
-                          { value: '', label: 'Default' },
+                          { value: '', label: 'System default' },
                           ...devices.map((d) => ({ value: d.deviceId, label: d.label || `Device ${d.deviceId.slice(0, 6)}` })),
                         ]}
                         className="bg-[var(--fill)] text-text-primary text-xs rounded-full px-3 py-1.5 border border-transparent min-w-0 max-w-[180px]"
                       />
                     </Row>
                   )}
-                  <Row
+                  {developerMode && (<Row
                     icon={Zap}
                     iconColor="#7c3aed"
                     label="Crossfade"
@@ -1749,13 +1785,13 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         <span className="text-text-muted text-xs tabular-nums w-10 text-right">{crossfadeDuration}s</span>
                       </div>
                     )}
-                  </Row>
-                  <Row
+                  </Row>)}
+                  {developerMode && (<Row
                     icon={Waves}
                     iconColor="#0ea5e9"
                     label="Smooth fade when pausing"
                     labelExtra={<div className="ml-2 translate-y-[3px]"><Toggle on={pauseFadeEnabled} onClick={() => setPauseFade(!pauseFadeEnabled)} /></div>}
-                  />
+                  />)}
                   <Row
                     icon={Headphones}
                     iconColor="#2563eb"
@@ -1763,8 +1799,14 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     sub="And play again when they reconnect"
                     labelExtra={<div className="ml-2 translate-y-[3px]"><Toggle on={pauseOnDisconnect} onClick={() => setPauseOnDisconnect(!pauseOnDisconnect)} /></div>}
                   />
+                  <Row icon={SlidersHorizontal} iconColor="#2563eb" label="Equalizer" sub="Presets, balance, playback speed and sleep timer">
+                    <button className="text-text-primary text-xs font-semibold underline underline-offset-4" onClick={() => { closeSettings(); useStore.getState().toggleEqPanel() }}>Open sound panel</button>
+                  </Row>
+                  <Row icon={Disc} iconColor="#2563eb" label="Audio quality" sub="Format and bitrate reported for the current track">
+                    <span className="text-text-secondary text-xs">{audioQualityLabel(playingInfo) ?? 'No format information'}</span>
+                  </Row>
                 </SettingsGroup>
-                <SettingsGroup title="Songs">
+                {developerMode && (<SettingsGroup title="Songs">
                   <Row
                     icon={FileText}
                     iconColor="#059669"
@@ -1781,8 +1823,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   <div className="py-2">
                     <EraCoversSection />
                   </div>
-                </SettingsGroup>
-                <SettingsGroup title="Sleep timer">
+                </SettingsGroup>)}
+                {developerMode && (<SettingsGroup title="Sleep timer">
                   <Row icon={Clock} iconColor="#4f46e5" label="Sleep timer">
                     <div className="flex items-center gap-2">
                       {sleepTimerEnd ? (
@@ -1807,7 +1849,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       </button>
                     </div>
                   </Row>
-                </SettingsGroup>
+                </SettingsGroup>)}
               </div>
             )}
 
@@ -1846,7 +1888,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       )}
                     </div>
                   </Row>
-                  <div className="py-3 border-b border-[var(--border)] last:border-b-0">
+                  {developerMode && (<div className="py-3 border-b border-[var(--border)] last:border-b-0">
                     <div className="flex items-center gap-2.5 mb-2.5">
                       <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: '#e11d48' }}>
                         <Type size={13} className="text-white" strokeWidth={2.25} />
@@ -1883,7 +1925,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         )
                       })}
                     </div>
-                  </div>
+                  </div>)}
                   <div className="py-3 border-b border-[var(--border)] last:border-b-0">
                     <div className="flex items-center gap-2.5 mb-2.5">
                       <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: '#db2777' }}>
@@ -1946,7 +1988,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       })}
                     </div>
                   </div>
-                  <Row
+                  {developerMode && (<Row
                     icon={Eye}
                     iconColor="#64748b"
                     label="Blur inactive lyrics"
@@ -1964,8 +2006,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         <span className="text-text-muted text-xs tabular-nums w-10 text-right">{lyricsBlurAmount}×</span>
                       </div>
                     )}
-                  </Row>
-                  <div className="py-3 border-b border-[var(--border)] last:border-b-0">
+                  </Row>)}
+                  {developerMode && (<div className="py-3 border-b border-[var(--border)] last:border-b-0">
                     <div className="flex items-center gap-2.5 mb-2.5">
                       <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: '#9333ea' }}>
                         <Palette size={13} className="text-white" strokeWidth={2.25} />
@@ -1991,9 +2033,9 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         onChange={setLyricsColorInactive}
                       />
                     </div>
-                  </div>
+                  </div>)}
                 </SettingsGroup>
-                <SettingsGroup title="WRLD">
+                {developerMode && (<SettingsGroup title="WRLD">
                   <Row
                     icon={Disc}
                     iconColor="#8b5cf6"
@@ -2031,7 +2073,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     </Row>
                   )}
                   <VizSettings />
-                </SettingsGroup>
+                </SettingsGroup>)}
               </div>
             )}
 
@@ -2090,7 +2132,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     <Row icon={MessageCircle} iconColor="#5865f2" label="Show Discord Status">
                       <Toggle on={appSettings.discordRpcEnabled} onClick={() => setSetting('discordRpcEnabled', !appSettings.discordRpcEnabled)} />
                     </Row>
-                    {appSettings.discordRpcEnabled && (
+                    {appSettings.discordRpcEnabled && developerMode && (
                       <Row
                         icon={MessageCircle}
                         iconColor="#5865f2"
@@ -2117,8 +2159,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     )}
                   </SettingsGroup>
                 )}
-                <SettingsGroup title="Downloads">
-                  <Row
+                {developerMode && (<SettingsGroup title="Downloads">
+                  {developerMode && (<Row
                     icon={Server}
                     iconColor="#0ea5e9"
                     label="Distributed CDN downloads"
@@ -2132,8 +2174,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         setCdnEnabled(next)
                       }}
                     />
-                  </Row>
-                </SettingsGroup>
+                  </Row>)}
+                </SettingsGroup>)}
               </div>
             )}
 
@@ -2143,6 +2185,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             {/* ── Shortcuts ── */}
             {!settingsQueryTrimmed && shows('shortcuts') && <span data-settings-section="shortcuts" aria-hidden />}{!settingsQueryTrimmed && shows('shortcuts') && (
               <div>
+                {!developerMode && <button className="settings-detail-back" onClick={() => setDetailPage(null)}><ArrowLeft size={14} /> Advanced</button>}
                 <SettingsTitle action={
                   <button
                     onClick={() => { setRecording(null); resetHotkeyBindings(); resetGlobalHotkeyBindings() }}
@@ -2153,15 +2196,15 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   </button>
                 }>Keyboard shortcuts</SettingsTitle>
                 <SettingsGroup footer='Click a shortcut, then press the keys. Esc cancels · Backspace clears. Shortcuts work while the app window is focused.'>
-                  <Row icon={Clock} iconColor="#4f46e5" label="Skip amount" sub="How far skip-forward / skip-backward jump">
+                  {developerMode && (<Row icon={Clock} iconColor="#4f46e5" label="Skip amount" sub="How far skip-forward / skip-backward jump">
                     <ThemedSelect
                       value={String(hotkeySeekSeconds)}
                       onChange={(v) => setHotkeySeekSeconds(parseInt(v))}
                       options={[5, 10, 15, 30, 60].map((s) => ({ value: String(s), label: `${s} seconds` }))}
                       className="bg-[var(--fill)] text-text-primary text-xs rounded-full px-3 py-1.5 border border-transparent"
                     />
-                  </Row>
-                  {isElectron && (
+                  </Row>)}
+                  {isElectron && developerMode && (
                     <Row
                       icon={Globe}
                       iconColor="#0ea5e9"
@@ -2325,9 +2368,9 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       </button>
                     </div>
                   </div>
-                  <Row icon={RefreshCw} iconColor="#0891b2" label="Auto-refresh changed files" sub="Reload tags when a file changes on disk, e.g. edited in another app">
+                  {developerMode && (<Row icon={RefreshCw} iconColor="#0891b2" label="Auto-refresh changed files" sub="Reload tags when a file changes on disk, e.g. edited in another app">
                     <Toggle on={libraryAutoRefresh} onClick={() => setLibraryAutoRefresh(!libraryAutoRefresh)} />
-                  </Row>
+                  </Row>)}
                 </SettingsGroup>
                 <SettingsGroup title="Storage">
                   <div className="py-3 border-b border-[var(--border)]">
@@ -2393,7 +2436,32 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── App ── */}
-            {!settingsQueryTrimmed && shows('app') && <span data-settings-section="app" aria-hidden />}{!settingsQueryTrimmed && shows('app') && isElectron && (
+
+            {!settingsQueryTrimmed && shows('app') && !developerMode && (
+              <div data-settings-section="app">
+                <SettingsTitle>Advanced</SettingsTitle>
+                <SettingsGroup title="Everyday use">
+                  {isElectron && <Row icon={Monitor} iconColor="#64748b" label="Start with Windows"
+                    sub={appSettings.startupAvailable ? 'Open Unreleased when you sign in to Windows' : 'Available in the installed Windows app'}>
+                    <Toggle label="Start with Windows" on={appSettings.startWithWindows} locked={!appSettings.startupAvailable}
+                      lockedReason="Available in the installed Windows app" onClick={() => { void setSetting('startWithWindows', !appSettings.startWithWindows) }} />
+                  </Row>}
+                  {isElectron && <Row icon={Keyboard} iconColor="#64748b" label="Global shortcuts" sub="Control music while using another app">
+                    <Toggle label="Global shortcuts" on={globalHotkeysEnabled} onClick={() => setGlobalHotkeysEnabled(!globalHotkeysEnabled)} />
+                  </Row>}
+                </SettingsGroup>
+                <SettingsGroup flush>
+                  <SettingsLink icon={Keyboard} color="#64748b" label="Keyboard shortcuts" sub="View and change your key bindings" onClick={() => { setDetailPage('shortcuts'); setJumpSection('shortcuts') }} />
+                </SettingsGroup>
+                <SettingsGroup title="Developer">
+                  <Row icon={Wrench} iconColor="#64748b" label="Developer options" sub="Show technical tools and detailed preferences">
+                    <Toggle label="Developer options" on={developerMode} onClick={() => setDeveloperMode(!developerMode)} />
+                  </Row>
+                </SettingsGroup>
+                <button className="settings-detail-back" onClick={() => { setDetailPage('about'); setJumpSection('about') }}>Help &amp; about <ArrowRight size={14} /></button>
+              </div>
+            )}
+            {!settingsQueryTrimmed && shows('app') && <span data-settings-section="app" aria-hidden />}{!settingsQueryTrimmed && shows('app') && isElectron && developerMode && (
               <div>
                 <SettingsTitle>App</SettingsTitle>
                 <SettingsGroup title="Startup">
@@ -2576,6 +2644,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             {/* ── About ── */}
             {!settingsQueryTrimmed && shows('about') && <span data-settings-section="about" aria-hidden />}{!settingsQueryTrimmed && shows('about') && (
               <div>
+                <button className="settings-detail-back" onClick={() => setDetailPage(null)}><ArrowLeft size={14} /> Advanced</button>
                 <SettingsTitle>About</SettingsTitle>
                 <div className="glass-pane rounded-2xl p-5 mb-6 flex items-start gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-accent text-white flex items-center justify-center shrink-0 shadow-lg">

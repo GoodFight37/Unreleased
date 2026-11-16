@@ -1,3 +1,6 @@
+import { getActiveRadioClient } from '../lib/radioSocketService'
+import { resumeEffectsContext } from '../lib/audioEffects'
+import { hasChatAccess } from '../lib/chatAccess'
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Menu, Check, RefreshCw, AlertTriangle } from 'lucide-react'
@@ -234,7 +237,7 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
     await el?.setFullscreen?.(!on)
   }
 
-  const menus: MenuDef[] = [
+  const expertMenus: MenuDef[] = [
     {
       id: 'file', label: 'File',
       entries: [
@@ -390,6 +393,48 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
         { kind: 'item', label: `Version ${APP_VERSION}`, onClick: run(() => openSettings('about')) },
       ],
     },
+  ]
+
+  const menus: MenuDef[] = developerMode ? expertMenus : [
+    { id: 'app', label: 'App', entries: [
+      { kind: 'item', label: 'Settings', hotkey: 'open-settings', onClick: hk('open-settings') },
+      { kind: 'item', label: 'Keyboard shortcuts', onClick: run(() => openSettings('shortcuts')) },
+      { kind: 'sep' },
+      { kind: 'item', label: 'Downloads', onClick: run(() => setShowDownloadManager(true)) },
+      { kind: 'item', label: 'File archive', onClick: run(() => setActiveView('api-files')) },
+      { kind: 'sep' },
+      { kind: 'item', label: 'Help & about', onClick: run(() => openSettings('about')) },
+      { kind: 'item', label: 'Exit', onClick: run(() => el?.closeWindow?.()) },
+    ] },
+    { id: 'community', label: 'Around Juice', entries: [
+      { kind: 'item', label: '999 FM', onClick: run(() => {
+        const state = useStore.getState()
+        if (!state.radioFmActive) {
+          state.setIsPlaying(false)
+          resumeEffectsContext()
+          void getActiveRadioClient()?.startListening()?.catch(() => state.setRadioFmActive(false))
+          state.setRadioFmActive(true)
+        }
+        state.setActiveView('wrld')
+      }) },
+      ...(hasChatAccess(account) ? [{ kind: 'item' as const, label: 'Staff chat', onClick: run(() => setActiveView('chat')) }] : []),
+      { kind: 'item', label: 'News', onClick: run(() => setActiveView('news')) },
+      { kind: 'item', label: 'Your listening', onClick: run(() => setActiveView('stats')) },
+      { kind: 'sep' },
+      { kind: 'item', label: 'Heardle', onClick: run(() => setActiveView('heardle')) },
+      { kind: 'item', label: 'Wordle', onClick: run(() => setActiveView('wordle')) },
+      { kind: 'item', label: 'Tier lists', onClick: run(() => setActiveView('tierlist')) },
+      { kind: 'sep' },
+      { kind: 'item', label: 'Discord community', onClick: run(() => openExternal('https://discord.gg/jwa')) },
+    ] },
+    { id: 'create', label: 'Create', entries: [
+      { kind: 'item', label: 'Synced lyrics', onClick: run(() => openLyricsGen()) },
+      { kind: 'item', label: 'Identify a song', onClick: run(() => useStore.getState().setShowRecognition(true)) },
+      { kind: 'item', label: 'Submit a remix or edit', onClick: run(() => useStore.getState().openCommunityEditSubmit()) },
+      { kind: 'item', label: 'Share Studio', onClick: openShareStudio, disabled: !currentTrack && !useStore.getState().radioFmActive },
+      { kind: 'item', label: 'Convert current song', onClick: run(() => { if (canConvert && currentTrack) openConvert({ id: currentTrack.id, path: currentTrack.path, title: currentTrack.title }) }), disabled: !canConvert },
+      { kind: 'item', label: 'Offline catalogue sync', onClick: run(() => useCatalogSync.getState().setOpen(true)) },
+    ] },
   ]
 
   useExitGhost(panelRef, popOut)

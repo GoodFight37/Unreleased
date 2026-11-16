@@ -5,7 +5,7 @@ import { useStore, useStorePick } from '../store/useStore'
 import { ViewType } from '../types'
 import { showStaffProfile, getToken } from '../lib/userApi'
 import AppMenu from './AppMenu'
-import { orderedNavItems, isNavItemVisible, orderedNavControls, isNavControlVisible, navTabFor, tabEntryView, type NavControlId } from '../lib/navItems'
+import { NAV_ITEMS, orderedNavItems, isNavItemVisible, orderedNavControls, isNavControlVisible, navTabFor, tabEntryView, type NavControlId } from '../lib/navItems'
 import { preloadView } from '../lib/lazyViews'
 import { hasChatAccess } from '../lib/chatAccess'
 import type { PlaylistContextMenuState } from './PlaylistContextMenu'
@@ -24,7 +24,9 @@ const LS_COLLAPSED = 'sidebar:collapsed'
 const LS_PLAYLISTS_EXPANDED = 'sidebar:playlistsExpanded'
 
 export default function Sidebar(): JSX.Element {
-  const { activeView, setActiveView, openProfile, openOwnPublicProfile, openSettings, setShowDiagnostics, developerMode, account, setShowUserAuth, playlists, setPendingPlaylistId, sidebarPosition, navStyle, navOrder, setNavOrder, navVisibility, setNavItemVisible, navControlOrder, navControlVisibility, setNavControlVisible, showDownloadManager, setShowDownloadManager, appMenuPosition, offlinePlaylists } = useStorePick('activeView', 'setActiveView', 'openProfile', 'openOwnPublicProfile', 'openSettings', 'setShowDiagnostics', 'developerMode', 'account', 'setShowUserAuth', 'playlists', 'setPendingPlaylistId', 'sidebarPosition', 'navStyle', 'navOrder', 'setNavOrder', 'navVisibility', 'setNavItemVisible', 'navControlOrder', 'navControlVisibility', 'setNavControlVisible', 'showDownloadManager', 'setShowDownloadManager', 'appMenuPosition', 'offlinePlaylists')
+  const { activeView, setActiveView, openProfile, openOwnPublicProfile, openSettings, setShowDiagnostics, developerMode, account, setShowUserAuth, playlists, setPendingPlaylistId, sidebarPosition, navStyle: configuredNavStyle, navOrder, setNavOrder, navVisibility, setNavItemVisible, navControlOrder, navControlVisibility, setNavControlVisible, showDownloadManager, setShowDownloadManager, appMenuPosition: configuredMenuPosition, offlinePlaylists } = useStorePick('activeView', 'setActiveView', 'openProfile', 'openOwnPublicProfile', 'openSettings', 'setShowDiagnostics', 'developerMode', 'account', 'setShowUserAuth', 'playlists', 'setPendingPlaylistId', 'sidebarPosition', 'navStyle', 'navOrder', 'setNavOrder', 'navVisibility', 'setNavItemVisible', 'navControlOrder', 'navControlVisibility', 'setNavControlVisible', 'showDownloadManager', 'setShowDownloadManager', 'appMenuPosition', 'offlinePlaylists')
+  const navStyle = developerMode ? configuredNavStyle : 'pill'
+  const appMenuPosition = developerMode ? configuredMenuPosition : 'sidebar'
   // Counts, not the list: every progress tick replaces `downloads`, and the
   // whole menu re-rendered with it.
   const hasDownloads = useStore((s) => s.downloads.length > 0)
@@ -132,10 +134,15 @@ export default function Sidebar(): JSX.Element {
   // Order + which tabs appear both come from Settings → Appearance → Menu
   // items. orderedNavItems sanitizes the saved order; isNavItemVisible drops
   // web-only tabs on web and anything the user has toggled off.
-  const items = orderedNavItems(navOrder, hasChatAccess(account), showStaffProfile(account)).filter((i) => isNavItemVisible(i, navVisibility, isElectron))
+  const items = developerMode
+    ? orderedNavItems(navOrder, hasChatAccess(account), showStaffProfile(account)).filter((i) => isNavItemVisible(i, navVisibility, isElectron))
+    : (['home', 'api-tracker', isElectron ? 'library' : 'playlists'] as ViewType[]).map((view, index) => ({
+        ...NAV_ITEMS.find((item) => item.view === view)!, label: ['Discover', 'Catalogue', 'Collection'][index],
+      }))
   // Which tab reads as current - not always activeView, since some views are
   // sub-views of a tab (the games inside Games). See navTabFor.
-  const activeTab = navTabFor(activeView)
+  const activeTab = !developerMode && ['library', 'liked', 'playlists', 'albums', 'shared-playlist'].includes(activeView)
+    ? (isElectron ? 'library' : 'playlists') : navTabFor(activeView)
   // The active tab's highlight slides from tab to tab rather than jumping -
   // one indicator behind the items, in whichever layout below is rendered.
   const navLayout = navStyle === 'pill' ? 'pill' : sidebarPosition === 'top' || sidebarPosition === 'bottom' ? 'bar' : 'side'
@@ -168,7 +175,8 @@ export default function Sidebar(): JSX.Element {
   // ordered and filtered to what's both available and toggled on in Settings.
   // Log in and the collapse toggle are rendered separately (never hideable).
   const controlCtx = { account: !!account, isElectron, developerMode, hasUploads: hasDownloads }
-  const controls = orderedNavControls(navControlOrder).filter((c) => isNavControlVisible(c, navControlVisibility, controlCtx))
+  const controls = orderedNavControls(navControlOrder).filter((c) =>
+    isNavControlVisible(c, navControlVisibility, controlCtx) && (developerMode || ['profile', 'notifications', 'uploads'].includes(c.id)))
 
   const rowCls = 'flex items-center w-full py-2 rounded text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors gap-3 px-3'
   const iconWrap = 'w-6 h-6 flex items-center justify-center shrink-0'
@@ -310,24 +318,25 @@ export default function Sidebar(): JSX.Element {
             <div className={`shrink-0 bg-[var(--border)] ${horizontal ? 'w-px h-6 mx-1' : 'h-px w-6 my-1'}`} />
           </>
         )}
+        {!developerMode && horizontal && <span className="coffre-brand" aria-label="Unreleased, Juice WRLD"><span>999</span> UNRELEASED</span>}
         {items.map(({ icon, label, view }) => (
           <button
             key={view}
             onClick={() => navClick(view)}
             {...warmOnIntent(view)}
-            onContextMenu={openNavMenu(view, label)}
+            onContextMenu={developerMode ? openNavMenu(view, label) : undefined}
             title={label}
             aria-label={label}
             aria-current={activeTab === view ? 'page' : undefined}
             data-indicator-key={view}
-            className={`nav-btn ${horizontal && activeTab === view ? 'px-3 gap-2' : 'w-10'} h-10 shrink-0 flex items-center justify-center rounded-full ${
+            className={`nav-btn ${horizontal && (!developerMode || activeTab === view) ? 'px-3 gap-2' : 'w-10'} h-10 shrink-0 flex items-center justify-center rounded-full ${
               activeTab === view
                 ? 'text-accent'
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
             {icon}
-            {horizontal && activeTab === view && <span className="text-xs font-semibold text-text-primary whitespace-nowrap">{label}</span>}
+            {horizontal && (!developerMode || activeTab === view) && <span className="text-xs font-semibold text-text-primary whitespace-nowrap">{label}</span>}
           </button>
         ))}
         <div className={`shrink-0 bg-[var(--border)] ${horizontal ? 'w-px h-6 mx-1' : 'h-px w-6 my-1'}`} />

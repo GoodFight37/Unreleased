@@ -136,19 +136,13 @@ export function useHomeData() {
       .then((list) => {
         albumsMemo = newestFirst(list)
         setAlbums(albumsMemo)
-        // The catalogue is ~10 MB of JSON, and Home is the desktop landing
-        // page - only pull it in when some album actually lists tracks to
-        // resolve. The public list can come back with none at all, and then
-        // the whole download bought nothing.
-        if (!list.some((a) => a.songs?.length)) return
-        return loadAllSongs()
-          .then((all) => {
-            albumIndexMemo = albumsApi.indexSongsByPath(all)
-            setAlbumSongIndex(albumIndexMemo)
-          })
       })
       .catch(() => undefined)
       .finally(() => setAlbumsPending(false))
+    loadAllSongs().then((all) => {
+      albumIndexMemo = albumsApi.indexSongsByPath(all)
+      setAlbumSongIndex(albumIndexMemo)
+    }).catch(() => undefined)
   }, [])
 
   const albumRow: HomeAlbumCard[] = useMemo(() => albums.map((album) => {
@@ -271,6 +265,7 @@ export function useHomeData() {
     setActiveView,
     showSection,
     recent, newsItems, games, playlistRow, albumRow, albumsPending,
+    catalogue: [...albumSongIndex.values()],
     openTrack, openNewsItem, openRadioFm,
   }
 }

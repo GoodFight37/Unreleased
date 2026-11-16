@@ -106,6 +106,7 @@ export default function WrldVisualizer({
 }: Props): JSX.Element {
   // 999 FM plays with isPlaying off; the visualizer stops listening when this is false.
   const isPlaying = useStore((s) => s.isPlaying || s.radioFmActive)
+  const developerMode = useStore((s) => s.developerMode)
   const lyricsOverride = useStore((s) => s.lyricsOverride)
   // Random: the queue's own radio (random songs after this one), not 999 FM.
   const randomOn = useStore((s) => s.radioMode && !s.radioFmActive)
@@ -434,7 +435,7 @@ export default function WrldVisualizer({
           <Radio size={15} className={fm.active && fm.live ? 'animate-pulse' : ''} />
           <span>{fm.label}</span>
         </button>
-        {fmCardAvailable && (
+        {developerMode && fmCardAvailable && (
           <button
             className={`${tool} ${fmCardShown ? toolOn : toolIdle}`}
             onClick={() => {
@@ -461,6 +462,7 @@ export default function WrldVisualizer({
           <Dices size={15} />
           <span>Random</span>
         </button>
+        {developerMode && <>
         <span className="w-px h-5 mx-1 bg-[var(--border)]" />
         <button
           className={`h-9 px-2.5 flex items-center gap-1.5 rounded-[10px] text-xs font-medium transition-colors ${toolIdle}`}
@@ -480,6 +482,7 @@ export default function WrldVisualizer({
         >
           <Settings2 size={17} />
         </button>
+        </>}
         {fullscreen && (
           <>
             <span className="w-px h-5 mx-1 bg-[var(--border)]" />
@@ -494,14 +497,14 @@ export default function WrldVisualizer({
             <button className={`${tool} ${toolIdle}`} onClick={onEnter} title="Fullscreen" aria-label="Fullscreen">
               <Maximize2 size={16} />
             </button>
-            {onPopOutMini && (
+            {developerMode && onPopOutMini && (
               <button className={`${tool} ${toolIdle}`} onClick={onPopOutMini} title="Pop out mini player" aria-label="Pop out mini player">
                 <PictureInPicture2 size={15} />
               </button>
             )}
           </>
         )}
-        {showSettings && (
+        {developerMode && showSettings && (
           <div
             className={`absolute top-full right-0 mt-2 ${IS_ELECTRON && settingsTab === 'desktop' ? 'w-[460px]' : 'w-[400px]'} max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto p-4 rounded-[14px] bg-[var(--surface)] border border-[var(--border)] shadow-2xl`}
           >

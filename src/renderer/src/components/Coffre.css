@@ -1,0 +1,51 @@
+.coffre-brand { display:flex;align-items:center;gap:9px;padding:0 16px 0 6px;font-size:12px;font-weight:800;letter-spacing:.015em;white-space:nowrap;color:var(--text-primary) }
+.coffre-brand>span { display:grid;place-items:center;width:29px;height:29px;border:1px solid var(--text-muted);border-radius:50%;font-size:12px;letter-spacing:-.08em;transform:rotate(-12deg) }
+.coffre-home { flex:1;min-height:0;overflow-y:auto;background:color-mix(in srgb,var(--surface) 91%,transparent) }
+.coffre-home-inner { max-width:1420px;margin:0 auto;padding:34px 42px 35px;display:flex;flex-direction:column;gap:34px }
+.coffre-hero { display:grid;grid-template-columns:1fr minmax(220px,.85fr);align-items:center;gap:48px;min-height:275px }
+.coffre-hero h1 { font-size:clamp(36px,4.6vw,62px);line-height:1.06;font-weight:800;letter-spacing:-.035em;color:var(--text-primary);margin-bottom:20px }
+.coffre-hero p { color:var(--text-secondary);font-size:14px;line-height:1.8;margin-bottom:24px }
+.coffre-primary { display:inline-flex;align-items:center;gap:13px;background:var(--text-primary);color:var(--surface);border-radius:12px;font-size:13px;font-weight:700;padding:13px 19px;transition:opacity 180ms }
+.coffre-primary:hover { opacity:.88 }
+.coffre-hero-art { position:relative;isolation:isolate;display:flex;align-items:center;justify-content:center;width:100%;height:285px;border-radius:16px;background:var(--fill);overflow:hidden }
+.coffre-hero-art .coffre-hero-cover { width:100%;height:100%;object-fit:contain }
+.coffre-art-caption { position:absolute;left:0;right:0;bottom:0;display:flex;align-items:end;justify-content:space-between;gap:12px;padding:36px 20px 16px;background:linear-gradient(transparent,rgba(0,0,0,.88));color:#fff;text-align:left;font-size:18px;font-weight:700 }
+.coffre-art-caption small { display:block;color:#f1f1f1;font-size:12px;font-weight:400;margin-top:5px }
+.coffre-999 { font-size:23px;letter-spacing:-.09em;flex-shrink:0 }
+.coffre-section-heading { display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:18px }
+.coffre-section-heading h2 { color:var(--text-primary);font-size:20px;font-weight:700;letter-spacing:-.025em }
+.coffre-section-heading>button,.coffre-empty button { display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:12px }
+.coffre-cover-row { display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:20px }
+.coffre-cover-card { min-width:0;text-align:left;color:var(--text-primary) }
+.coffre-cover { display:flex;position:relative;align-items:center;justify-content:center;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--fill);margin-bottom:10px }
+.coffre-cover>img { width:100%;height:100%;object-fit:contain }
+.coffre-cover-card strong { display:block;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.coffre-cover-card>span:last-child { display:block;color:var(--text-secondary);font-size:12px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.coffre-card-play { position:absolute;bottom:9px;right:9px;display:grid;place-items:center;width:34px;height:34px;background:var(--surface-raised);color:var(--text-primary);border-radius:50% }
+.coffre-era-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px }
+.coffre-era { display:flex;align-items:center;gap:13px;padding:13px 0;text-align:left;border-top:1px solid var(--border);color:var(--text-primary);min-width:0 }
+.coffre-era-cover { width:55px;height:55px;flex-shrink:0;border-radius:8px;overflow:hidden;background:var(--fill) }
+.coffre-era>span:nth-child(2) { flex:1;min-width:0 }
+.coffre-era strong { font-size:12px;font-weight:600;display:block;line-height:1.5 }
+.coffre-era small { display:block;font-size:11px;color:var(--text-secondary);margin-top:4px }
+.coffre-album-row { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:22px }
+.coffre-empty { padding:24px 0;color:var(--text-secondary);display:flex;align-items:center;gap:18px;font-size:13px;flex-wrap:wrap }
+.collection-page { display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden }
+.collection-navigation { display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:12px 22px 4px;flex-shrink:0 }
+.collection-navigation button { display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:10px;color:var(--text-secondary);font-size:12px }
+.collection-navigation button[aria-current=page] { background:var(--fill-strong);color:var(--text-primary) }
+.coffre-catalogue { background:color-mix(in srgb,var(--surface) 91%,transparent) }
+.coffre-catalogue h1 { font-size:30px;font-weight:750;letter-spacing:-.03em;margin-bottom:6px }
+.catalogue-intro { color:var(--text-secondary);font-size:12px;margin-bottom:20px }
+.catalogue-sections { margin-bottom:15px }
+.catalogue-sections>button { display:inline-flex;color:var(--text-secondary);font-size:12px;padding:5px 0;cursor:pointer;list-style:revert }
+.catalogue-sections>button[aria-expanded=true] { margin-bottom:10px }
+.catalogue-sections .glass-seg { max-width:100% }
+.coffre-catalogue .catalog-toolbar { gap:6px;background:transparent;padding:0 }
+.coffre-catalogue .catalog-tool { gap:6px;width:auto;min-width:38px;padding:0 11px }
+.coffre-catalogue .catalog-tool>svg { flex-shrink:0 }
+.settings-detail-back { display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:12px;margin-bottom:20px }
+@media (max-width:1100px) { .coffre-brand{font-size:0;gap:0;padding-right:5px}.coffre-brand>span{font-size:12px}.coffre-home-inner{padding:28px}.coffre-cover-row{grid-template-columns:repeat(3,minmax(0,1fr))}.coffre-era-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (min-width:1101px) and (max-height:820px) { .coffre-home-inner{padding:24px 32px;gap:24px}.coffre-hero{min-height:220px}.coffre-hero-art{height:220px}.coffre-hero h1{font-size:48px;margin-bottom:15px}.coffre-hero p{margin-bottom:18px} }
+@media (max-width:680px) { .coffre-home-inner{padding:24px 20px;gap:28px}.coffre-hero{grid-template-columns:1fr;gap:25px}.coffre-hero-art{height:250px}.coffre-hero-copy{order:2}.coffre-hero h1{font-size:38px}.coffre-cover-row{grid-template-columns:repeat(2,minmax(0,1fr))}.coffre-album-row{grid-template-columns:repeat(2,minmax(0,1fr))}.coffre-era-grid{grid-template-columns:1fr}.coffre-section-heading h2{font-size:18px}.collection-navigation{padding:10px 12px 4px}.collection-navigation button{padding:8px;font-size:11px} }
+@media (prefers-reduced-motion:reduce) { .coffre-primary { transition:none } }

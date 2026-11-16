@@ -310,6 +310,21 @@ const FONT_VERBS = ['import', 'add', 'remove']
 
 export const SETTINGS_COMMANDS: TermCommand[] = [
   {
+    name: 'startup', group: 'Settings', usage: 'startup [on|off]',
+    description: 'Show or change whether the installed Windows app starts when you sign in',
+    complete: (_before, partial) => ['on', 'off'].filter((value) => value.startsWith(partial.toLowerCase())),
+    run: async (args, ctx) => {
+      const el = (window as any).electron
+      if (!el?.getAppSettings || !el?.setAppSetting) fail('available in the installed Windows app')
+      const settings = await el.getAppSettings()
+      if (!settings.startupAvailable) fail('available in the installed Windows app')
+      if (!args.trim()) { ctx.print(settings.startWithWindows ? 'on' : 'off'); return }
+      const enabled = parseBool(args.trim())
+      if (await el.setAppSetting('startWithWindows', enabled) === false) fail('Windows could not save the startup setting')
+      ctx.print(`Start with Windows: ${enabled ? 'on' : 'off'}`, 'ok')
+    },
+  },
+  {
     name: 'fonts', aliases: ['font'], group: 'Settings', usage: 'fonts [import | add <installed font name> | remove <font>]',
     covers: ['fonts.addFontFile', 'fonts.removeCustomFont', 'fontActions.deleteFont'],
     description: 'List the fonts you can pick, add your own - import a .ttf/.otf/.woff/.woff2 file or use one installed on this computer - or remove one (same as Settings > Appearance > Custom fonts). Pick it with "set font" / "set lyrics-font"',

@@ -1923,7 +1923,9 @@ export default function ApiTrackerView(): JSX.Element {
   // - tying it to sortedSongs previously meant a group's members could be
   // missed if they hadn't scrolled into view yet, and re-querying on every
   // page load compounded into serious lag as more pages loaded.
-  const [compactView, setCompactViewState] = useState(() => localStorage.getItem(LS_TRACKER_COMPACT) === 'true')
+  const developerMode = useStore((s) => s.developerMode)
+  const [showSections, setShowSections] = useState(false)
+  const [compactView, setCompactViewState] = useState(() => versionsEnabled && localStorage.getItem(LS_TRACKER_COMPACT) === 'true')
   const setCompactView = (v: boolean | ((prev: boolean) => boolean)): void => {
     setCompactViewState(prev => {
       const next = typeof v === 'function' ? v(prev) : v
@@ -2793,10 +2795,14 @@ export default function ApiTrackerView(): JSX.Element {
   }, [activeChannel])
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${developerMode ? '' : 'coffre-catalogue'}`}>
       {/* Header */}
       <div className="px-4 md:px-5 pt-4 md:pt-5 pb-3 shrink-0">
-        <h1 className="text-text-primary text-xl font-bold mb-1 md:mb-6">Tracker</h1>
+        <h1 className="text-text-primary text-xl font-bold mb-1 md:mb-6">{developerMode ? 'Tracker' : 'Catalogue'}</h1>
+        {!developerMode && <p className="catalogue-intro">Unreleased tracks, sessions and other versions.</p>}
+        <div className="catalogue-sections">
+        <button onClick={() => setShowSections((value) => !value)} aria-expanded={showSections || trackerTab !== 'songs' || developerMode}>Explore the catalogue</button>
+        {(showSections || trackerTab !== 'songs' || developerMode) && (
 
         <GlassSegmented
           ariaLabel="Tracker sections"
@@ -2815,8 +2821,10 @@ export default function ApiTrackerView(): JSX.Element {
           ]}
         />
 
-        {trackerTab === 'songs' && <StatsBar stats={stats} />}
-        {trackerTab === 'songs' && (
+        )}
+        </div>
+        {developerMode && trackerTab === 'songs' && <StatsBar stats={stats} />}
+        {developerMode && trackerTab === 'songs' && (
           <EraRow
             eras={eras}
             counts={stats?.era_stats}
@@ -2837,7 +2845,7 @@ export default function ApiTrackerView(): JSX.Element {
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder='Search, or artists:"Juice WRLD"…'
+                placeholder="Find a song, an alternate title or an artist…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className={`${GLASS_SEARCH} pl-9 pr-9`}
@@ -2849,10 +2857,12 @@ export default function ApiTrackerView(): JSX.Element {
               )}
             </div>
             <div className="catalog-toolbar flex items-center shrink-0 max-w-full">
+            {developerMode && (
             <button onClick={() => useStore.getState().setShowRecognition(true)} title="Identify song" aria-label="Identify song" className={`${glassToolButton(false)} catalog-tool`}>
               <AudioLines size={16} />
             </button>
-            <div className="relative shrink-0 hidden md:block">
+            )}
+            <div className="relative shrink-0">
               <button
                 onClick={() => setShowFilterMenu((v) => !v)}
                 onMouseDown={(e) => e.stopPropagation()}
@@ -2860,6 +2870,7 @@ export default function ApiTrackerView(): JSX.Element {
                 title="Filters"
               >
                 <ListFilter size={15} />
+                {!developerMode && <span className="text-xs">Filters</span>}
                 {(categoryFilter.size + eraFilter.size + (libraryFilter !== 'all' ? 1 : 0)) > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-[3px] rounded-full bg-accent text-[0.5625rem] leading-[15px] font-bold text-white text-center">
                     {categoryFilter.size + eraFilter.size + (libraryFilter !== 'all' ? 1 : 0)}
@@ -2884,6 +2895,7 @@ export default function ApiTrackerView(): JSX.Element {
                 />
               )}
             </div>
+            {developerMode ? <>
             <SearchHelpButton
               size={15}
               className={(open) => `${glassToolButton(open)} catalog-tool`}
@@ -2917,9 +2929,15 @@ export default function ApiTrackerView(): JSX.Element {
               ]}
             />
 
+            </> : versionsEnabled && <button
+              className={glassPillButton(compactView)}
+              onClick={() => { setCompactView(!compactView); clearExpandedGroups() }}
+              aria-pressed={compactView} title="Show songs that have a named version group">
+              <Layers size={15} /><span className="text-xs">Version groups</span>
+            </button>}
             {/* Always laid out (hidden outside the detailed view) so switching
                 layout never shifts the toolbar sideways. */}
-            {(() => {
+            {developerMode && (() => {
               const fieldsShown = viewMode === 'detail' && !compactView
               return (
                 <button
@@ -2938,7 +2956,7 @@ export default function ApiTrackerView(): JSX.Element {
           </div>
 
           {/* Second row - mobile-only category select (desktop uses the filter popover above) */}
-          <div className="md:hidden flex items-center gap-2 flex-wrap">
+          <div className={`md:hidden flex items-center gap-2 flex-wrap ${developerMode ? '' : '!hidden'}`}>
             <ThemedSelect
               value={categoryParam}
               onChange={(v) => { setCategoryFilter(new Set(v ? [v as Category] : [])); resetSongs() }}

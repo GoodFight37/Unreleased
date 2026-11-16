@@ -90,8 +90,8 @@ const main = async () => {
     await record('tab: Home -> Tracker', () => store(() => window.__store.getState().setActiveView('api-tracker')), 1400)
     await record('tab: Tracker -> Files', () => store(() => window.__store.getState().setActiveView('api-files')))
     await record('tab: Files -> Playlists', () => store(() => window.__store.getState().setActiveView('playlists')))
-    await record('nav: hover + press Home', async () => {
-      const btn = win.locator('.app-sidebar button[aria-label="Home"]').first()
+    await record('nav: hover + press Discover', async () => {
+      const btn = win.locator('.app-sidebar button[aria-label="Discover"]').first()
       await btn.hover(); await win.mouse.down(); await win.waitForTimeout(150); await win.mouse.up()
     })
     await record('play/pause toggle', async () => {
@@ -109,9 +109,13 @@ const main = async () => {
       await store(() => window.__store.setState({ showQueue: true })); await win.waitForTimeout(700)
       await store(() => window.__store.setState({ showQueue: false }))
     }, 1000)
-    await record('tracker era chip', async () => {
+    await record('catalogue era filter', async () => {
       await store(() => window.__store.getState().setActiveView('api-tracker')); await win.waitForTimeout(900)
-      await win.locator('[aria-label="Eras"] button').nth(1).click()
+      await win.locator('button[title="Filters"]').click()
+      const allEras = win.getByRole('button', { name: 'All eras', exact: true })
+      await allEras.waitFor({ timeout: 10_000 })
+      await allEras.locator('..').getByRole('button').nth(1).click()
+      await win.keyboard.press('Escape')
     })
     await record('theme Dark -> Light', () => store(() => window.__store.getState().setTheme('glass-light')), 1200)
     await record('open WRLD', () => store(() => window.__store.getState().setActiveView('wrld')), 1500)
@@ -132,6 +136,7 @@ const main = async () => {
     console.log(`${r.step} | ${r.kind} ${r.name} | ${r.duration}ms+${r.delay} x${r.iterations} | ${r.easing} | ${r.from} -> ${r.to} | ${r.target} | ${flag(r)}`)
   }
   console.log(`\n${all.length} rows -> ${path.relative(ROOT, OUT)}`)
+  if (all.some((row) => row.error)) throw new Error('Motion audit has failed scenarios; see motion-audit.json')
 }
 
 main().catch((err) => { console.error('[motion-audit]', err); process.exitCode = 1 })
