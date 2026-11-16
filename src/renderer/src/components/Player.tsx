@@ -2821,7 +2821,7 @@ export default function Player(): JSX.Element {
         {/* Track info */}
         <div className="flex items-center gap-3 w-72 min-w-0 shrink-0">
           <button
-            className="w-14 h-14 rounded-[10px] bg-surface-overlay shrink-0 overflow-hidden hover:ring-2 ring-accent transition-all"
+            className="w-14 h-14 rounded-[10px] bg-surface-overlay shrink-0 overflow-hidden hover:ring-2 ring-accent transition"
             onClick={radioFmActive ? expandToWrld : () => setShowNowPlaying(!showNowPlaying)}
             title={radioFmActive ? '999FM' : 'Now Playing'}
           >

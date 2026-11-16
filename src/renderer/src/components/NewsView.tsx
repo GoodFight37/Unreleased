@@ -112,7 +112,7 @@ function FeaturedCard({ item, onOpen, canManage, onEdit, onDelete, onContextMenu
       <button
         onClick={() => onOpen(item)}
         onContextMenu={(e) => { e.preventDefault(); onContextMenu(item, e) }}
-        className="w-full text-left rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-raised)] hover:border-accent/40 hover:shadow-lg hover:shadow-black/5 transition-all duration-200 block cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="w-full text-left rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-raised)] hover:border-accent/40 hover:shadow-lg hover:shadow-black/5 transition duration-200 block cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         {item.image_url ? (
           <div className="relative aspect-[16/7] w-full overflow-hidden bg-[var(--surface-overlay)]">
@@ -155,7 +155,7 @@ function NewsCard({ item, onOpen, canManage, onEdit, onDelete, onContextMenu }: 
       <button
         onClick={() => onOpen(item)}
         onContextMenu={(e) => { e.preventDefault(); onContextMenu(item, e) }}
-        className="w-full h-full text-left flex flex-col rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--surface-raised)] hover:border-accent/40 hover:shadow-lg hover:shadow-black/5 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="w-full h-full text-left flex flex-col rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--surface-raised)] hover:border-accent/40 hover:shadow-lg hover:shadow-black/5 hover:-translate-y-0.5 transition duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         {item.image_url && (
           <div className="w-full aspect-[16/9] shrink-0 overflow-hidden bg-[var(--surface-overlay)]">

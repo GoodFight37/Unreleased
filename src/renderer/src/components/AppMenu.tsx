@@ -537,7 +537,7 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
           aria-label="Application menu"
           tabIndex={-1}
           onKeyDown={handlePanelKeyDown}
-          className="app-menu-glass animate-menu-pop !p-0 !min-w-0 !max-w-none w-[356px] max-w-[calc(100vw-16px)] flex flex-col !overflow-hidden outline-none"
+          className="app-menu-glass animate-menu-pop origin-top-left !p-0 !min-w-0 !max-w-none w-[356px] max-w-[calc(100vw-16px)] flex flex-col !overflow-hidden outline-none"
         >
           {/* Category tabs with sliding liquid halo */}
           <div

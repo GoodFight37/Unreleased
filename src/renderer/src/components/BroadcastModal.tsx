@@ -128,7 +128,7 @@ export default function BroadcastModal({ onClose }: { onClose: () => void }): JS
         {confirming ? (
           <div className="flex items-center gap-2">
             <button onClick={send} disabled={sending}
-              className="flex-1 py-2.5 rounded-xl bg-accent text-[var(--bg)] text-sm font-semibold hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40">
+              className="flex-1 py-2.5 rounded-xl bg-accent text-[var(--bg)] text-sm font-semibold hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-40">
               {sending && <Loader2 size={14} className="animate-spin" />} Send to everyone
             </button>
             <button onClick={() => setConfirming(false)} disabled={sending}
@@ -138,7 +138,7 @@ export default function BroadcastModal({ onClose }: { onClose: () => void }): JS
           </div>
         ) : (
           <button onClick={() => { setSent(false); setConfirming(true) }} disabled={!trimmed}
-            className="w-full py-2.5 rounded-xl bg-accent text-[var(--bg)] text-sm font-semibold hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40">
+            className="w-full py-2.5 rounded-xl bg-accent text-[var(--bg)] text-sm font-semibold hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-40">
             <Megaphone size={14} /> Broadcast
           </button>
         )}

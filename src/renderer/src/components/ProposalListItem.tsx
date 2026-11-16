@@ -68,7 +68,7 @@ export default function ProposalListItem({
 
   const actionBtnCls = isMobile
     ? 'w-8 h-8 flex items-center justify-center rounded-lg text-text-muted transition-colors disabled:opacity-40'
-    : 'p-1.5 rounded-lg text-text-muted transition-all disabled:opacity-40'
+    : 'p-1.5 rounded-lg text-text-muted transition disabled:opacity-40'
 
   return (
     <div className={`rounded-xl overflow-hidden bg-surface/60 border border-[var(--border)] transition-colors ${isMobile ? '' : 'hover:border-accent/30 group'}`}>

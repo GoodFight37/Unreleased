@@ -132,7 +132,7 @@ export default function LyricsControls(): JSX.Element {
               onClick={() => setLyricsBlur(!lyricsBlur)}
               className={`relative w-10 h-5 rounded-full shrink-0 transition-colors appearance-none border-0 p-0 leading-none ${lyricsBlur ? 'bg-accent' : 'bg-[var(--surface-overlay)]'}`}
             >
-              <span className={`absolute inset-y-0 my-auto w-4 h-4 rounded-full bg-white transition-all ${lyricsBlur ? 'left-[22px]' : 'left-0.5'}`} />
+              <span className={`absolute inset-y-0 my-auto w-4 h-4 rounded-full bg-white transition ${lyricsBlur ? 'left-[22px]' : 'left-0.5'}`} />
             </button>
           </div>
           {lyricsBlur && (

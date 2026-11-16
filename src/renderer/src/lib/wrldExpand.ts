@@ -8,7 +8,7 @@ import type { ViewType } from '../types'
 // previous view mounted under WRLD until the slide ends, and WRLD animates
 // its own page with transform and opacity.
 
-const DURATION_MS = 550
+const DURATION_MS = 380
 const EASING = 'cubic-bezier(0.4, 0, 0.2, 1)'
 /** Corner radius of the floating bar the sheet grows out of. */
 const BAR_RADIUS = 22

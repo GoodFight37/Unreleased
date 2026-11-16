@@ -2,6 +2,9 @@
 export default {
   content: ['./src/renderer/src/**/*.{js,ts,jsx,tsx}', './src/renderer/index.html'],
   darkMode: 'class',
+  // Hover styles only on devices that really hover (mouse, trackpad): a tap
+  // on a touch screen must not leave a hover state stuck on.
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       colors: {

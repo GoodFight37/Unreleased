@@ -92,7 +92,7 @@ export default function PlaylistCard({
       {...(onLongPress ? longPress.bind(onLongPress) : {})}
     >
       <div
-        className={`relative aspect-square rounded-2xl overflow-hidden bg-[var(--fill)] flex items-center justify-center mb-2.5 shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition-all duration-200 ${selected ? 'ring-2 ring-accent' : ''} ${isDropTarget ? 'ring-2 ring-accent scale-[1.03]' : ''}`}
+        className={`relative aspect-square rounded-2xl overflow-hidden bg-[var(--fill)] flex items-center justify-center mb-2.5 shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition duration-200 ${selected ? 'ring-2 ring-accent' : ''} ${isDropTarget ? 'ring-2 ring-accent scale-[1.03]' : ''}`}
         // Kept permanently on its own GPU layer (rather than only while
         // hovered) so entering hover just updates this layer's existing
         // transform instead of promoting a fresh one - a late promotion here

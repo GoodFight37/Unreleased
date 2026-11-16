@@ -1339,7 +1339,7 @@ function OtpSetupPanel({ onEnabled }: { onEnabled: () => Promise<void> }): JSX.E
         </div>
       )}
       <button onClick={confirm} disabled={confirming || !code}
-        className="w-full py-2.5 rounded-xl bg-accent text-[var(--bg)] text-sm font-semibold hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40">
+        className="w-full py-2.5 rounded-xl bg-accent text-[var(--bg)] text-sm font-semibold hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-40">
         {confirming && <Loader2 size={14} className="animate-spin" />} Verify & enable
       </button>
     </div>

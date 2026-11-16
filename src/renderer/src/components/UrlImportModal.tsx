@@ -405,7 +405,7 @@ export default function UrlImportModal(): JSX.Element | null {
               <button
                 onClick={run}
                 disabled={busy || noElectron || !url.trim()}
-                className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full py-2.5 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {busy ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
                 {busy ? 'Importing…' : 'Import'}

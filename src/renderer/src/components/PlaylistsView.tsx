@@ -3529,7 +3529,7 @@ export default function PlaylistsView(): JSX.Element {
               key: 'liked',
               tile: (
                 <button key="liked" onClick={e => handleCardClick('liked', true, e.detail)} onDoubleClick={() => setShowLiked(true)} className="group text-left cursor-pointer">
-                  <div className={`aspect-square rounded-2xl bg-gradient-to-br from-accent/60 to-accent/15 flex items-center justify-center mb-2.5 shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition-all duration-200 ${expandedKey === 'liked' ? 'ring-2 ring-accent' : ''}`}>
+                  <div className={`aspect-square rounded-2xl bg-gradient-to-br from-accent/60 to-accent/15 flex items-center justify-center mb-2.5 shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition duration-200 ${expandedKey === 'liked' ? 'ring-2 ring-accent' : ''}`}>
                     <Heart size={44} className="text-accent" fill="currentColor" />
                   </div>
                   <p className="text-text-primary text-sm font-semibold truncate">Liked Songs</p>

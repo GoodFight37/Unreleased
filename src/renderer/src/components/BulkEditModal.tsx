@@ -898,7 +898,7 @@ function BulkEditor<T>({ spec, onClose }: { spec: BulkSpec<T>; onClose: () => vo
                     <button
                       key={o.value}
                       onClick={() => setValue(f.key, o.value)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${
                         value === o.value
                           ? 'bg-accent text-white'
                           : 'bg-surface-overlay text-text-muted hover:text-text-primary border border-[var(--border)]'
@@ -1124,7 +1124,7 @@ function BulkEditor<T>({ spec, onClose }: { spec: BulkSpec<T>; onClose: () => vo
                   onClick={submit}
                   disabled={batch.length === 0 || status === 'submitting' || status === 'done'}
                   title={batch.length > 0 && status === 'idle' ? 'Ctrl+Enter' : undefined}
-                  className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                     status === 'done'  ? 'bg-emerald-500/20 text-emerald-400' :
                     status === 'error' ? 'bg-red-500/20 text-red-400' :
                     batch.length === 0 ? 'bg-surface-overlay text-text-muted opacity-30 cursor-not-allowed' :

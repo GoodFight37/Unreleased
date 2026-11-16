@@ -120,7 +120,7 @@ function CompRow({ item, onOpen }: { item: CompChange; onOpen: (i: CompChange) =
   return (
     <button
       onClick={() => onOpen(item)}
-      className="w-full text-left flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] hover:border-accent/40 hover:shadow-lg hover:shadow-black/5 transition-all duration-200 p-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      className="w-full text-left flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] hover:border-accent/40 hover:shadow-lg hover:shadow-black/5 transition duration-200 p-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
     >
       <ActionIcon action={item.action} />
       <div className="min-w-0 flex-1">
@@ -151,7 +151,7 @@ function TrackerRow({ item, onOpen }: { item: TrackerChange; onOpen: (i: Tracker
   return (
     <button
       onClick={() => clickable && onOpen(item)}
-      className={`w-full text-left flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 transition-all duration-200 ${
+      className={`w-full text-left flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 transition duration-200 ${
         clickable ? 'hover:border-accent/40 hover:shadow-lg hover:shadow-black/5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50' : 'cursor-default'
       }`}
     >

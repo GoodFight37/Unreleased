@@ -72,7 +72,7 @@ export default function RadioFmControls(): JSX.Element {
         <div className="flex gap-2">
           <button
             onClick={() => castFmVote('yes')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium transition ${
               myVote === 'yes'
                 ? 'bg-green-600/40 text-green-300 ring-1 ring-green-500/50'
                 : 'bg-green-600/15 hover:bg-green-600/30 text-green-400'
@@ -81,7 +81,7 @@ export default function RadioFmControls(): JSX.Element {
           </button>
           <button
             onClick={() => castFmVote('no')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium transition ${
               myVote === 'no'
                 ? 'bg-red-600/40 text-red-300 ring-1 ring-red-500/50'
                 : 'bg-red-900/15 hover:bg-red-900/30 text-red-400'

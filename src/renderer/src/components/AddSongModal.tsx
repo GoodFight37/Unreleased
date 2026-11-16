@@ -186,7 +186,7 @@ export default function AddSongModal({ onClose, onSubmitted, channel }: {
             <input value={edNotes} onChange={e => setEdNotes(e.target.value)} placeholder="Editor notes (optional)…"
               className="flex-1 min-w-0 bg-[var(--surface-overlay)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs text-text-primary placeholder:text-text-muted placeholder:opacity-30 focus:outline-none focus:border-accent/40 transition-colors" />
             <button onClick={handleSubmit} disabled={!f.name.trim() || submitState === 'submitting' || submitState === 'submitted'}
-              className={`sm:w-52 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              className={`sm:w-52 py-2.5 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 ${
                 submitState === 'submitted' ? 'bg-emerald-500/20 text-emerald-400' :
                 submitState === 'error'     ? 'bg-red-500/20 text-red-400' :
                 !f.name.trim()              ? 'bg-[var(--surface-overlay)] text-text-muted opacity-40 cursor-not-allowed' :

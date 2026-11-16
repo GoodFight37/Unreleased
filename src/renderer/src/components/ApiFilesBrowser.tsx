@@ -1364,7 +1364,7 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
                       {!isDir && <span className="hidden md:inline-block text-center text-[10px] uppercase tracking-wide text-text-muted bg-surface-overlay px-1.5 py-0.5 rounded shrink-0 w-12">{ext}</span>}
                       {!selectMode && (
                         <button
-                          className="shrink-0 p-2 -my-1.5 text-text-muted md:opacity-0 md:group-hover:opacity-100 hover:text-text-primary active:text-accent transition-all"
+                          className="shrink-0 p-2 -my-1.5 text-text-muted md:opacity-0 md:group-hover:opacity-100 hover:text-text-primary active:text-accent transition"
                           onClick={(e) => { e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
                           title="More options"
                         >
@@ -1529,7 +1529,7 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
                               {pending && <PendingMarker proposal={pending} />}
                               {!selectMode && (
                                 <button
-                                  className="shrink-0 p-1.5 -m-1 text-text-muted md:opacity-0 md:group-hover:opacity-100 hover:text-text-primary active:text-accent transition-all"
+                                  className="shrink-0 p-1.5 -m-1 text-text-muted md:opacity-0 md:group-hover:opacity-100 hover:text-text-primary active:text-accent transition"
                                   onClick={(e) => { e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
                                   title="More options"
                                 >

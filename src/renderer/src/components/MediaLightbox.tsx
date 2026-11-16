@@ -303,7 +303,7 @@ export default function MediaLightbox({ items, index, onClose, onNav }: Props): 
             <button
               key={it.url}
               onClick={() => onNav(i)}
-              className={`shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition-all ${
+              className={`shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition ${
                 i === index ? 'border-accent' : 'border-transparent opacity-50 hover:opacity-80'
               }`}
             >

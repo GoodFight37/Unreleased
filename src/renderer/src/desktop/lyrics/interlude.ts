@@ -75,7 +75,7 @@ export class InterludeMark {
     if (animated) {
       run(this.el, [{ opacity: 0 }, { opacity: 1 }], { duration: 600, delay: 150, easing: 'ease-out', fill: 'backwards' })
       run(this.el, [{ transform: 'scale(0.7)' }, { transform: 'scale(1)' }],
-        { duration: 700, delay: 150, easing: 'cubic-bezier(0.2, 1.4, 0.4, 1)', fill: 'backwards' })
+        { duration: 700, delay: 150, easing: 'cubic-bezier(0.2, 1.15, 0.4, 1)', fill: 'backwards' })
     }
     // The note breathes, slowly, and sways a little.
     run(this.note, [{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }],
@@ -93,7 +93,7 @@ export class InterludeMark {
         if (lit > 0) {
           run(dot, [{ opacity: 0.22 }, { opacity: 1 }], { duration: 350, delay: lit * 1000, easing: 'ease-out', fill: 'backwards' })
           run(dot, [{ transform: 'scale(1.6)' }, { transform: 'scale(1)' }],
-            { duration: 450, delay: lit * 1000, easing: 'cubic-bezier(0.2, 1.4, 0.4, 1)', fill: 'backwards' })
+            { duration: 450, delay: lit * 1000, easing: 'cubic-bezier(0.2, 1.15, 0.4, 1)', fill: 'backwards' })
         }
       } else {
         dot.style.opacity = '0.22'
@@ -112,7 +112,7 @@ export class InterludeMark {
     this.el.style.opacity = '0'
     if (!animated) return
     this.el.animate([{ opacity: from, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.8)' }],
-      { duration: 300, easing: 'ease-in' })
+      { duration: 200, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' })
   }
 
   /** Holds still with the song paused, and goes on with it. */

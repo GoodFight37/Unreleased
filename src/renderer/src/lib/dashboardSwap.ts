@@ -83,7 +83,7 @@ export function swapIn(root: HTMLElement, dir: 1 | -1, wholePage = false): void 
   // A whole page (Home -> Tracker, Files, Playlists) only fades in, in place:
   // no sideways slide, no copy of the old page (App.tsx skips captureLeaving).
   if (wholePage) {
-    root.animate([{ opacity: 0 }, { opacity: 1 }], { duration: PAGE_SWAP_IN_MS, easing: 'cubic-bezier(0.33, 0, 0.15, 1)' })
+    root.animate([{ opacity: 0 }, { opacity: 1 }], { duration: PAGE_SWAP_IN_MS, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' })
     return
   }
   const runs = new Map<HTMLElement, Animation>()

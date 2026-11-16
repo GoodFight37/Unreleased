@@ -662,7 +662,7 @@ export class EchoScene extends LyricScene {
     current.rings[index].forEach((ring, number) => {
       const wait = delay + 0.04 + number * 0.09, duration = 0.55 + number * 0.15
       this.animate(ring, [{ opacity: number === 0 ? 0.7 : 0.4, scale: '1' }, { opacity: 0, scale: number === 0 ? '1.3' : '1.6' }],
-        { duration, delay: wait, easing: 'ease-in', hold: false })
+        { duration, delay: wait, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', hold: false })
     })
   }
 }
@@ -762,7 +762,7 @@ export class CinemaScene extends LyricScene {
       const old = this.title.block
       if (animated) {
         this.fadeAway(old, 0.45)
-        this.animate(old, [{ translate: '0px 0px' }, { translate: `0px ${-22 * this.s}px` }], { duration: 0.5, easing: 'ease-in' })
+        this.animate(old, [{ translate: '0px 0px' }, { translate: `0px ${-22 * this.s}px` }], { duration: 0.3, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' })
       } else old.remove()
     }
     this.title = null

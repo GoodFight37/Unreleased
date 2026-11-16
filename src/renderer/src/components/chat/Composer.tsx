@@ -1356,7 +1356,7 @@ const Composer = forwardRef<ComposerHandle, {
             onClick={submit}
             disabled={!canSend}
             title="Send"
-            className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center transition-all ${
+            className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center transition ${
               canSend ? 'bg-accent text-white hover:brightness-110 scale-100' : 'text-text-muted scale-95'
             }`}
           >

@@ -21,8 +21,8 @@ export function SwapIcon({ swapKey, children }: { swapKey: string | boolean; chi
     prev.current = swapKey
     if (reducedMotion()) return
     ref.current?.animate(
-      [{ opacity: 0, transform: 'scale(0.55)' }, { opacity: 1, transform: 'scale(1)' }],
-      { duration: 260, easing: 'cubic-bezier(0.3, 1.25, 0.5, 1)' },
+      [{ opacity: 0, transform: 'scale(0.9)' }, { opacity: 1, transform: 'scale(1)' }],
+      { duration: 140, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' },
     )
   }, [swapKey])
   return <span ref={ref} className="inline-flex">{children}</span>
@@ -50,7 +50,7 @@ export function TrackSwap({ swapKey, order, className, children }: {
         { opacity: 0, transform: step === 1 || step === -1 ? `translateX(${step * 16}px)` : 'translateY(6px)' },
         { opacity: 1, transform: 'none' },
       ],
-      { duration: 380, easing: ENTER_EASE },
+      { duration: 220, easing: ENTER_EASE },
     )
   }, [swapKey, order])
   return <div ref={ref} className={className}>{children}</div>

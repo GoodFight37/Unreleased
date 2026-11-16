@@ -120,7 +120,7 @@ export function SlotRow({ ladder, guesses, status, showEraHint }: {
           <div
             key={i}
             title={guess ? (guess.songId === null ? 'Skipped' : guess.label) : `${secLabel(secs)} unlocked`}
-            className={`flex-1 h-11 sm:h-12 rounded-xl border transition-all duration-200 ${tone}`}
+            className={`flex-1 h-11 sm:h-12 rounded-xl border transition duration-200 ${tone}`}
           />
         )
       })}

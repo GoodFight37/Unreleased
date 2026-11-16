@@ -109,7 +109,7 @@ export class Aura {
   fade(opacity: number, duration: number): Promise<unknown> {
     const from = getComputedStyle(this.stage).opacity
     this.stage.style.opacity = String(opacity)
-    return this.stage.animate([{ opacity: from }, { opacity }], { duration, easing: opacity > 0 ? 'ease-out' : 'ease-in' }).finished.catch(() => {})
+    return this.stage.animate([{ opacity: from }, { opacity }], { duration, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' }).finished.catch(() => {})
   }
 
   /** The breath and every spark's endless drift, each on its own path and pace. */

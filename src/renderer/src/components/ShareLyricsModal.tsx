@@ -1031,7 +1031,7 @@ export default function ShareLyricsModal({ title, artist, imageUrl, rawLyrics, a
                   {busy === 'mp4' && mp4Progress !== null && (
                     <div className="w-full h-1.5 rounded-full bg-[var(--surface-highest)] overflow-hidden">
                       <div
-                        className="h-full bg-accent transition-all duration-150"
+                        className="h-full bg-accent transition duration-150"
                         style={{ width: `${mp4Progress}%` }}
                       />
                     </div>

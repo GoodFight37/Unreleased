@@ -90,7 +90,7 @@ function Toggle({ checked, onChange, label, description, icon }: { checked: bool
         <span className="block text-xs text-text-muted">{description}</span>
       </span>
       <span className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${checked ? 'bg-accent' : 'bg-surface-highest'}`}>
-        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${checked ? 'left-5' : 'left-1'}`} />
+        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition ${checked ? 'left-5' : 'left-1'}`} />
       </span>
     </button>
   )

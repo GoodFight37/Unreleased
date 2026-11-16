@@ -129,8 +129,13 @@ export class LyricScene implements LyricRenderer {
   animate(el: HTMLElement, frames: Keyframe[], { duration, delay = 0, easing = 'ease-out', hold = true }: {
     duration: number; delay?: number; easing?: string; hold?: boolean
   }): Animation {
-    const animation = el.animate(frames, { duration: duration * 1000, delay: delay * 1000, easing, fill: hold ? 'backwards' : 'none' })
     const last = frames[frames.length - 1]
+    // Reduced motion: keep the fades, drop the movement (CSS rules can't reach Element.animate()).
+    if (document.documentElement.dataset.effectsMotion === 'reduce') {
+      frames = frames.map((f) => ('opacity' in f ? { offset: f.offset, opacity: f.opacity } : { offset: f.offset }))
+      duration = Math.min(duration, 0.2)
+    }
+    const animation = el.animate(frames, { duration: duration * 1000, delay: delay * 1000, easing, fill: hold ? 'backwards' : 'none' })
     const style = el.style as unknown as Record<string, string>
     for (const key of Object.keys(last)) if (key !== 'offset' && key !== 'easing' && key !== 'composite') style[key] = String(last[key])
     if (this.frozen) animation.pause()
@@ -144,7 +149,7 @@ export class LyricScene implements LyricRenderer {
       const effect = a.effect as KeyframeEffect | null
       if (effect?.getKeyframes().some((k) => 'opacity' in k)) a.cancel()
     })
-    this.animate(el, [{ opacity: from }, { opacity: 0 }], { duration, delay, easing: 'ease-in' }).finished
+    this.animate(el, [{ opacity: from }, { opacity: 0 }], { duration, delay, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' }).finished
       .then(() => el.remove(), () => el.remove())
   }
 

@@ -124,16 +124,16 @@
 html:active-view-transition-type(palette)::view-transition { pointer-events: none; }
 html:active-view-transition-type(palette)::view-transition-old(root),
 html:active-view-transition-type(palette)::view-transition-new(root) {
-  animation-duration: 450ms;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-duration: 300ms;
+  animation-timing-function: var(--ease-out);
 }
 
 /* A dialog growing or shrinking (ModalOverlay's `expanded`) cross-fades the same way. */
 html:active-view-transition-type(panel-resize)::view-transition { pointer-events: none; }
 html:active-view-transition-type(panel-resize)::view-transition-old(root),
 html:active-view-transition-type(panel-resize)::view-transition-new(root) {
-  animation-duration: 450ms;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-duration: 300ms;
+  animation-timing-function: var(--ease-out);
 }
 
 /* ─── Gradient surfaces ──────────────────────────────────────────────────────────
@@ -500,7 +500,7 @@ input[type='range']:active::-moz-range-thumb {
   overflow: hidden;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.2s var(--ease-out);
 }
 .player-loading--range {
   top: 50%;
@@ -636,7 +636,7 @@ input[type='range']:active::-moz-range-thumb {
   to   { opacity: 1; }
 }
 .animate-sheet-in  { animation: sheet-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-sheet-out { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; animation-composition: add; }
+.animate-sheet-out { animation: sheet-out 0.2s var(--ease-out) both; animation-composition: add; }
 .animate-scrim-in  { animation: scrim-in 0.2s ease both; }
 .animate-scrim-out { animation: scrim-in 0.18s ease reverse both; }
 
@@ -675,14 +675,14 @@ input[type='range']:active::-moz-range-thumb {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.rows-cascade > :nth-child(-n+24) { animation: row-in 0.36s cubic-bezier(0.33, 0, 0.15, 1) both; }
-.rows-cascade > :nth-child(2)  { animation-delay:  16ms; }
-.rows-cascade > :nth-child(3)  { animation-delay:  32ms; }
-.rows-cascade > :nth-child(4)  { animation-delay:  48ms; }
-.rows-cascade > :nth-child(5)  { animation-delay:  64ms; }
-.rows-cascade > :nth-child(6)  { animation-delay:  80ms; }
-.rows-cascade > :nth-child(7)  { animation-delay:  96ms; }
-.rows-cascade > :nth-child(8)  { animation-delay: 112ms; }
+.rows-cascade > :nth-child(-n+8) { animation: row-in 0.22s var(--ease-out) both; }
+.rows-cascade > :nth-child(2)  { animation-delay:  10ms; }
+.rows-cascade > :nth-child(3)  { animation-delay:  20ms; }
+.rows-cascade > :nth-child(4)  { animation-delay:  30ms; }
+.rows-cascade > :nth-child(5)  { animation-delay:  40ms; }
+.rows-cascade > :nth-child(6)  { animation-delay:  50ms; }
+.rows-cascade > :nth-child(7)  { animation-delay:  60ms; }
+.rows-cascade > :nth-child(8)  { animation-delay:  70ms; }
 .rows-cascade > :nth-child(9)  { animation-delay: 128ms; }
 .rows-cascade > :nth-child(10) { animation-delay: 144ms; }
 .rows-cascade > :nth-child(11) { animation-delay: 158ms; }
@@ -749,22 +749,30 @@ input[type='range']:active::-moz-range-thumb {
   from { opacity: 1; transform: translateY(0); }
   to   { opacity: 0; transform: translateY(-6px); }
 }
-.animate-wrld-view-in  { animation: wrld-view-in 0.46s cubic-bezier(0.33, 0, 0.15, 1) 0.14s both; }
+.animate-wrld-view-in  { animation: wrld-view-in 0.24s var(--ease-out) both; }
 .animate-wrld-view-out { animation: wrld-view-out 0.22s cubic-bezier(0.4, 0, 0.6, 1) both; pointer-events: none; }
 
 /* The toggle's own icon (lyrics / queue / radio) turns in when it changes. */
 @keyframes wrld-icon-swap {
-  from { opacity: 0; transform: scale(0.7) rotate(-30deg); }
-  to   { opacity: 1; transform: scale(1)   rotate(0); }
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
 }
-.animate-wrld-icon-swap { display: inline-flex; animation: wrld-icon-swap 0.38s cubic-bezier(0.3, 1.25, 0.5, 1) both; }
+.animate-wrld-icon-swap { display: inline-flex; animation: wrld-icon-swap 0.14s var(--ease-out) both; }
+
+/* Shared motion curves (strong ease-out for anything entering or leaving,
+   ease-in-out for on-screen moves, iOS-like curve for drawers). */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
 
 /* Top-bar buttons: a light translucent veil on hover (never a dark square) and
    only the pressed button sinks, not the whole bar. */
-.nav-btn { transition: color 150ms ease-out, background-color 150ms ease-out, transform 120ms ease-out; }
+.nav-btn { transition: color 150ms ease, background-color 150ms ease, transform 160ms var(--ease-out); }
 .nav-btn:hover { background-color: rgb(0 0 0 / 0.05); }
 .dark .nav-btn:hover { background-color: rgb(255 255 255 / 0.08); }
-.nav-btn:active { transform: scale(0.96); }
+.nav-btn:active { transform: scale(0.96); transition-duration: 150ms, 150ms, 100ms; }
 .nav-active-fill { background-color: rgb(0 0 0 / 0.06); }
 .dark .nav-active-fill { background-color: rgb(255 255 255 / 0.1); }
 @media (prefers-reduced-motion: reduce) { .nav-btn:active { transform: none; } }
@@ -801,10 +809,10 @@ input[type='range']:active::-moz-range-thumb {
   opacity: 0;
   will-change: transform;
   transition:
-    transform 0.38s cubic-bezier(0.4, 0, 0.2, 1),
-    width 0.38s cubic-bezier(0.4, 0, 0.2, 1),
-    height 0.38s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.2s ease;
+    transform 0.2s var(--ease-out),
+    width 0.2s var(--ease-out),
+    height 0.2s var(--ease-out),
+    opacity 0.15s ease;
 }
 
 /* ─── Playlist grid quick view ─────────────────────────────────────────────────
@@ -893,12 +901,13 @@ input[type='range']:active::-moz-range-thumb {
 
 /* Menu / flyout entrance, also used by Transfers. A fade keeps text crisp
    and leaves anchored menus in place, including ones flipped above a trigger. */
+/* `scale`, not `transform`: popovers centred with a translate keep it. */
 @keyframes menu-pop {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from { opacity: 0; scale: 0.96; }
+  to   { opacity: 1; scale: 1; }
 }
 .animate-menu-pop {
-  animation: menu-pop 0.45s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+  animation: menu-pop 0.18s var(--ease-out) backwards;
 }
 
 /* Settings disclosures only arrive in response to expanding a section. */
@@ -907,7 +916,7 @@ input[type='range']:active::-moz-range-thumb {
   to   { opacity: 1; transform: none; }
 }
 .animate-disclosure-in {
-  animation: disclosure-in 0.48s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+  animation: disclosure-in 0.22s var(--ease-out) backwards;
 }
 
 /* Shared switch thumbs, checkmarks, disclosure arrows and transfer progress.
@@ -1226,11 +1235,13 @@ html.glass-gpu-active:has(.modal-glass) .menu-glass {
 /* Tactile spring response on interactive glass buttons & chips (disabled in reduced motion). */
 .glass-button,
 .glass-chip {
-  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s;
+  transition: transform 0.2s var(--ease-out), color 0.15s;
 }
+/* Press sinks fast, release eases back a little slower. */
 .glass-button:active:not(:disabled),
 .glass-chip:active:not(:disabled) {
   transform: scale(0.96);
+  transition-duration: 0.12s, 0.15s;
 }
 :where(html[data-effects-motion="reduce"]) .glass-button,
 :where(html[data-effects-motion="reduce"]) .glass-chip {
@@ -1584,10 +1595,10 @@ body, #root, .app-shell {
    `to`, so it lands on the image's own opacity, whatever that is. */
 @keyframes img-fade-in { from { opacity: 0; } }
 img[data-img-fade="pending"] { opacity: 0; }
-img[data-img-fade="in"] { animation: img-fade-in 0.42s cubic-bezier(0.33, 0, 0.15, 1); }
+img[data-img-fade="in"] { animation: img-fade-in 0.24s var(--ease-out); }
 
 /* Player cover art crossfading between songs (PlayerMotion's CoverFade). */
-.cover-fade { transition: opacity 0.34s cubic-bezier(0.33, 0, 0.15, 1); }
+.cover-fade { transition: opacity 0.24s var(--ease-out); }
 
 /* Wordle: the row a rejected guess was typed into. The message under the board
    says what's wrong; this is what makes it land without being read. */

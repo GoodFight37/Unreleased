@@ -225,7 +225,7 @@ export default function StatsView(): JSX.Element {
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); setCtxMenu((prev) => prev?.track.id === track.id ? null : { track, songId, x: e.clientX, y: e.clientY }) }}
-                    className="p-1.5 text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                    className="p-1.5 text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 transition shrink-0"
                     title="More options"
                   >
                     <MoreHorizontal size={16} />
@@ -290,7 +290,7 @@ export default function StatsView(): JSX.Element {
                       {track && (
                         <button
                           onClick={(e) => { e.stopPropagation(); setCtxMenu((prev) => prev?.songId === event.song ? null : { track, songId: event.song, x: e.clientX, y: e.clientY }) }}
-                          className="p-1.5 text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                          className="p-1.5 text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 transition shrink-0"
                           title="More options"
                         >
                           <MoreHorizontal size={16} />

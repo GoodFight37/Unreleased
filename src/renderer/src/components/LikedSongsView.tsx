@@ -149,7 +149,7 @@ export default function LikedSongsView(): JSX.Element {
                       equivalent - invisible and undiscoverable on mobile. */}
                   <button
                     onClick={e => { e.stopPropagation(); setCtxMenu(prev => prev?.track.id === track.id ? null : { track, songId, x: e.clientX, y: e.clientY }) }}
-                    className="text-text-muted hover:text-text-primary opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all shrink-0 w-11 h-11 md:w-auto md:h-auto flex items-center justify-center md:p-1.5"
+                    className="text-text-muted hover:text-text-primary opacity-100 md:opacity-0 md:group-hover:opacity-100 transition shrink-0 w-11 h-11 md:w-auto md:h-auto flex items-center justify-center md:p-1.5"
                     aria-label="More options"
                   >
                     <MoreHorizontal size={18} className="md:w-4 md:h-4" />

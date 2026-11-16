@@ -304,7 +304,7 @@ export default function DonorFiles(): JSX.Element {
           </div>
           <div className="h-1.5 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${pct > 90 ? 'bg-red-400' : 'bg-accent'}`}
+              className={`h-full rounded-full transition ${pct > 90 ? 'bg-red-400' : 'bg-accent'}`}
               style={{ width: `${pct}%` }}
             />
           </div>

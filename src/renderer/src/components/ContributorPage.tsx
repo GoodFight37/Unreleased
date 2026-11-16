@@ -680,7 +680,7 @@ export default function ContributorPage(): JSX.Element {
                       </button>
                     </div>
                     <div className="mt-1.5 h-1 bg-[var(--surface)] rounded-full overflow-hidden">
-                      <div className="h-full bg-accent rounded-full transition-all duration-200" style={{ width: `${u.percent}%` }} />
+                      <div className="h-full bg-accent rounded-full transition-[width] duration-200" style={{ width: `${u.percent}%` }} />
                     </div>
                   </div>
                 ))}

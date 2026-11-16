@@ -48,8 +48,8 @@ export function MotionDisclosure({ open, children, className }: {
       from,
       { opacity: open ? 1 : 0, transform: open ? 'none' : 'translateY(-4px)' },
     ], {
-      duration: open ? 480 : EXIT_MS,
-      easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+      duration: open ? 220 : EXIT_MS,
+      easing: 'cubic-bezier(0.23, 1, 0.32, 1)',
       fill: open ? 'none' : 'forwards',
     })
   }, [open, mounted, reducedMotion])

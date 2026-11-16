@@ -368,7 +368,7 @@ export function SyncedLyricsTable({ value, onChange }: {
             <button
               onClick={() => commit(rows.filter((_, j) => j !== i))}
               title="Remove line"
-              className="shrink-0 p-1 rounded text-text-muted opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:text-red-400 transition-all"
+              className="shrink-0 p-1 rounded text-text-muted opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:text-red-400 transition"
             >
               <X size={12} />
             </button>
@@ -831,7 +831,7 @@ export default function EditorPage({ initialSongId = null }: {
                   <div className="flex flex-wrap gap-1.5 mt-0.5">
                     {CATEGORIES.map(c => (
                       <button key={c.value} onClick={() => setCat(c.value)}
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${
                           cat === c.value
                             ? CAT_PILL[c.value] || 'bg-accent text-white'
                             : 'bg-surface-overlay text-text-muted hover:text-text-primary border border-[var(--border)]'
@@ -876,7 +876,7 @@ export default function EditorPage({ initialSongId = null }: {
                   <button
                     onClick={submit}
                     disabled={submitState === 'submitting' || submitState === 'submitted' || changedCount === 0 || alreadySubmitted}
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                       submitState === 'submitted' ? 'bg-emerald-500/20 text-emerald-400' :
                       submitState === 'error'     ? 'bg-red-500/20 text-red-400' :
                       changedCount === 0 || alreadySubmitted ? 'bg-surface-overlay text-text-muted opacity-30 cursor-not-allowed' :
@@ -899,7 +899,7 @@ export default function EditorPage({ initialSongId = null }: {
                       onBlur={() => { if (deleteState === 'confirm') setDeleteState('idle') }}
                       disabled={deleteState === 'submitting' || deleteState === 'submitted'}
                       title="Propose deleting this song entry - admins review before it's removed."
-                      className={`w-full py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                      className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                         deleteState === 'submitted' ? 'bg-emerald-500/20 text-emerald-400' :
                         deleteState === 'error'     ? 'bg-red-500/20 text-red-400' :
                         deleteState === 'confirm'   ? 'bg-red-500 text-white hover:bg-red-600' :
@@ -1081,7 +1081,7 @@ export default function EditorPage({ initialSongId = null }: {
                           : synced !== String(base.synced_lyrics || '')
                         return (
                           <button key={tab} onClick={() => setLyricsTab(tab)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
                               active ? 'bg-surface-overlay text-text-primary' : 'text-text-muted opacity-75 hover:text-text-muted'
                             }`}>
                             {tab === 'lyrics' ? 'Lyrics' : 'Synced'}

@@ -22,7 +22,7 @@ export function useContentMotion(ref: RefObject<HTMLElement>, contentKey: string
     if (!changed || !el?.getClientRects().length || reducedMotion.matches) return
 
     const animation = el.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: 460, easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+      duration: 180, easing: 'cubic-bezier(0.23, 1, 0.32, 1)',
     })
     const cancel = (): void => animation.cancel()
     reducedMotion.addEventListener('change', cancel)

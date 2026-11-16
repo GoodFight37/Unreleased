@@ -128,7 +128,7 @@ function AlbumCard({ album, coverUrl, onClick, onDelete }: {
     <div className="group/card flex flex-col gap-2 animate-fade-in">
       <button
         onClick={onClick}
-        className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[var(--surface-overlay)] shadow-sm hover:shadow-xl transition-all duration-300 ring-1 ring-black/5 dark:ring-white/5 hover:scale-[1.02]"
+        className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[var(--surface-overlay)] shadow-sm hover:shadow-xl transition duration-300 ring-1 ring-black/5 dark:ring-white/5 hover:scale-[1.02]"
       >
         {coverUrl && !imgError ? (
           <img src={coverUrl} alt={album.title} className="w-full h-full object-cover" onError={() => setImgError(true)} />
@@ -144,7 +144,7 @@ function AlbumCard({ album, coverUrl, onClick, onDelete }: {
         </div>
         <button
           onClick={e => { e.stopPropagation(); onDelete() }}
-          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 backdrop-blur-sm text-white/70 hover:text-white hover:bg-red-500/80 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-all duration-150"
+          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 backdrop-blur-sm text-white/70 hover:text-white hover:bg-red-500/80 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition duration-150"
         >
           <X size={11} />
         </button>
@@ -353,7 +353,7 @@ function AlbumDetail({ album, artists, pathIndex, onBack, onSaved, onDeleted }: 
         <button
           onClick={save}
           disabled={busy || !dirty || !title.trim() || !artistId || !releaseDate}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40 ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition disabled:opacity-40 ${
             dirty ? 'bg-[var(--accent)]/15 hover:bg-[var(--accent)]/25 text-[var(--accent)]' : 'bg-[var(--surface-overlay)] text-[var(--text-muted)]'
           }`}
         >

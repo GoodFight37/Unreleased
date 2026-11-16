@@ -379,7 +379,7 @@ export default function ConvertFormatModal({ floating = false }: { floating?: bo
               <button
                 onClick={run}
                 disabled={busy || noElectron}
-                className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full py-2.5 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {busy ? <Loader2 size={15} className="animate-spin" /> : <FileAudio2 size={15} />}
                 {busy ? 'Converting…' : `Convert to ${selected.label}`}

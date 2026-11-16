@@ -108,7 +108,7 @@ function MiniQueueRow({ track, isActive, isPlaying, onPlay, onRemove }: {
         {onRemove && (
           <button
             onClick={(e) => { e.stopPropagation(); onRemove() }}
-            className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400 transition-all p-0.5"
+            className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400 transition p-0.5"
           >
             <X size={10} />
           </button>

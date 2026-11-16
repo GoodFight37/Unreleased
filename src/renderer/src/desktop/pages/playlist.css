@@ -2,7 +2,7 @@
    3D like a door on its hinge, the covers' edge nearest. Every size is the design's size times --s. */
 :root { --s: 1; }
 #stage { position: absolute; left: 24px; top: 24px; width: var(--width); height: var(--stage-height); transform-style: preserve-3d;
-  transform-origin: var(--hinge) 50%; transform: perspective(var(--depth)) rotateY(var(--angle)); transition: transform 0.6s cubic-bezier(0.25, 1, 0.4, 1); }
+  transform-origin: var(--hinge) 50%; transform: perspective(var(--depth)) rotateY(var(--angle)); transition: transform 0.35s cubic-bezier(0.23, 1, 0.32, 1); }
 /* In the WRLD tab it turns to face the user while the pointer is over it. */
 .in-tab #stage:hover { transform: perspective(var(--depth)) rotateY(0deg); }
 #catcher { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.01); }
@@ -21,7 +21,7 @@
 .names .title:hover svg { opacity: 1; }
 .names .subtitle { font-size: calc(12.5px * var(--s)); font-weight: 500; color: rgba(255, 255, 255, 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #play-list { width: calc(30px * var(--s)); height: calc(30px * var(--s)); border-radius: 50%; flex: none; display: grid; place-items: center;
-  background: rgba(255, 255, 255, 0.9); color: rgba(0, 0, 0, 0.85); transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.3s; }
+  background: rgba(255, 255, 255, 0.9); color: rgba(0, 0, 0, 0.85); transition: transform 0.25s cubic-bezier(0.3, 1.1, 0.5, 1), opacity 0.3s; }
 #play-list:hover { transform: scale(1.08); background: #fff; }
 #play-list.gone { opacity: 0; pointer-events: none; }
 #play-list svg { width: calc(13px * var(--s)); height: calc(13px * var(--s)); margin-left: calc(1.5px * var(--s)); }

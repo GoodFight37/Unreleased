@@ -52,7 +52,7 @@ function SongChip({ song, selected, dropSide, onClick, onDragStart, onDragEnd, o
         />
       )}
       <div
-        className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden border-2 transition-all ${
+        className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden border-2 transition ${
           selected ? 'border-accent ring-2 ring-accent/50 scale-95' : 'border-[var(--border)] hover:border-accent/50'
         }`}
       >

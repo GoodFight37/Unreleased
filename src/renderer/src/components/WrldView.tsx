@@ -578,7 +578,7 @@ export default function WrldView(): JSX.Element {
             onClick={() => setSelectedAlbumId(album.id)}
             className="flex flex-col gap-1.5 text-left group/album"
           >
-            <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-lg ring-1 ring-white/[0.06] group-hover/album:ring-white/25 transition-all duration-200 bg-white/[0.04]">
+            <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-lg ring-1 ring-white/[0.06] group-hover/album:ring-white/25 transition duration-200 bg-white/[0.04]">
               {coverUrl ? (
                 <img
                   src={coverUrl}
@@ -592,7 +592,7 @@ export default function WrldView(): JSX.Element {
               )}
               {/* Play overlay */}
               <div className="absolute inset-0 bg-black/0 group-hover/album:bg-black/30 transition-colors duration-200 flex items-center justify-center">
-                <div className="w-8 h-8 rounded-full bg-white/0 group-hover/album:bg-white flex items-center justify-center transition-all duration-200 opacity-0 group-hover/album:opacity-100 shadow-xl translate-y-1 group-hover/album:translate-y-0">
+                <div className="w-8 h-8 rounded-full bg-white/0 group-hover/album:bg-white flex items-center justify-center transition duration-200 opacity-0 group-hover/album:opacity-100 shadow-xl translate-y-1 group-hover/album:translate-y-0">
                   <Play size={10} className="text-black ml-0.5" fill="black" />
                 </div>
               </div>
@@ -1430,7 +1430,7 @@ export default function WrldView(): JSX.Element {
                   {playlists.slice(0, 6).map(pl => (
                     <button key={pl.id} onClick={() => handleAddToPlaylist(pl.id)} title={pl.name}
                       className="flex flex-col gap-1.5 text-left group/pl">
-                      <div className="w-full aspect-square rounded-xl overflow-hidden ring-1 ring-white/[0.06] group-hover/pl:ring-white/25 transition-all shadow-md">
+                      <div className="w-full aspect-square rounded-xl overflow-hidden ring-1 ring-white/[0.06] group-hover/pl:ring-white/25 transition shadow-md">
                         {playlistCoverUrl(pl)
                           ? <img src={playlistCoverUrl(pl)} className="w-full h-full object-cover" />
                           : <div className="w-full h-full bg-white/[0.06] flex items-center justify-center">
@@ -1456,7 +1456,7 @@ export default function WrldView(): JSX.Element {
         </div>
 
         {/* Notch handle - pill tab */}
-        <div className="w-[5px] group-hover:w-[3px] h-16 group-hover:h-24 rounded-l-full bg-white/20 group-hover:bg-white/50 transition-all duration-200 ease-out shrink-0" />
+        <div className="w-[5px] group-hover:w-[3px] h-16 group-hover:h-24 rounded-l-full bg-white/20 group-hover:bg-white/50 transition-[width,height,background-color] duration-200 ease-out shrink-0" />
       </div>
 
       {/* Mobile queue - full-screen sheet (there's no side-by-side room for
@@ -1968,7 +1968,7 @@ function WrldQueueRow({ track, isActive, isPlaying, showDrag, onPlay, onRemove }
           </span>
         )}
         {onRemove && (
-          <button onClick={(e) => { e.stopPropagation(); onRemove() }} className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 transition-all ml-1 p-0.5">
+          <button onClick={(e) => { e.stopPropagation(); onRemove() }} className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 transition ml-1 p-0.5">
             <X size={11} />
           </button>
         )}

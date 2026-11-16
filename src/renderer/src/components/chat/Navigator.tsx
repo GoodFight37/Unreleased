@@ -126,7 +126,7 @@ function RecentDmButton({ conv, active, onClick, onContextMenu }: {
 // that stay referentially stable for the life of the rail, so sweeping the
 // cursor across the rail mid-drag re-renders the two icons whose highlight
 // actually changed instead of every icon (and every recent-DM avatar) on the
-// rail. The transitions are listed explicitly rather than `transition-all`:
+// rail. The transitions are listed explicitly rather than `transition`:
 // the drag only changes opacity and the drop ring, and `all` also animates
 // the inherited registered colour custom properties declared in index.css.
 const ServerRailRow = memo(function ServerRailRow({

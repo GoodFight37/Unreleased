@@ -339,7 +339,7 @@ export default function LocalEditorPage(): JSX.Element {
         const dirty = tab === 'lyrics' ? changed('lyrics') : changed('syncedLyrics')
         return (
           <button key={tab} onClick={() => setLyricsTab(tab)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
               active ? 'bg-surface-overlay text-text-primary' : 'text-text-muted opacity-75 hover:text-text-muted'
             }`}>
             {tab === 'lyrics' ? 'Lyrics' : 'Synced'}

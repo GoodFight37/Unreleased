@@ -58,7 +58,7 @@ export function Toggle({ on, onClick }: { on: boolean; onClick: () => void }): J
           button's own box model. No shadow on the knob either - its default
           downward offset (0 1px 3px) reads as visual weight sitting low,
           making it look off-center even when it's geometrically centered. */}
-      <span className={`absolute inset-y-0 my-auto w-4 h-4 rounded-full bg-white transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
+      <span className={`absolute inset-y-0 my-auto w-4 h-4 rounded-full bg-white transition ${on ? 'left-[22px]' : 'left-0.5'}`} />
     </button>
   )
 }

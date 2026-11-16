@@ -511,7 +511,7 @@ function QueueRow({
           <button
             onClick={(e) => { e.stopPropagation(); onRemove() }}
             aria-label="Remove from queue"
-            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-text-muted hover:text-red-400 transition-all ml-1 w-8 h-8 md:w-auto md:h-auto flex items-center justify-center md:p-0.5"
+            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-text-muted hover:text-red-400 transition ml-1 w-8 h-8 md:w-auto md:h-auto flex items-center justify-center md:p-0.5"
           >
             <X size={14} className="md:w-[11px] md:h-[11px]" />
           </button>

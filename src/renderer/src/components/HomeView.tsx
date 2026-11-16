@@ -229,7 +229,7 @@ function RecentTile({ tracks, onPlay, onContextMenu, span }: {
             <div className="relative aspect-square rounded-lg overflow-hidden bg-surface-raised mb-1.5">
               <AlbumArtThumbnail track={track} fill res={512} className="w-full h-full object-cover" />
               <span className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <span className="absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full bg-accent text-black flex items-center justify-center opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all">
+              <span className="absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full bg-accent text-black flex items-center justify-center opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition">
                 <Play size={13} className="ml-0.5" fill="currentColor" />
               </span>
             </div>
@@ -305,7 +305,7 @@ function AlbumsTile({ albums, onAll, span }: {
               <button
                 onClick={a.play}
                 aria-label={`Play ${a.title}`}
-                className="absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full bg-accent text-black flex items-center justify-center opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 focus-visible:opacity-100 transition-all"
+                className="absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full bg-accent text-black flex items-center justify-center opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 focus-visible:opacity-100 transition"
               >
                 <Play size={13} className="ml-0.5" fill="currentColor" />
               </button>

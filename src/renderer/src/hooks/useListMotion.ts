@@ -1,7 +1,7 @@
 import { effectsMotionMedia } from '../lib/effectsPreference'
 import { RefObject, useLayoutEffect, useRef } from 'react'
 
-const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
+const EASE = 'cubic-bezier(0.23, 1, 0.32, 1)'
 // More rows than this coming or going at once is a different list (a new
 // queue), not an edit of this one - it just swaps in.
 const MAX_CHANGED = 4
@@ -67,11 +67,11 @@ export function useListMotion(ref: RefObject<HTMLElement>, { enter, exit, anchor
       // Added onto any slide still running, so quick edits chain smoothly.
       n.el.animate(
         [{ transform: `translateY(${p.y - n.y}px)` }, { transform: 'translateY(0)' }],
-        { duration: 460, easing: EASE, composite: 'add' },
+        { duration: 220, easing: EASE, composite: 'add' },
       )
     }
     for (const n of added) {
-      n.el.animate(enter ?? [{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: EASE })
+      n.el.animate(enter ?? [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: EASE })
     }
     for (const p of gone) {
       // The row's own (now detached) element still holds what it showed.
@@ -87,7 +87,7 @@ export function useListMotion(ref: RefObject<HTMLElement>, { enter, exit, anchor
       })
       box.appendChild(ghost)
       const done = (): void => ghost.remove()
-      ghost.animate(exit ?? [{ opacity: 0, transform: 'translateX(-12px)' }], { duration: 300, easing: 'cubic-bezier(0.4, 0, 0.6, 1)', fill: 'forwards' })
+      ghost.animate(exit ?? [{ opacity: 0, transform: 'translateX(-12px)' }], { duration: 200, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', fill: 'forwards' })
         .finished.then(done, done)
       // A hidden window doesn't advance animations.
       window.setTimeout(done, 1000)

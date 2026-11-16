@@ -7,10 +7,10 @@ import QueuePanel from './QueuePanel'
 import { usePresence } from '../hooks/usePresence'
 import { ELECTRON_TITLEBAR_CLEARANCE_Y, IS_ELECTRON } from '../lib/platform'
 
-const ENTER_MS = 520
-const EXIT_MS = 340
-const ENTER_EASE = 'cubic-bezier(0.33, 0, 0.15, 1)'
-const EXIT_EASE = 'cubic-bezier(0.4, 0, 0.6, 1)'
+const ENTER_MS = 280
+const EXIT_MS = 200
+const ENTER_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
+const EXIT_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)'
 const reducedMotion = (): boolean => effectsMotionMedia().matches
 
 // One side panel's place at the right of the main row. Only transform and
@@ -92,7 +92,7 @@ function SidePanelSlot({ open, keepMounted = false, slotRef, children }: {
   )
 }
 
-const GLIDE_MS = 460
+const GLIDE_MS = 260
 
 // The Now Playing and Queue panels float over the right edge of the main row
 // (md+) instead of narrowing the view, starting below the frameless window's

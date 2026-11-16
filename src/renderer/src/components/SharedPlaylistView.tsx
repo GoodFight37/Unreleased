@@ -202,7 +202,7 @@ export default function SharedPlaylistView(): JSX.Element {
               target="_blank"
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
-              className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-raised transition-all hidden md:flex"
+              className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-raised transition hidden md:flex"
               title="Download"
             >
               <Download size={14} />

@@ -206,6 +206,7 @@ export default function CommandPalette({ onClose }: { onClose: () => void }): JS
   return (
     <ModalOverlay
       standalone
+      motion={false}
       onClose={onClose}
       zIndexClassName="z-[210]"
       panelClassName="bg-surface border border-[var(--border)] rounded-2xl shadow-2xl w-full max-w-xl max-h-[74vh]"

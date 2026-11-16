@@ -254,6 +254,7 @@ export function ModalOverlay({
   onClose,
   floating = false,
   standalone = false,
+  motion = true,
   closeOnEscape = true,
   zIndexClassName,
   panelClassName,
@@ -296,6 +297,8 @@ export function ModalOverlay({
    *  expanded, at its own size, centred). Docked, the change cross-fades. */
   expanded?: boolean
   expandedMaxWidth?: number
+  /** False for keyboard-summoned, frequently used overlays (Ctrl+K): no open/close motion. */
+  motion?: boolean
   children: (drag: {
     onHandleMouseDown: (e: ReactMouseEvent) => void
     locked: boolean
@@ -427,7 +430,7 @@ export function ModalOverlay({
   // the centering above, so the panel rises into its centered spot. Not for a
   // pop-out: that's a real OS window, which opens and closes on its own.
   const rootRef = useRef<HTMLDivElement>(null)
-  useOverlayMotion(rootRef, !floating)
+  useOverlayMotion(rootRef, !floating && motion)
   // A drag that starts inside the panel (selecting text, a slider) and ends
   // over the backdrop fires its click on the backdrop - only a press that
   // began there too counts as clicking outside.
