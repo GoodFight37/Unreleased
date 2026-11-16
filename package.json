@@ -21,6 +21,7 @@
     "electron:build": "npm run build && electron-builder",
     "electron:smoke": "electron . --smoke-test",
     "ui:verify": "node scripts/ui-verify.mjs",
+    "ui:motion": "node scripts/motion-audit.mjs",
     "terminal:check-coverage": "node scripts/check-terminal-coverage.mjs"
   },
   "keywords": [],
