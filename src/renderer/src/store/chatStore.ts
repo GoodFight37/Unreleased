@@ -55,6 +55,10 @@ export type IdentityState = 'unknown' | 'disabled' | 'ready' | 'needs-link'
 
 const PAGE = 40
 const TYPING_TTL_MS = 6000
+const MAX_ROOM_ITEMS = 500
+const MAX_CACHED_ROOMS = 24
+const MAX_PLAIN_CACHE = 1500
+const MAX_THREADS_CACHED = 20
 
 function emptyRoom(): RoomMessages {
   return { items: [], hasMore: true, loading: false, loaded: false, error: null }
@@ -70,7 +74,7 @@ function upsert(items: UiMessage[], msg: UiMessage): UiMessage[] {
   const next = items.concat(msg)
   // Temp messages carry negative ids and always belong at the end.
   next.sort((a, b) => (a.id < 0 ? Infinity : a.id) - (b.id < 0 ? Infinity : b.id))
-  return next
+  return next.length > MAX_ROOM_ITEMS ? next.slice(next.length - MAX_ROOM_ITEMS) : next
 }
 
 function loadLastRead(userId: number): Record<string, number> {
@@ -315,12 +319,33 @@ export const useChatStore = create<ChatState>((set, get) => {
   const patchRoom = (key: string, fn: (r: RoomMessages) => Partial<RoomMessages>): void => {
     set((s) => {
       const cur = s.rooms[key] ?? emptyRoom()
-      return { rooms: { ...s.rooms, [key]: { ...cur, ...fn(cur) } } }
+      const nextRooms: Record<string, RoomMessages> = { ...s.rooms }
+      // Move touched room to insertion-order tail (LRU eviction when > MAX_CACHED_ROOMS)
+      delete nextRooms[key]
+      nextRooms[key] = { ...cur, ...fn(cur) }
+      const keys = Object.keys(nextRooms)
+      if (keys.length > MAX_CACHED_ROOMS) {
+        const activeKey = s.active ? roomKey(s.active) : null
+        for (const k of keys) {
+          if (Object.keys(nextRooms).length <= MAX_CACHED_ROOMS) break
+          if (k !== key && k !== activeKey) delete nextRooms[k]
+        }
+      }
+      return { rooms: nextRooms }
     })
   }
 
   const setPlain = (id: number, value: Decrypted): void => {
-    set((s) => ({ plain: { ...s.plain, [id]: value } }))
+    set((s) => {
+      const nextPlain = { ...s.plain, [id]: value }
+      const keys = Object.keys(nextPlain)
+      if (keys.length > MAX_PLAIN_CACHE) {
+        for (let i = 0; i < keys.length - MAX_PLAIN_CACHE; i++) {
+          delete nextPlain[Number(keys[i])]
+        }
+      }
+      return { plain: nextPlain }
+    })
   }
 
   const decryptOne = async (msg: ChatMessage): Promise<void> => {
@@ -1412,7 +1437,17 @@ export const useChatStore = create<ChatState>((set, get) => {
     openThread: (rootId) => {
       set({ threadRootId: rootId })
       if (rootId == null) return
-      set((s) => ({ threads: { ...s.threads, [rootId]: { items: s.threads[rootId]?.items ?? [], loading: true } } }))
+      set((s) => {
+        const nextThreads = { ...s.threads, [rootId]: { items: s.threads[rootId]?.items ?? [], loading: true } }
+        const keys = Object.keys(nextThreads)
+        if (keys.length > MAX_THREADS_CACHED) {
+          for (const k of keys) {
+            if (Object.keys(nextThreads).length <= MAX_THREADS_CACHED) break
+            if (Number(k) !== rootId) delete nextThreads[Number(k)]
+          }
+        }
+        return { threads: nextThreads }
+      })
       api.listThread(rootId)
         .then((items) => {
           set((s) => ({ threads: { ...s.threads, [rootId]: { items, loading: false } } }))

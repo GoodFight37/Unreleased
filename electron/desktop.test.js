@@ -126,9 +126,9 @@ test('untimed lyrics are paced evenly over the song', () => {
 
 test('the scene\'s clock runs at the song\'s speed, and stands still paused', () => {
   const scene = loadTs(path.join(RENDERER, 'desktop/lyrics/scene.ts'))
-  const now = scene.epochNow()
-  assert.ok(Math.abs(scene.clockTime({ seconds: 10, at: now - 2, running: true, rate: 1.5 }) - 13) < 0.05)
-  assert.equal(scene.clockTime({ seconds: 10, at: now - 2, running: false }), 10)
+  const now = 1000
+  assert.equal(scene.clockTime({ seconds: 10, at: now - 2, running: true, rate: 1.5 }, now), 13)
+  assert.equal(scene.clockTime({ seconds: 10, at: now - 2, running: false }, now), 10)
 })
 
 test('the line sung is found by its start, and a long break shows the song\'s name', () => {

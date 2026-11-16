@@ -8,6 +8,7 @@ import {
 } from '../lib/communityEditsApi'
 import { errorMessage, formatBytes } from '../lib/format'
 import { showAppToast } from '../lib/appToast'
+import { confirmGlass } from '../lib/confirmModal'
 import { Empty, QueueSearch, StatusChip, matchesQuery, relativeTime, shortDate } from './adminShared'
 import { CommunityEditPlayer, formatLength, openCommunityEditMatch } from './communityEditShared'
 
@@ -107,7 +108,7 @@ export default function CommunityEditsTab({ onCountsChanged }: { onCountsChanged
   }
 
   const reverse = async (edit: CommunityEdit): Promise<void> => {
-    if (!confirm('Take back this approval? The file is taken out of Files (Remixes & Edits/Community-Made).')) return
+    if (!(await confirmGlass({ title: 'Reverse approval', message: 'Take back this approval? The file is taken out of Files (Remixes & Edits/Community-Made).', confirmLabel: 'Reverse', destructive: true }))) return
     setActionId(edit.id)
     try {
       applyUpdate(await adminReverseCommunityEdit(edit.id))

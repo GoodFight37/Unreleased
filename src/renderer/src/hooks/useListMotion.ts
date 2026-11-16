@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { RefObject, useLayoutEffect, useRef } from 'react'
 
 const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
@@ -53,7 +54,7 @@ export function useListMotion(ref: RefObject<HTMLElement>, { enter, exit, anchor
       next.set(el.dataset.flipKey!, { el, y: el.offsetTop - base, left: el.offsetLeft, width: el.offsetWidth, height: el.offsetHeight })
     }
     last.current = next
-    if (!prev || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!prev || effectsMotionMedia().matches) return
 
     const gone = [...prev.entries()].filter(([k]) => !next.has(k)).map(([, p]) => p)
     const added = [...next.entries()].filter(([k]) => !prev.has(k)).map(([, n]) => n)

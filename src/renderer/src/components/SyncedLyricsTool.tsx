@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   AlignLeft, ChevronLeft, ChevronRight, ChevronsDown, Clock, Crosshair, Ear, Eraser, Keyboard, Pause, Play, Plus, RotateCcw, WholeWord, X,
@@ -280,7 +281,7 @@ export default function SyncedLyricsTool({
     const el = box?.querySelector<HTMLElement>(`[data-line="${line}"]`)
     if (!box || !el) return
     if (onlyNearEdge && el.offsetTop >= box.scrollTop + 40 && el.offsetTop + el.offsetHeight <= box.scrollTop + box.clientHeight - 40) return
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const reduce = effectsMotionMedia().matches
     box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2, behavior: reduce ? 'auto' : 'smooth' })
   }
   useEffect(() => { if (follow && clock.playing && lit.line >= 0) centre(lit.line, false) }, [lit.line, follow, clock.playing])

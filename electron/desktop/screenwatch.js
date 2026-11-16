@@ -5,6 +5,7 @@
 // line, so nothing needs to sit outside the app's archive.
 const { spawn } = require('child_process')
 const EventEmitter = require('events')
+const path = require('path')
 const readline = require('readline')
 
 const SCRIPT = [
@@ -117,11 +118,17 @@ class ScreenWatch extends EventEmitter {
     /** @type {{ pid: number, className: string, rect: { x: number, y: number, width: number, height: number } }[] | null}
      *  the apps' windows on screen, once told */
     this.windows = null
+    this.failures = 0
   }
 
   /** `who` needs to know (or no longer does); the helper runs while anyone does. */
   need(who, on) {
-    if (on) this.wanted.add(who); else this.wanted.delete(who)
+    if (on) {
+      this.wanted.add(who)
+      this.failures = 0
+    } else {
+      this.wanted.delete(who)
+    }
     if (this.wanted.size && !this.child) this.start()
     else if (!this.wanted.size && this.child) this.stop()
   }
@@ -129,9 +136,10 @@ class ScreenWatch extends EventEmitter {
   start() {
     if (process.platform !== 'win32') return
     const encoded = Buffer.from(SCRIPT.replace('__PARENT__', String(process.pid)), 'utf16le').toString('base64')
+    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
     let child
     try {
-      child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+      child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
         '-EncodedCommand', encoded], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
     } catch (error) {
       console.warn('[desktop] screen watch failed to start:', error.message)
@@ -142,9 +150,11 @@ class ScreenWatch extends EventEmitter {
       readline.createInterface({ input: child.stdout }).on('line', (line) => {
         const [kind, ...rest] = line.split('\t')
         if (kind === 'windows') {
+          this.failures = 0
           this.windows = parseWindows(rest[0])
           this.emit('windows', this.windows)
         } else if (kind === 'front') {
+          this.failures = 0
           const [pid, className = '', bounds] = rest
           this.front = { pid: Number(pid) || 0, className: className.trim(), rect: rectOf(bounds) }
           this.emit('front', this.front)
@@ -157,8 +167,11 @@ class ScreenWatch extends EventEmitter {
       this.child = null
       this.front = null
       this.windows = null
-      // Gone while still wanted (killed from outside): started again a moment later.
-      if (this.wanted.size) setTimeout(() => { if (this.wanted.size && !this.child) this.start() }, 3000)
+      // Gone while still wanted (killed from outside): started again with exponential backoff.
+      if (this.wanted.size && this.failures < 6) {
+        const delay = Math.min(60000, 3000 * Math.pow(2, this.failures++))
+        setTimeout(() => { if (this.wanted.size && !this.child) this.start() }, delay)
+      }
     })
   }
 

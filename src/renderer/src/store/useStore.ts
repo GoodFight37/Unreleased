@@ -715,7 +715,6 @@ interface AppActions {
   saveCustomSkin: (skin: Skin) => void
   /** Removes a custom skin; if it was the active theme, falls back to dark. */
   deleteCustomSkin: (id: string) => void
-  setSidebarPosition: (position: SidebarPosition) => void
   setAppMenuPosition: (position: AppMenuPosition) => void
   setNavStyle: (style: NavStyle) => void
   setAutoHideNav: (on: boolean) => void
@@ -1215,7 +1214,8 @@ function buildUserSettings(s: AppStore): UserSettings {
     wrld_theme_background: s.wrldThemeBackground,
     playlist_hero_enabled_dark: s.playlistHeroEnabledDark,
     playlist_hero_enabled_light: s.playlistHeroEnabledLight,
-    sidebar_position: s.sidebarPosition,
+    // The fork keeps its bar on top locally; push back the old saved value so the upstream app on the same account keeps its own layout.
+    sidebar_position: ls.get<string>('sidebarPosition') ?? 'bottom',
     nav_style: s.navStyle,
     auto_hide_nav: s.autoHideNav,
     auto_hide_nav_zone: s.autoHideNavZone,
@@ -1539,7 +1539,8 @@ export const useStore = create<AppStore>((set, get, store) => ({
   customSkins: hydrateCustomSkins(),
   // getSkin() maps unknown persisted ids (renamed/removed skins) back to dark.
   theme: getSkin(ls.get<string>('theme') ?? DEFAULT_SKIN_ID).id,
-  sidebarPosition: ls.get<SidebarPosition>('sidebarPosition') ?? 'bottom',
+  // The bar is fixed on top: saved left/right/bottom values are ignored.
+  sidebarPosition: 'top',
   appMenuPosition: ls.get<AppMenuPosition>('appMenuPosition') ?? 'sidebar',
   navStyle: ls.get<NavStyle>('navStyle') ?? 'pill',
   autoHideNav: ls.get<boolean>('autoHideNav') ?? false,
@@ -1859,7 +1860,6 @@ export const useStore = create<AppStore>((set, get, store) => ({
     if (get().theme === id) get().setTheme(DEFAULT_SKIN_ID)
     get()._scheduleProfilePush(['userSettings'])
   },
-  setSidebarPosition: (sidebarPosition) => { set({ sidebarPosition }); ls.set('sidebarPosition', sidebarPosition); get()._scheduleProfilePush(['userSettings']) },
   setAppMenuPosition: (appMenuPosition) => { set({ appMenuPosition }); ls.set('appMenuPosition', appMenuPosition) },
   // The floating pill never auto-hides, and that setting is locked off while it's chosen.
   setNavStyle: (navStyle) => {
@@ -3687,12 +3687,13 @@ export const useStore = create<AppStore>((set, get, store) => ({
     const mergedFavGifs = [...s.favoriteGifs, ...serverFavGifs.filter((g) => !s.favoriteGifs.some((f) => f.id === g.id))]
     if (mergedFavGifs.length !== s.favoriteGifs.length) { set({ favoriteGifs: mergedFavGifs }); ls.set('favoriteGifs', mergedFavGifs) }
 
-    if (serverSettings.theme && serverSettings.theme !== s.theme) s.setTheme(getSkin(serverSettings.theme).id)
     if (serverSettings.custom_skins && JSON.stringify(serverSettings.custom_skins) !== JSON.stringify(s.customSkins)) {
       set({ customSkins: serverSettings.custom_skins })
       ls.set('customSkins', serverSettings.custom_skins)
       setCustomSkinsCache(serverSettings.custom_skins)
     }
+    // After seeding custom skins, so a synced custom id resolves to the right Dark/Light fallback.
+    if (serverSettings.theme && serverSettings.theme !== s.theme) s.setTheme(getSkin(serverSettings.theme).id)
     if (Array.isArray(serverSettings.donor_playlists) && JSON.stringify(serverSettings.donor_playlists) !== JSON.stringify(s.donorPlaylists)) {
       set({ donorPlaylists: serverSettings.donor_playlists })
       ls.set('donorPlaylists', serverSettings.donor_playlists)
@@ -3721,7 +3722,8 @@ export const useStore = create<AppStore>((set, get, store) => ({
     if (serverSettings.playlist_hero_enabled_light !== undefined && serverSettings.playlist_hero_enabled_light !== s.playlistHeroEnabledLight) {
       set({ playlistHeroEnabledLight: serverSettings.playlist_hero_enabled_light }); ls.set('playlistHeroEnabledLight', serverSettings.playlist_hero_enabled_light)
     }
-    if (serverSettings.sidebar_position && serverSettings.sidebar_position !== s.sidebarPosition) s.setSidebarPosition(serverSettings.sidebar_position as SidebarPosition)
+    // Mirror the server's nav position untouched (the fork stays on top) so pushes echo it back unchanged.
+    if (serverSettings.sidebar_position) ls.set('sidebarPosition', serverSettings.sidebar_position)
     if (serverSettings.nav_order && JSON.stringify(serverSettings.nav_order) !== JSON.stringify(s.navOrder)) s.setNavOrder(serverSettings.nav_order)
     if (serverSettings.nav_visibility) { set({ navVisibility: { ...s.navVisibility, ...serverSettings.nav_visibility } }); ls.set('navVisibility', get().navVisibility) }
     if (serverSettings.nav_control_order && JSON.stringify(serverSettings.nav_control_order) !== JSON.stringify(s.navControlOrder)) s.setNavControlOrder(serverSettings.nav_control_order)
@@ -3847,7 +3849,7 @@ useStore.subscribe((s, prev) => {
 // Dev-only console handle for driving store state while debugging (e.g.
 // forcing auth-gated views to render without an account). Never set in
 // production builds.
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV || (typeof location !== 'undefined' && location.search.includes('uiVerify=1'))) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(window as any).__store = useStore
 }

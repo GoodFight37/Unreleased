@@ -17,7 +17,7 @@ function recovery(verdict, elapsed = 1000) {
   const env = { console: { warn() {}, error() {} }, Date: { now: () => 400000 }, navigator: { onLine: true },
     useStore: { getState: () => state }, getActive: () => audio, cfActive: ref(false),
     recoveryTimer: ref(null), recoveryProbe: ref(null), recoveryAttempts: ref(4),
-    recoveryStartedAt: ref(400000 - elapsed), recoveryGeneration: ref(0), recoveryLoading: ref(null),
+    recoveryStartedAt: ref(400000 - elapsed), recoveryGeneration: ref(0), recoveryLoading: ref(null), recoverPlaybackRef: ref(null),
     resolvePlaybackUrl: track => track.streamUrl, probeSource: async () => ({ verdict, reason: 'why', detail: 'detail' }),
     runLog() {}, describeMediaError: () => '', describeSource: () => '', lastProgressTime: ref(0),
     MAX_RECOVERY_ATTEMPTS: 4, SLOW_RETRY_MS: 10000, RECOVERY_WINDOW_MS: 300000,

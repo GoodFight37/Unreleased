@@ -28,7 +28,10 @@ export default function ApiFilesView({ embedded = false }: { embedded?: boolean 
       <div ref={contentRef} className="flex flex-col flex-1 min-h-0 min-w-0">
         {mine ? (
           <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8 pb-player">
-            <div className={`flex items-center justify-between gap-4 pb-3 ${embedded ? 'pt-1' : isElectron ? 'pt-9' : 'pt-5'}`}>
+            <div
+              className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pb-3 ${embedded ? 'pt-1' : isElectron ? 'pt-9' : 'pt-5'}`}
+              style={embedded ? undefined : { paddingTop: isElectron ? 'max(0.5rem, calc(2.25rem - var(--nav-pill-clearance, 0px)))' : 'max(0.5rem, calc(1.25rem - var(--nav-pill-clearance, 0px)))' }}
+            >
               <div className="flex items-center gap-2.5 min-w-0">
                 <Cloud size={18} className="text-text-muted shrink-0" />
                 <h1 className="text-text-primary text-xl font-bold">My files</h1>

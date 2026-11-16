@@ -4,6 +4,7 @@ import { useStrictModeSafeEffect } from './useStrictModeSafeEffect'
 import * as erasApi from '../lib/erasApi'
 import type { Era } from '../lib/erasApi'
 import { errorMessage } from '../lib/format'
+import { confirmGlass } from '../lib/confirmModal'
 
 export function useEraList(): {
   eras: Era[]
@@ -125,7 +126,7 @@ export function useEditEra(era: Era, onSaved: (era: Era) => void, onDeleted: () 
   }, [era.id, name, description, timeFrame, playCount, busy, onSaved])
 
   const remove = useCallback(async () => {
-    if (!confirm(`Delete "${era.name}"? This can't be undone.`)) return
+    if (!(await confirmGlass({ title: 'Delete era', message: `Delete "${era.name}"? This can't be undone.`, confirmLabel: 'Delete', destructive: true }))) return
     setDeleting(true)
     setError(null)
     try {

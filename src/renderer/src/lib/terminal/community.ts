@@ -91,7 +91,7 @@ const tierlistCommand: TermCommand = {
       ctx.print(`${song.name} → ${where} in "${list.name}"`, 'ok')
     } else if (sub === 'rm') {
       const id = idArg(rest[0], 'tierlist rm <id>')
-      if (!confirmAction(ctx, `Delete tier list #${id}?`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Delete tier list #${id}?`, bool.has('y')))) return
       await deleteTierlist(id)
       ctx.print(`deleted #${id}`, 'ok')
     } else fail('usage: tierlist [ls | show | view | new | rename | public | private | rank | unrank | rm]')

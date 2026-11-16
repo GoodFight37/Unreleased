@@ -147,10 +147,11 @@ export function idArg(word: string | undefined, usage: string): number {
 
 /** Confirms a destructive action. `-y` skips the question; a script has to pass
  *  it, since nobody is there to answer. Resolves false when declined. */
-export function confirmAction(ctx: TermCtx, message: string, yes: boolean): boolean {
+export async function confirmAction(ctx: TermCtx, message: string, yes: boolean): Promise<boolean> {
   if (yes) return true
   if (ctx.scripted) fail('this needs confirmation - add -y to run it from a script')
-  if (!window.confirm(message)) { ctx.print('cancelled', 'dim'); return false }
+  const { confirmGlass } = await import('../confirmModal')
+  if (!(await confirmGlass(message))) { ctx.print('cancelled', 'dim'); return false }
   return true
 }
 

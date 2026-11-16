@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { CSSProperties, RefObject, TouchEvent as ReactTouchEvent, useRef, useState } from 'react'
 
 // Shared "drag down to close" gesture - the curtain-reveal WRLD's full-screen
@@ -78,7 +79,7 @@ export function useDragToDismiss(onDismiss: () => void, options: Options = {}) {
   // nothing to slide (no elRef/slideOutMs) or motion is reduced.
   const slideOut = (): void => {
     const el = elRef?.current
-    if (!slideOutMs || !el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!slideOutMs || !el || effectsMotionMedia().matches) {
       onDismiss()
       return
     }

@@ -35,12 +35,21 @@ export default memo(function WordLyricLine({ words, active, getTime, offset }: P
     let raf = 0
     let last = -1
     const tick = (): void => {
+      if (document.hidden) { raf = 0; return }
       const n = sungAt()
       if (n !== last) { last = n; setSung(n) }
       raf = requestAnimationFrame(tick)
     }
-    tick()
-    return () => cancelAnimationFrame(raf)
+    const onVis = (): void => {
+      if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
+      else if (!raf) tick()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    if (!document.hidden) tick()
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      cancelAnimationFrame(raf)
+    }
   }, [active, words, offset, getTime]) // what sungAt reads
 
   return (

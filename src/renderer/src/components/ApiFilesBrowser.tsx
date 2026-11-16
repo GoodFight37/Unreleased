@@ -1,6 +1,7 @@
 import { MotionOverlay } from './MotionOverlay'
 import { PopLayer } from './PopLayer'
 import { useContentMotion } from '../hooks/useContentMotion'
+import { useVirtualWindow } from '../hooks/useVirtualWindow'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Folder, Music2, ChevronRight, ArrowLeft, Home, Play, Loader2,
@@ -86,7 +87,7 @@ const LS_VIEW_MODE = 'api-files:viewMode'
 const LS_TYPE_FILTER = 'api-files:typeFilter'
 
 const MEDIA_FILTERS: { key: MediaFilter; label: string; icon: typeof Filter }[] = [
-  { key: 'all', label: 'All', icon: Filter },
+  { key: 'all', label: 'All types', icon: Filter },
   { key: 'audio', label: 'Audio', icon: Music2 },
   { key: 'image', label: 'Images', icon: ImageIcon },
   { key: 'video', label: 'Videos', icon: Video },
@@ -465,6 +466,27 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
     () => (localStorage.getItem(LS_TYPE_FILTER) as MediaFilter) || 'all'
   )
   const listingRef = useRef<HTMLDivElement>(null)
+  const listContentRef = useRef<HTMLDivElement>(null)
+  const gridContentRef = useRef<HTMLDivElement>(null)
+  const appTextScale = useStore(s => s.appTextScale)
+  const [gridLayout, setGridLayout] = useState<{ cols: number; rowStride: number }>({ cols: 4, rowStride: 224 })
+  useEffect(() => {
+    const el = listingRef.current
+    if (!el) return
+    const GAP = 12
+    const MIN_COL = 140
+    const compute = (): void => {
+      const innerW = Math.max(MIN_COL, el.clientWidth - 40)
+      const cols = Math.max(1, Math.floor((innerW + GAP) / (MIN_COL + GAP)))
+      const colW = (innerW - GAP * (cols - 1)) / cols
+      const labelH = Math.round(52 * appTextScale)
+      setGridLayout({ cols, rowStride: Math.round(colW + labelH + GAP) })
+    }
+    compute()
+    const ro = new ResizeObserver(compute)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [appTextScale])
   useContentMotion(listingRef, JSON.stringify([
     localMode ? ['local', localPath] : ['channel', activeChannel, currentPath, isSearching],
     viewMode, typeFilter,
@@ -633,6 +655,23 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
       ? sortedEntries
       : sortedEntries.filter((e) => e.type === 'directory' || getMediaType(e.name) === typeFilter),
     [sortedEntries, typeFilter]
+  )
+
+  const listRowStride = Math.round((searching ? 64 : 54) * appTextScale)
+  const listWin = useVirtualWindow(
+    listingRef,
+    listContentRef,
+    viewMode === 'list' ? filteredEntries.length : 0,
+    listRowStride,
+    6,
+  )
+  const gridRowCount = Math.ceil(filteredEntries.length / gridLayout.cols)
+  const gridWin = useVirtualWindow(
+    listingRef,
+    gridContentRef,
+    viewMode === 'grid' ? gridRowCount : 0,
+    gridLayout.rowStride,
+    3,
   )
 
   // The user's own pending comp proposals, as ghost rows in the folder they'd
@@ -896,8 +935,11 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Header */}
         {/* Inside the Tracker, the Tracker's own title and tabs sit above. */}
-        <div className={`px-5 pb-3 shrink-0 ${embedded ? '' : isElectron ? 'pt-9' : 'pt-5'}`}>
-          <div className="flex items-center justify-between mb-3 gap-4">
+        <div
+          className={`px-5 pb-3 shrink-0 ${embedded ? '' : isElectron ? 'pt-9' : 'pt-5'}`}
+          style={embedded ? undefined : { paddingTop: isElectron ? 'max(0.5rem, calc(2.25rem - var(--nav-pill-clearance, 0px)))' : 'max(0.5rem, calc(1.25rem - var(--nav-pill-clearance, 0px)))' }}
+        >
+          <div className="flex flex-wrap items-center justify-between mb-3 gap-x-4 gap-y-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               {!embedded && <HardDrive size={18} className="text-text-muted shrink-0" />}
               {!embedded && <h1 className="text-text-primary text-xl font-bold shrink-0">API Files</h1>}
@@ -905,11 +947,12 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
                 <p className="text-text-muted text-sm truncate">{channelDescription}</p>
               )}
             </div>
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="catalog-toolbar flex flex-wrap items-center justify-end shrink-0 max-w-full">
               {/* Comps are API sources; local files don't belong to one. */}
               {channels.length > 0 && !localMode && (
                 <GlassSegmented
                   ariaLabel="Channel"
+                  className="glass-seg-quiet"
                   value={activeChannel}
                   onChange={onChannelChange}
                   options={channels.map((ch) => ({ value: ch.slug, label: ch.name, title: ch.description || ch.name }))}
@@ -918,6 +961,7 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
               {/* Sort - clicking the chosen field again flips the direction. */}
               <GlassSegmented
                 ariaLabel="Sort by"
+                className="glass-seg-quiet"
                 value={sortBy}
                 onChange={toggleSort}
                 options={(['name', 'type', 'size'] as SortBy[]).map((by) => ({
@@ -929,13 +973,15 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
               {/* Type filter */}
               <GlassSegmented
                 ariaLabel="File type"
+                className="glass-seg-quiet"
                 value={typeFilter}
                 onChange={setTypeFilter}
-                options={MEDIA_FILTERS.map(({ key, label, icon: Icon }) => ({ value: key, icon: <Icon size={14} />, title: `Show ${label.toLowerCase()}` }))}
+                options={MEDIA_FILTERS.map(({ key, label }) => ({ value: key, label, title: `Show ${label.toLowerCase()}` }))}
               />
               {/* View toggle */}
               <GlassSegmented
                 ariaLabel="Layout"
+                className="glass-seg-quiet"
                 value={viewMode}
                 onChange={setViewMode}
                 options={[
@@ -947,6 +993,7 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
               {(isElectron || onMine) && (
                 <GlassSegmented
                   ariaLabel="Source"
+                  className="glass-seg-quiet"
                   value={localMode ? 'local' : 'api'}
                   onChange={(v) => { if (v === 'mine') onMine?.(); else setLocalMode(v === 'local') }}
                   options={[
@@ -965,7 +1012,7 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
               subfolders. */}
           {!localMode && (
             <div className={`${GLASS_SEARCH_WRAP} mb-2`}>
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none z-20" />
               <input
                 type="text"
                 value={search}
@@ -974,7 +1021,7 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
                 placeholder={searchInFolder && currentPath ? `Search in ${currentPath.slice(currentPath.lastIndexOf('/') + 1)}…` : 'Search files…'}
                 className={`${GLASS_SEARCH} pl-9 ${currentPath ? (search ? 'pr-24' : 'pr-16') : (search ? 'pr-16' : 'pr-10')}`}
               />
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 z-20">
                 {search && (
                   <button
                     onClick={() => { setSearch(''); setDebouncedSearch('') }}
@@ -1204,7 +1251,7 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
               <p className="text-text-muted text-sm">No {typeFilter} files here</p>
             </div>
           ) : viewMode === 'list' ? (
-            /* ── List view ────────────────────────────────────────────────────── */
+            /* ── List view (virtualized) ──────────────────────────────────────── */
             <div className="space-y-0.5">
               {parentRowAction && (
                 <button onClick={parentRowAction} {...(localMode ? {} : parentDropProps)} className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg transition-colors text-left ${
@@ -1220,268 +1267,288 @@ export default function ApiFilesBrowser({ embedded = false, startLocal = false, 
                   </span>
                 </button>
               )}
-              {filteredEntries.map((entry) => {
-                const isDir = entry.type === 'directory'
-                const mt = isDir ? 'folder' : getMediaType(entry.name)
-                const ext = getFileExt(entry.name).slice(1).toUpperCase()
-                const isMedia = mt === 'image' || mt === 'video'
-                const isSelected = selectedPaths.has(entry.path)
-                const isLiked = !localMode && mt === 'audio' && likedSet.has(apiFileTrackId(entry.path, trackChannel))
-                const isDropTarget = dropTarget === entry.path
-                const pending = localMode ? undefined : pendingFor(entry.path)
-                return (
-                  <div key={entry.path}
-                    {...dragSourceProps(entry)}
-                    {...dropTargetProps(entry)}
-                    {...folderHoverProps(entry)}
-                    className={`group flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-default ${
-                      isDropTarget ? 'bg-accent/15 ring-2 ring-accent/50'
-                        : isSelected ? 'bg-accent/10 hover:bg-accent/15'
-                        : 'hover:bg-surface-overlay'
-                    }`}
-                    onClick={(e) => {
-                      if (e.ctrlKey || e.metaKey) {
-                        toggleSelect(entry.path)
-                        return
-                      }
-                      if (selectMode) { toggleSelect(entry.path); return }
-                      if (isDir) openFolder(entry)
-                      else if (isMedia) openMedia(entry)
-                      else if (mt === 'text') openText(entry)
-                    }}
-                    onDoubleClick={() => { if (!selectMode && mt === 'audio') playEntry(entry) }}
-                    onContextMenu={e => { e.preventDefault(); e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
-                    onTouchStart={() => handleLongPressStart(entry)}
-                    onTouchEnd={handleLongPressEnd}
-                  >
-                    {/* Checkbox (select mode) */}
-                    {selectMode && (
-                      <div className="shrink-0 w-5 flex items-center justify-center">
-                        {isSelected
-                          ? <CheckSquare2 size={16} className="text-accent" />
-                          : <Square size={16} className="text-text-muted opacity-50" />}
-                      </div>
-                    )}
-                    {/* Icon / thumbnail */}
-                    <div className="relative shrink-0 w-9 h-9">
-                      {isDir ? (
-                        <div className="w-9 h-9 flex items-center justify-center">
-                          <Folder size={20} className={`transition-colors ${isSelected ? 'text-accent' : 'text-text-secondary group-hover:text-accent'}`} />
-                        </div>
-                      ) : mt === 'audio' ? (
-                        <button
-                          className="relative w-9 h-9 rounded overflow-hidden"
-                          onClick={(e) => { e.stopPropagation(); if (!selectMode) playEntry(entry) }}
-                          title="Play"
-                        >
-                          {localMode ? <LocalCoverThumb path={entry.path} size={36} /> : <ApiCoverThumb path={entry.path} size={36} />}
-                          {!selectMode && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded">
-                              {playing === entry.path ? <Loader2 size={14} className="text-white animate-spin" /> : <Play size={14} fill="white" className="text-white ml-0.5" />}
-                            </div>
-                          )}
-                        </button>
-                      ) : mt === 'image' ? (
-                        <div className="w-9 h-9"><ImageThumb src={localMode ? toFileUrl(entry.path) : smallCoverUrl(buildStreamUrl(entry.path, activeChannel))} size={36} /></div>
-                      ) : mt === 'video' ? (
-                        <div className="w-9 h-9 flex items-center justify-center"><Video size={18} className="text-text-muted" /></div>
-                      ) : mt === 'text' ? (
-                        <div className="w-9 h-9 flex items-center justify-center"><FileText size={18} className="text-text-muted" /></div>
-                      ) : (
-                        <div className="w-9 h-9 flex items-center justify-center"><Music2 size={18} className="text-text-muted opacity-40" /></div>
-                      )}
-                    </div>
-                    <span className="flex-1 min-w-0">
-                      <span className={`block text-sm truncate ${isDir ? 'text-text-primary font-medium cursor-pointer' : 'text-text-secondary'}`}>{entry.name}</span>
-                      {searching && parentFolder(entry.path) && (
-                        <span className="block text-text-muted text-[10px] truncate">{parentFolder(entry.path)}</span>
-                      )}
-                    </span>
-                    {pending && <PendingMarker proposal={pending} />}
-                    {isLiked && (
-                      <button
-                        className="shrink-0 p-1 text-accent"
-                        onClick={(e) => { e.stopPropagation(); toggleApiFileLike(entry.path) }}
-                        disabled={!channelsReady}
-                        title="Unlike"
-                      >
-                        <Heart size={13} fill="currentColor" />
-                      </button>
-                    )}
-                    {!isDir && entry.size != null && (
-                      <span className="hidden md:inline-block text-text-muted text-xs shrink-0 w-14 text-right">{(entry.size / 1_048_576).toFixed(1)} MB</span>
-                    )}
-                    {!isDir && <span className="hidden md:inline-block text-center text-[10px] uppercase tracking-wide text-text-muted bg-surface-overlay px-1.5 py-0.5 rounded shrink-0 w-12">{ext}</span>}
-                    {/* Touch devices can't right-click (long-press enters
-                        select mode instead), so the context menu needs a
-                        visible trigger: always shown on mobile, hover-reveal
-                        on desktop where right-click already works. */}
-                    {!selectMode && (
-                      <button
-                        className="shrink-0 p-2 -my-1.5 text-text-muted md:opacity-0 md:group-hover:opacity-100 hover:text-text-primary active:text-accent transition-all"
-                        onClick={(e) => { e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
-                        title="More options"
-                      >
-                        <MoreHorizontal size={16} />
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-              {visibleGhosts.map((g) => <PendingGhostItem key={`ghost:${g.path}`} ghost={g} variant="row" />)}
-            </div>
-          ) : (
-            /* ── Grid view ────────────────────────────────────────────────────── */
-            <div className="grid gap-3 pt-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
-              {parentRowAction && (
-                <button onClick={parentRowAction} {...(localMode ? {} : parentDropProps)} className={`flex flex-col items-center gap-2 p-3 rounded-xl transition-colors ${
-                  dropTarget === '..' ? 'bg-accent/15 ring-2 ring-accent/50' : 'bg-surface-overlay hover:bg-surface-raised'
-                }`}>
-                  <div className="w-full aspect-square flex items-center justify-center">
-                    {dropTarget === '..'
-                      ? <CornerLeftUp size={40} className="text-accent" />
-                      : <FolderOpen size={40} className="text-text-muted" />}
-                  </div>
-                  <span className={`text-xs ${dropTarget === '..' ? 'text-accent' : 'text-text-muted'}`}>
-                    {dropTarget === '..' ? 'Move up' : '..'}
-                  </span>
-                </button>
-              )}
-              {filteredEntries.map((entry) => {
-                const isDir = entry.type === 'directory'
-                const mt = isDir ? 'folder' : getMediaType(entry.name)
-                const ext = getFileExt(entry.name).slice(1).toUpperCase()
-                const isMedia = mt === 'image' || mt === 'video'
-                const isSelected = selectedPaths.has(entry.path)
-                const isLiked = !localMode && mt === 'audio' && likedSet.has(apiFileTrackId(entry.path, trackChannel))
-                const isDropTarget = dropTarget === entry.path
-                const pending = localMode ? undefined : pendingFor(entry.path)
-                return (
-                  <div key={entry.path}
-                    {...dragSourceProps(entry)}
-                    {...dropTargetProps(entry)}
-                    {...folderHoverProps(entry)}
-                    className={`group flex flex-col rounded-xl overflow-hidden transition-colors cursor-default ${
-                      isDropTarget ? 'bg-accent/15 ring-2 ring-accent/60'
-                        : isSelected ? 'bg-accent/10 ring-2 ring-accent/40'
-                        : 'bg-surface-overlay hover:bg-surface-raised'
-                    }`}
-                    onClick={(e) => {
-                      if (e.ctrlKey || e.metaKey) {
-                        toggleSelect(entry.path)
-                        return
-                      }
-                      if (selectMode) { toggleSelect(entry.path); return }
-                      if (isDir) openFolder(entry)
-                      else if (isMedia) openMedia(entry)
-                      else if (mt === 'audio') playEntry(entry)
-                      else if (mt === 'text') openText(entry)
-                    }}
-                    onContextMenu={e => { e.preventDefault(); e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
-                    onTouchStart={() => handleLongPressStart(entry)}
-                    onTouchEnd={handleLongPressEnd}
-                  >
-                    {/* Thumb */}
-                    <div className="relative w-full aspect-square bg-surface-raised flex items-center justify-center overflow-hidden">
-                      {isDir ? (
-                        <Folder size={40} className={`transition-colors ${isSelected ? 'text-accent' : 'text-text-secondary group-hover:text-accent'}`} />
-                      ) : mt === 'audio' ? (
-                        <>
-                          {localMode
-                            ? <LocalCoverThumb path={entry.path} fill />
-                            : <ProgressiveCover lazy src={buildCoverArtUrl(entry.path, false, activeChannel)} className="w-full h-full object-cover"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
-                          {!selectMode && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                              {playing === entry.path
-                                ? <Loader2 size={24} className="text-white animate-spin" />
-                                : <Play size={24} fill="white" className="text-white ml-0.5" />}
-                            </div>
-                          )}
-                        </>
-                      ) : mt === 'image' ? (
-                        <>
-                          {localMode
-                            ? <img src={toFileUrl(entry.path)} alt={entry.name} loading="lazy" decoding="async" className="w-full h-full object-cover"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                            : <ProgressiveCover lazy src={buildStreamUrl(entry.path, activeChannel)} alt={entry.name} className="w-full h-full object-cover"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
-                          {!selectMode && (
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                                <ImageIcon size={16} className="text-white" />
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      ) : mt === 'video' ? (
-                        <>
-                          <Video size={36} className="text-text-muted" />
-                          {!selectMode && (
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                                <Play size={16} fill="white" className="text-white ml-0.5" />
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      ) : mt === 'text' ? (
-                        <>
-                          <FileText size={36} className="text-text-muted" />
-                          {!selectMode && (
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                                <FileText size={16} className="text-white" />
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-xs uppercase text-text-muted">{ext}</span>
-                      )}
-                      {/* Checkbox overlay (select mode) */}
+              <div ref={listContentRef} style={{ height: listWin.totalHeight, position: 'relative' }}>
+                {filteredEntries.slice(listWin.start, listWin.end).map((entry, idx) => {
+                  const rowIndex = listWin.start + idx
+                  const isDir = entry.type === 'directory'
+                  const mt = isDir ? 'folder' : getMediaType(entry.name)
+                  const ext = getFileExt(entry.name).slice(1).toUpperCase()
+                  const isMedia = mt === 'image' || mt === 'video'
+                  const isSelected = selectedPaths.has(entry.path)
+                  const isLiked = !localMode && mt === 'audio' && likedSet.has(apiFileTrackId(entry.path, trackChannel))
+                  const isDropTarget = dropTarget === entry.path
+                  const pending = localMode ? undefined : pendingFor(entry.path)
+                  return (
+                    <div key={entry.path}
+                      style={{ position: 'absolute', top: rowIndex * listRowStride, left: 0, right: 0, height: listRowStride - 2 }}
+                      {...dragSourceProps(entry)}
+                      {...dropTargetProps(entry)}
+                      {...folderHoverProps(entry)}
+                      className={`group flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-default ${
+                        isDropTarget ? 'bg-accent/15 ring-2 ring-accent/50'
+                          : isSelected ? 'bg-accent/10 hover:bg-accent/15'
+                          : 'hover:bg-surface-overlay'
+                      }`}
+                      onClick={(e) => {
+                        if (e.ctrlKey || e.metaKey) {
+                          toggleSelect(entry.path)
+                          return
+                        }
+                        if (selectMode) { toggleSelect(entry.path); return }
+                        if (isDir) openFolder(entry)
+                        else if (isMedia) openMedia(entry)
+                        else if (mt === 'text') openText(entry)
+                      }}
+                      onDoubleClick={() => { if (!selectMode && mt === 'audio') playEntry(entry) }}
+                      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
+                      onTouchStart={() => handleLongPressStart(entry)}
+                      onTouchEnd={handleLongPressEnd}
+                    >
+                      {/* Checkbox (select mode) */}
                       {selectMode && (
-                        <div className="absolute top-1.5 left-1.5 z-10">
+                        <div className="shrink-0 w-5 flex items-center justify-center">
                           {isSelected
-                            ? <CheckSquare2 size={18} className="text-accent drop-shadow" />
-                            : <Square size={18} className="text-white/70 drop-shadow" />}
+                            ? <CheckSquare2 size={16} className="text-accent" />
+                            : <Square size={16} className="text-text-muted opacity-50" />}
                         </div>
                       )}
-                      {/* Liked indicator */}
+                      {/* Icon / thumbnail */}
+                      <div className="relative shrink-0 w-9 h-9">
+                        {isDir ? (
+                          <div className="w-9 h-9 flex items-center justify-center">
+                            <Folder size={20} className={`transition-colors ${isSelected ? 'text-accent' : 'text-text-secondary group-hover:text-accent'}`} />
+                          </div>
+                        ) : mt === 'audio' ? (
+                          <button
+                            className="relative w-9 h-9 rounded overflow-hidden"
+                            onClick={(e) => { e.stopPropagation(); if (!selectMode) playEntry(entry) }}
+                            title="Play"
+                          >
+                            {localMode ? <LocalCoverThumb path={entry.path} size={36} /> : <ApiCoverThumb path={entry.path} size={36} />}
+                            {!selectMode && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                {playing === entry.path ? <Loader2 size={14} className="text-white animate-spin" /> : <Play size={14} fill="white" className="text-white ml-0.5" />}
+                              </div>
+                            )}
+                          </button>
+                        ) : mt === 'image' ? (
+                          <div className="w-9 h-9"><ImageThumb src={localMode ? toFileUrl(entry.path) : smallCoverUrl(buildStreamUrl(entry.path, activeChannel))} size={36} /></div>
+                        ) : mt === 'video' ? (
+                          <div className="w-9 h-9 flex items-center justify-center"><Video size={18} className="text-text-muted" /></div>
+                        ) : mt === 'text' ? (
+                          <div className="w-9 h-9 flex items-center justify-center"><FileText size={18} className="text-text-muted" /></div>
+                        ) : (
+                          <div className="w-9 h-9 flex items-center justify-center"><Music2 size={18} className="text-text-muted opacity-40" /></div>
+                        )}
+                      </div>
+                      <span className="flex-1 min-w-0">
+                        <span className={`block text-sm truncate ${isDir ? 'text-text-primary font-medium cursor-pointer' : 'text-text-secondary'}`}>{entry.name}</span>
+                        {searching && parentFolder(entry.path) && (
+                          <span className="block text-text-muted text-[10px] truncate">{parentFolder(entry.path)}</span>
+                        )}
+                      </span>
+                      {pending && <PendingMarker proposal={pending} />}
                       {isLiked && (
                         <button
-                          className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center"
+                          className="shrink-0 p-1 text-accent"
                           onClick={(e) => { e.stopPropagation(); toggleApiFileLike(entry.path) }}
-                        disabled={!channelsReady}
+                          disabled={!channelsReady}
                           title="Unlike"
                         >
-                          <Heart size={12} fill="currentColor" className="text-accent" />
+                          <Heart size={13} fill="currentColor" />
                         </button>
                       )}
-                    </div>
-                    {/* Label */}
-                    <div className="px-2 py-2 flex items-center gap-1">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-text-primary text-xs font-medium truncate">{entry.name}</p>
-                        {!isDir && <p className="text-text-muted text-[10px] uppercase tracking-wide mt-0.5">{ext}</p>}
-                      </div>
-                      {pending && <PendingMarker proposal={pending} />}
-                      {/* Same visible context-menu trigger as the list rows —
-                          right-click/long-press aren't discoverable on touch. */}
+                      {!isDir && entry.size != null && (
+                        <span className="hidden md:inline-block text-text-muted text-xs shrink-0 w-14 text-right">{(entry.size / 1_048_576).toFixed(1)} MB</span>
+                      )}
+                      {!isDir && <span className="hidden md:inline-block text-center text-[10px] uppercase tracking-wide text-text-muted bg-surface-overlay px-1.5 py-0.5 rounded shrink-0 w-12">{ext}</span>}
                       {!selectMode && (
                         <button
-                          className="shrink-0 p-1.5 -m-1 text-text-muted md:opacity-0 md:group-hover:opacity-100 hover:text-text-primary active:text-accent transition-all"
+                          className="shrink-0 p-2 -my-1.5 text-text-muted md:opacity-0 md:group-hover:opacity-100 hover:text-text-primary active:text-accent transition-all"
                           onClick={(e) => { e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
                           title="More options"
                         >
-                          <MoreHorizontal size={15} />
+                          <MoreHorizontal size={16} />
                         </button>
                       )}
                     </div>
-                  </div>
-                )
-              })}
-              {visibleGhosts.map((g) => <PendingGhostItem key={`ghost:${g.path}`} ghost={g} variant="tile" />)}
+                  )
+                })}
+              </div>
+              {visibleGhosts.map((g) => <PendingGhostItem key={`ghost:${g.path}`} ghost={g} variant="row" />)}
+            </div>
+          ) : (
+            /* ── Grid view (virtualized) ──────────────────────────────────────── */
+            <div className="pt-1 space-y-3">
+              {parentRowAction && (
+                <button onClick={parentRowAction} {...(localMode ? {} : parentDropProps)} className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-colors ${
+                  dropTarget === '..' ? 'bg-accent/15 ring-2 ring-accent/50' : 'bg-surface-overlay hover:bg-surface-raised'
+                }`}>
+                  {dropTarget === '..'
+                    ? <CornerLeftUp size={18} className="text-accent" />
+                    : <FolderOpen size={18} className="text-text-muted" />}
+                  <span className={`text-xs font-medium ${dropTarget === '..' ? 'text-accent' : 'text-text-muted'}`}>
+                    {dropTarget === '..' ? 'Move up a level' : '.. (Parent folder)'}
+                  </span>
+                </button>
+              )}
+              <div ref={gridContentRef} style={{ height: gridWin.totalHeight, position: 'relative' }}>
+                {Array.from({ length: gridWin.end - gridWin.start }, (_, rIdx) => {
+                  const row = gridWin.start + rIdx
+                  const sliceStart = row * gridLayout.cols
+                  const rowEntries = filteredEntries.slice(sliceStart, sliceStart + gridLayout.cols)
+                  return (
+                    <div
+                      key={row}
+                      style={{
+                        position: 'absolute',
+                        top: row * gridLayout.rowStride,
+                        left: 0,
+                        right: 0,
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${gridLayout.cols}, minmax(0, 1fr))`,
+                        gap: 12,
+                      }}
+                    >
+                      {rowEntries.map((entry) => {
+                        const isDir = entry.type === 'directory'
+                        const mt = isDir ? 'folder' : getMediaType(entry.name)
+                        const ext = getFileExt(entry.name).slice(1).toUpperCase()
+                        const isMedia = mt === 'image' || mt === 'video'
+                        const isSelected = selectedPaths.has(entry.path)
+                        const isLiked = !localMode && mt === 'audio' && likedSet.has(apiFileTrackId(entry.path, trackChannel))
+                        const isDropTarget = dropTarget === entry.path
+                        const pending = localMode ? undefined : pendingFor(entry.path)
+                        return (
+                          <div key={entry.path}
+                            {...dragSourceProps(entry)}
+                            {...dropTargetProps(entry)}
+                            {...folderHoverProps(entry)}
+                            className={`group flex flex-col rounded-xl overflow-hidden transition-colors cursor-default ${
+                              isDropTarget ? 'bg-accent/15 ring-2 ring-accent/60'
+                                : isSelected ? 'bg-accent/10 ring-2 ring-accent/40'
+                                : 'bg-surface-overlay hover:bg-surface-raised'
+                            }`}
+                            onClick={(e) => {
+                              if (e.ctrlKey || e.metaKey) {
+                                toggleSelect(entry.path)
+                                return
+                              }
+                              if (selectMode) { toggleSelect(entry.path); return }
+                              if (isDir) openFolder(entry)
+                              else if (isMedia) openMedia(entry)
+                              else if (mt === 'audio') playEntry(entry)
+                              else if (mt === 'text') openText(entry)
+                            }}
+                            onContextMenu={e => { e.preventDefault(); e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
+                            onTouchStart={() => handleLongPressStart(entry)}
+                            onTouchEnd={handleLongPressEnd}
+                          >
+                            {/* Thumb */}
+                            <div className="relative w-full aspect-square bg-surface-raised flex items-center justify-center overflow-hidden">
+                              {isDir ? (
+                                <Folder size={40} className={`transition-colors ${isSelected ? 'text-accent' : 'text-text-secondary group-hover:text-accent'}`} />
+                              ) : mt === 'audio' ? (
+                                <>
+                                  {localMode
+                                    ? <LocalCoverThumb path={entry.path} fill />
+                                    : <ProgressiveCover lazy src={buildCoverArtUrl(entry.path, false, activeChannel)} className="w-full h-full object-cover"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
+                                  {!selectMode && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                      {playing === entry.path
+                                        ? <Loader2 size={24} className="text-white animate-spin" />
+                                        : <Play size={24} fill="white" className="text-white ml-0.5" />}
+                                    </div>
+                                  )}
+                                </>
+                              ) : mt === 'image' ? (
+                                <>
+                                  {localMode
+                                    ? <img src={toFileUrl(entry.path)} alt={entry.name} loading="lazy" decoding="async" className="w-full h-full object-cover"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                                    : <ProgressiveCover lazy src={buildStreamUrl(entry.path, activeChannel)} alt={entry.name} className="w-full h-full object-cover"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
+                                  {!selectMode && (
+                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                                        <ImageIcon size={16} className="text-white" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              ) : mt === 'video' ? (
+                                <>
+                                  <Video size={36} className="text-text-muted" />
+                                  {!selectMode && (
+                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                                        <Play size={16} fill="white" className="text-white ml-0.5" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              ) : mt === 'text' ? (
+                                <>
+                                  <FileText size={36} className="text-text-muted" />
+                                  {!selectMode && (
+                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                                        <FileText size={16} className="text-white" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-xs uppercase text-text-muted">{ext}</span>
+                              )}
+                              {selectMode && (
+                                <div className="absolute top-1.5 left-1.5 z-10">
+                                  {isSelected
+                                    ? <CheckSquare2 size={18} className="text-accent drop-shadow" />
+                                    : <Square size={18} className="text-white/70 drop-shadow" />}
+                                </div>
+                              )}
+                              {isLiked && (
+                                <button
+                                  className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center"
+                                  onClick={(e) => { e.stopPropagation(); toggleApiFileLike(entry.path) }}
+                                  disabled={!channelsReady}
+                                  title="Unlike"
+                                >
+                                  <Heart size={12} fill="currentColor" className="text-accent" />
+                                </button>
+                              )}
+                            </div>
+                            {/* Label */}
+                            <div className="px-2 py-2 flex items-center gap-1">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-text-primary text-xs font-medium truncate">{entry.name}</p>
+                                {!isDir && <p className="text-text-muted text-[10px] uppercase tracking-wide mt-0.5">{ext}</p>}
+                              </div>
+                              {pending && <PendingMarker proposal={pending} />}
+                              {!selectMode && (
+                                <button
+                                  className="shrink-0 p-1.5 -m-1 text-text-muted md:opacity-0 md:group-hover:opacity-100 hover:text-text-primary active:text-accent transition-all"
+                                  onClick={(e) => { e.stopPropagation(); openContextMenu(entry, e.clientX, e.clientY) }}
+                                  title="More options"
+                                >
+                                  <MoreHorizontal size={15} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+              {visibleGhosts.length > 0 && (
+                <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
+                  {visibleGhosts.map((g) => <PendingGhostItem key={`ghost:${g.path}`} ghost={g} variant="tile" />)}
+                </div>
+              )}
             </div>
           )}
         </div>

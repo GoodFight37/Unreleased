@@ -2,6 +2,7 @@
 // WRLD tab, frameBridge.ts), the shapes of what it hears, and the two habits of a window on the desktop - letting
 // clicks through its clear parts, and moving when its empty glass is dragged.
 import { frameBridge } from './frameBridge'
+import { effectsMotionMedia, isReducedMotion, isReducedTransparency } from '../../lib/effectsPreference'
 import type { DesktopSettings } from '../../store/desktopSlice'
 import type { AlbumColors, Meter } from '../light/engine'
 import type { LyricTune, StageClock } from '../lyrics/scene'
@@ -10,6 +11,7 @@ import type { DesktopTrack } from '../../lib/desktopBridge'
 import type { DeskVizLook } from '../deskViz'
 import type { WidgetPart } from '../widgetMenu'
 
+export { effectsMotionMedia, isReducedMotion, isReducedTransparency }
 export type { DesktopTrack }
 
 export interface NowTrack { id: string; title: string; artist: string; album: string; duration: number; cover: string | null }
@@ -215,7 +217,8 @@ export function frosted(el: HTMLElement, live: Live, amount: () => number): void
   el.prepend(layer)
   let key = ''
   const place = (): void => {
-    const url = live.frost, display = live.primary
+    const reduce = isReducedTransparency()
+    const url = reduce ? null : live.frost, display = reduce ? null : live.primary
     el.classList.toggle('frosted', Boolean(url && display))
     if (!url || !display) { if (key) { key = ''; layer.style.backgroundImage = '' } return }
     const box = el.getBoundingClientRect()
@@ -232,6 +235,7 @@ export function frosted(el: HTMLElement, live: Live, amount: () => number): void
     })
   }
   live.on((what) => { if (what === 'frost' || what === 'settings') place() })
+  effectsMotionMedia().addEventListener('change', place)
   window.setInterval(place, 400)
   place()
 }

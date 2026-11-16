@@ -6,8 +6,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 1.25rem 1.5rem;
-  gap: 1rem;
+  padding: max(0.35rem, calc(1.25rem - var(--nav-pill-clearance, 0px))) 1.5rem 1.25rem;
+  gap: 1.5rem;
 }
 
 .library-workspace button:focus-visible,
@@ -45,8 +45,8 @@
   min-width: 0;
   padding: 1rem;
   border-radius: 1rem;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 1px solid transparent;
   text-align: left;
 }
 
@@ -136,9 +136,68 @@
 
 .library-overview section > div:last-child { overflow: visible; }
 
+.library-overview > div:first-child { gap: 1.75rem; }
+.library-overview .tile-plain { overflow: visible; }
+.library-overview-side {
+  border-left: 1px solid var(--border);
+  padding-left: 1.25rem;
+}
+.library-overview-side > :not(:first-child) {
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+
+.library-overview .library-album-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1rem;
+}
+.library-overview .library-album {
+  height: auto;
+  border-color: transparent;
+  background: transparent;
+}
+.library-overview .library-album-open {
+  flex-direction: column;
+  align-items: stretch;
+  gap: .75rem;
+  padding: .375rem;
+}
+.library-overview .library-album-cover {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: .875rem;
+}
+.library-overview .library-album-open > div:last-child { min-height: 5rem; }
+.library-overview .library-album:hover,
+.library-overview .library-album:focus-within { background: var(--surface-overlay); }
+
+.library-folders-summary {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  list-style: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: .875rem;
+  font-weight: 600;
+  border-radius: .5rem;
+}
+.library-folders-summary::-webkit-details-marker { display: none; }
+.library-folders-summary:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb));
+  outline-offset: 4px;
+}
+.library-folders[open] .library-folders-chevron { transform: rotate(180deg); }
+
+@container library (max-width: 70rem) {
+  .library-overview .library-album-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @container library (max-width: 50rem) {
   .library-overview { grid-template-columns: minmax(0, 1fr); }
   .library-overview .library-overview-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .library-overview-side { border-left: 0; padding-left: 0; }
 }
 
 @container library (max-width: 34rem) {
@@ -146,4 +205,5 @@
   .library-shortcut { padding: .75rem; gap: .5rem; }
   .library-shortcut > svg:last-child { display: none; }
   .library-overview .library-overview-side { grid-template-columns: minmax(0, 1fr); }
+  .library-overview .library-album-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

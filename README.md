@@ -17,7 +17,7 @@ is the Electron desktop build.
 | macOS (Apple Silicon and Intel) | `.dmg` |
 | Linux (x64) | AppImage |
 
-Installed builds update themselves in the background.
+Upstream auto-updates are disabled in this Liquid Glass fork; update by pulling the latest commits or installing a new fork build.
 
 The macOS app is not signed yet. If Gatekeeper says it is damaged, the copy
 was signed on the build machine and that signature does not count on yours.

@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from './effectsPreference'
 import { useLayoutEffect, useSyncExternalStore } from 'react'
 import type { ViewType } from '../types'
 
@@ -54,7 +55,7 @@ export function isExpandingToWrld(): boolean {
 export function expandToWrld(open: () => void, from: ViewType): void {
   const bar = document.querySelector<HTMLElement>('[data-wrld-expand="bar"]')
   if (!bar || bar.offsetHeight === 0 || from === 'wrld' || current
-    || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    || effectsMotionMedia().matches) {
     open()
     return
   }

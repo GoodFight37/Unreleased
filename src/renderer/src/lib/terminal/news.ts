@@ -84,7 +84,7 @@ export const NEWS_COMMANDS: TermCommand[] = [
         }
       } else if (sub === 'rm') {
         const id = idArg(rest[0], 'news rm <id>')
-        if (!confirmAction(ctx, `Delete news post #${id}? This can't be undone.`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Delete news post #${id}? This can't be undone.`, bool.has('y')))) return
         await deleteNewsItem(id)
         ctx.print(`deleted #${id}`, 'ok')
       } else if (sub === 'upload') {
@@ -110,7 +110,7 @@ export const NEWS_COMMANDS: TermCommand[] = [
           ctx.print(`updated channel ${c.id}`, 'ok')
         } else if (verb === 'rm') {
           const id = rest[1] ?? fail('usage: news channels rm <id>')
-          if (!confirmAction(ctx, `Delete the news channel "${id}"?`, bool.has('y'))) return
+          if (!(await confirmAction(ctx, `Delete the news channel "${id}"?`, bool.has('y')))) return
           await deleteChannel(id)
           ctx.print(`deleted channel ${id}`, 'ok')
         } else fail('usage: news channels [ls | new | edit | rm]')

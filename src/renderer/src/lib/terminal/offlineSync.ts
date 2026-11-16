@@ -80,7 +80,7 @@ export const OFFLINE_SYNC_COMMANDS: TermCommand[] = [
           const removeFiles = bool.has('remove')
           await previewCatalogSync()
           const kept = catalogSyncFootprint()
-          if (removeFiles && kept.songs && !confirmAction(ctx, `Turn Sync off and delete ${kept.songs.toLocaleString()} songs (${formatBytes(kept.bytes)}) that only Sync kept?`, bool.has('y'))) return
+          if (removeFiles && kept.songs && !(await confirmAction(ctx, `Turn Sync off and delete ${kept.songs.toLocaleString()} songs (${formatBytes(kept.bytes)}) that only Sync kept?`, bool.has('y')))) return
           await setCatalogSyncEnabled(false, { removeFiles })
           if (removeFiles) ctx.print(`Sync is off; removed ${kept.songs.toLocaleString()} songs (${formatBytes(kept.bytes)})`, 'ok')
           else ctx.print(`Sync is off; ${kept.songs.toLocaleString()} songs stay on this computer (offline remove deletes them)`, 'ok')
@@ -129,7 +129,7 @@ export const OFFLINE_SYNC_COMMANDS: TermCommand[] = [
           await previewCatalogSync()
           const kept = catalogSyncFootprint()
           if (!kept.songs) { ctx.print('no songs from Sync on this computer', 'dim'); return }
-          if (!confirmAction(ctx, `Delete ${kept.songs.toLocaleString()} songs (${formatBytes(kept.bytes)}) that only Sync kept?`, bool.has('y'))) return
+          if (!(await confirmAction(ctx, `Delete ${kept.songs.toLocaleString()} songs (${formatBytes(kept.bytes)}) that only Sync kept?`, bool.has('y')))) return
           await removeCatalogSyncFiles()
           ctx.print(`removed ${kept.songs.toLocaleString()} songs (${formatBytes(kept.bytes)})`, 'ok')
           return

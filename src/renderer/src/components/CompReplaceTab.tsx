@@ -3,6 +3,7 @@ import { AlertCircle, Check, FolderOpen, Loader2, X as XIcon } from 'lucide-reac
 import ThemedCheckbox from './ThemedCheckbox'
 import { useStorePick } from '../store/useStore'
 import { errorMessage } from '../lib/format'
+import { confirmGlass } from '../lib/confirmModal'
 import {
   loadLiveComp, localCompFiles, planCompReplace, runCompReplace,
   type CompReplacePhase, type CompReplacePlan, type LocalCompFile,
@@ -65,7 +66,7 @@ export default function CompReplaceTab(): JSX.Element {
     const message = `Replace ${channelName} with "${picked?.folder}"?\n\n`
       + `${plan.upload.length} file${plan.upload.length === 1 ? '' : 's'} to upload, ${plan.removed.length} removed. `
       + 'Removed and replaced files are archived and can be restored from their history.'
-    if (!confirm(message)) return
+    if (!(await confirmGlass({ title: 'Replace compilation', message, confirmLabel: 'Replace', destructive: true }))) return
     setError(null)
     setProgress(0)
     try {

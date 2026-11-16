@@ -88,7 +88,7 @@ export function useArtTextContrast(
         for (let i = 0; i < data.length; i += 4)
           sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
         const avg = sum / (data.length / 4)
-        const factor = isDarkSkin ? 0.22 : 0.45
+        const factor = isDarkSkin ? 0.22 : 0.34
         setTextIsDark(avg * factor > 90)
       } catch { setTextIsDark(false) }
     }

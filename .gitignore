@@ -78,6 +78,7 @@ Thumbs.db
 
 # Testing
 coverage/
+.ui-verify/
 
 # Misc
 *.local

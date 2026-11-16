@@ -2,21 +2,22 @@ import { ChevronRight } from 'lucide-react'
 
 // Shared bento-tile primitive for the Editor/Contributor profile pages'
 // "Visual Redesign v2 - Bento Dashboard Pivot" visual language.
-export function Tile({ title, icon, action, controls, span = '', children }: {
+export function Tile({ title, icon, action, controls, span = '', plain = false, children }: {
   title?: string
   icon?: JSX.Element
   action?: { label: string; onClick: () => void }
   /** Extra buttons at the right end of the header, before `action`. */
   controls?: React.ReactNode
   span?: string
+  plain?: boolean
   children: React.ReactNode
 }): JSX.Element {
   return (
-    <section data-swap className={`${span} min-w-0 min-h-0 flex flex-col overflow-hidden rounded-2xl glass-pane p-4`}>
+    <section data-swap className={`${span} min-w-0 min-h-0 flex flex-col overflow-hidden ${plain ? 'tile-plain' : 'rounded-2xl glass-pane p-4'}`}>
       {title && (
         <div className="flex items-center gap-2 mb-3 shrink-0">
           <span className="text-text-muted">{icon}</span>
-          <h2 className="text-text-primary text-sm font-bold uppercase tracking-wider flex-1 min-w-0 truncate">{title}</h2>
+          <h2 className={`text-text-primary flex-1 min-w-0 truncate ${plain ? 'text-base font-semibold tracking-tight' : 'text-sm font-bold uppercase tracking-wider'}`}>{title}</h2>
           {controls}
           {action && (
             <button

@@ -89,7 +89,7 @@
   --titlebar: #000000;
   --text-primary: #ffffff;
   --text-secondary: #b3b3b3;
-  --text-muted: #6b6b6b;
+  --text-muted: #a3a3a3;
   --border: rgba(255, 255, 255, 0.08);
   --scrollbar: #404040;
 }
@@ -346,18 +346,34 @@ input[type='range'] {
   margin: 0;
 }
 input[type='range']::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
+  height: 5px;
+  border-radius: 9999px;
   background: var(--surface-overlay);
+  box-shadow:
+    inset 0 1px 2px rgb(15 23 42 / 0.16),
+    inset 0 -0.5px 0 rgb(255 255 255 / 0.6);
+}
+.dark input[type='range']::-webkit-slider-runnable-track {
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 0.36),
+    inset 0 -0.5px 0 rgb(255 255 255 / 0.22);
 }
 /* Firefox draws none of the -webkit- pseudo-elements, so every rule below is
    mirrored onto its -moz- counterpart. Keep the two in separate blocks: one
    unrecognized pseudo-element invalidates a whole selector list, so merging
    them would drop the styling in both engines. */
 input[type='range']::-moz-range-track {
-  height: 4px;
-  border-radius: 2px;
+  height: 5px;
+  border-radius: 9999px;
   background: var(--surface-overlay);
+  box-shadow:
+    inset 0 1px 2px rgb(15 23 42 / 0.16),
+    inset 0 -0.5px 0 rgb(255 255 255 / 0.6);
+}
+.dark input[type='range']::-moz-range-track {
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 0.36),
+    inset 0 -0.5px 0 rgb(255 255 255 / 0.22);
 }
 input[type='range']::-moz-focus-outer {
   border: 0;
@@ -365,36 +381,84 @@ input[type='range']::-moz-focus-outer {
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  height: 12px;
-  width: 12px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  margin-top: -4px; /* centers 12px thumb on 4px track */
+  height: 14px;
+  width: 24px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--glass-base, #fff) 72%, transparent);
+  -webkit-backdrop-filter: blur(2px) saturate(1.3);
+  backdrop-filter: blur(2px) saturate(1.3);
+  border: 0.5px solid rgb(20 35 65 / 0.18);
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 255 255 / 0.85),
+    0 2px 8px rgb(56 110 190 / 0.2);
+  margin-top: -4.5px; /* centers 14px thumb on 5px track */
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.16s, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s;
 }
-/* Keep the thumb visible for the whole drag - :hover alone drops out the
-   moment the cursor strays vertically off the thin track, which reads as
-   the slider "slipping away" even though the drag (native pointer capture)
-   is still tracking correctly. :active persists for the whole mouse-down. */
-input[type='range']:hover::-webkit-slider-thumb,
+.dark input[type='range']::-webkit-slider-thumb {
+  background: color-mix(in srgb, #e2e8f0 20%, rgb(20 24 34 / 0.55));
+  border-color: rgb(255 255 255 / 0.22);
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 255 255 / 0.68),
+    0 2px 8px rgb(0 0 0 / 0.18);
+}
+/* Hide only thumbs whose capsule is actually registered in the GPU frame. */
+.progress-track input[data-glass-slider]::-webkit-slider-thumb {
+  opacity: 1;
+}
+.glass-gpu-active .progress-track input[data-glass-slider-ready]::-webkit-slider-thumb {
+  opacity: 0 !important;
+  height: 22px;
+  width: 26px;
+  margin-top: -8.5px;
+}
+:where(html[data-effects-transparency="reduce"]) .progress-track input[data-glass-slider]::-webkit-slider-thumb {
+  opacity: 1 !important;
+  background: var(--control-thumb);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+input[type='range']:hover::-webkit-slider-thumb {
+  opacity: 1;
+  transform: scale(1.06);
+}
 input[type='range']:active::-webkit-slider-thumb {
   opacity: 1;
+  transform: scale(1.18);
 }
-/* Firefox centers the thumb on the track itself, so no margin-top here - and
-   it draws a border on the default thumb that has to be cleared. */
+:where(html[data-effects-motion="reduce"]) input[type='range']:hover::-webkit-slider-thumb,
+:where(html[data-effects-motion="reduce"]) input[type='range']:active::-webkit-slider-thumb {
+  transform: none;
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 255 255 / 0.95),
+    0 0 0 1px rgb(255 255 255 / 0.35),
+    0 2px 8px rgb(0 0 0 / 0.18);
+}
 input[type='range']::-moz-range-thumb {
-  height: 12px;
-  width: 12px;
-  border: none;
-  border-radius: 50%;
-  background: var(--text-primary);
+  height: 14px;
+  width: 24px;
+  border: 0.5px solid rgb(20 35 65 / 0.18);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--glass-base, #fff) 72%, transparent);
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 255 255 / 0.85),
+    0 2px 8px rgb(56 110 190 / 0.2);
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.16s, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
-input[type='range']:hover::-moz-range-thumb,
+.progress-track input[data-glass-slider]::-moz-range-thumb { opacity: 1; }
+.glass-gpu-active .progress-track input[data-glass-slider-ready]::-moz-range-thumb { opacity: 0 !important; }
+input[type='range']:hover::-moz-range-thumb {
+  opacity: 1;
+  transform: scale(1.06);
+}
 input[type='range']:active::-moz-range-thumb {
   opacity: 1;
+  transform: scale(1.18);
+}
+:where(html[data-effects-motion="reduce"]) input[type='range']:hover::-moz-range-thumb,
+:where(html[data-effects-motion="reduce"]) input[type='range']:active::-moz-range-thumb {
+  transform: none;
 }
 /* Touch devices have no :hover at all, so a hover-gated thumb never becomes
    visible except mid-drag (:active) - on a bare slider with no accent fill
@@ -462,15 +526,13 @@ input[type='range']:active::-moz-range-thumb {
 @keyframes player-loading-sweep {
   to { transform: translateX(250%); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .player-loading::after {
+:where(html[data-effects-motion="reduce"]) .player-loading::after {
     animation: none;
     transform: none;
     width: 100%;
     background: var(--sweep);
     opacity: 0.45;
   }
-}
 
 /* Equalizer band sliders. Unlike seek/volume, a band's setting has to be
    readable at a glance without hovering each one - so the thumb stays
@@ -650,7 +712,7 @@ input[type='range']:active::-moz-range-thumb {
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 .animate-wrld-queue-in {
-  animation: wrld-queue-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: wrld-queue-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ─── WRLD side panel (lyrics / queue / FM radio) ───────────────────────────────
@@ -671,8 +733,8 @@ input[type='range']:active::-moz-range-thumb {
   from { opacity: 1; transform: translateX(0); }
   to   { opacity: 0; transform: translateX(32px); }
 }
-.animate-wrld-panel-in  { animation: wrld-panel-in 0.6s cubic-bezier(0.33, 0, 0.15, 1) 0.1s both; }
-.animate-wrld-panel-out { animation: wrld-panel-out 0.36s cubic-bezier(0.4, 0, 0.6, 1) both; pointer-events: none; }
+.animate-wrld-panel-in  { animation: wrld-panel-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-wrld-panel-out { animation: wrld-panel-out 0.28s cubic-bezier(0.4, 0, 0.6, 1) both; pointer-events: none; }
 
 /* Swapping views inside the open panel (lyrics <-> queue, radio <-> lyrics) is
    a crossfade: the old view lifts away, and the new one rises in once it has
@@ -696,6 +758,32 @@ input[type='range']:active::-moz-range-thumb {
   to   { opacity: 1; transform: scale(1)   rotate(0); }
 }
 .animate-wrld-icon-swap { display: inline-flex; animation: wrld-icon-swap 0.38s cubic-bezier(0.3, 1.25, 0.5, 1) both; }
+
+/* Top-bar buttons: a light translucent veil on hover (never a dark square) and
+   only the pressed button sinks, not the whole bar. */
+.nav-btn { transition: color 150ms ease-out, background-color 150ms ease-out, transform 120ms ease-out; }
+.nav-btn:hover { background-color: rgb(0 0 0 / 0.05); }
+.dark .nav-btn:hover { background-color: rgb(255 255 255 / 0.08); }
+.nav-btn:active { transform: scale(0.96); }
+.nav-active-fill { background-color: rgb(0 0 0 / 0.06); }
+.dark .nav-active-fill { background-color: rgb(255 255 255 / 0.1); }
+@media (prefers-reduced-motion: reduce) { .nav-btn:active { transform: none; } }
+
+/* WRLD listening screen: the blurred cover behind it breathes very slowly
+   (transform only, compositor-friendly). Scale and shift keep at least the
+   static 10% overscan, so the blur's soft edges stay off-screen; still under
+   reduced motion. */
+.wrld-drift {
+  transform: scale(1.2);
+  animation: wrld-drift 46s ease-in-out infinite alternate;
+}
+@keyframes wrld-drift {
+  0%   { transform: scale(1.2) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.26) translate3d(-1.5%, 1%, 0); }
+  100% { transform: scale(1.23) translate3d(1.2%, -1.2%, 0); }
+}
+:where(html[data-effects-motion="reduce"]) .wrld-drift { animation: none; }
+@media (prefers-reduced-motion: reduce) { .wrld-drift { animation: none; } }
 
 /* ─── Sliding nav highlight ────────────────────────────────────────────────────
    hooks/useSlidingIndicator: one highlight behind the nav items, moved onto the
@@ -839,7 +927,7 @@ input[type='range']:active::-moz-range-thumb {
 .menu-glass {
   --menu-glass-fill: color-mix(in srgb, var(--text-primary) 10%, transparent);
   background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.6);
   backdrop-filter: blur(24px) saturate(1.6);
   border-radius: 12px;
@@ -848,19 +936,50 @@ input[type='range']:active::-moz-range-thumb {
     inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 14%, transparent),
     0 10px 28px rgb(0 0 0 / 0.35);
 }
-.menu-glass-row { border-radius: 8px; }
+.menu-glass-row { border: 0; box-shadow: none; background: transparent; border-radius: 8px; }
+.menu-glass-row:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
 .menu-glass-row:hover:not(:disabled),
 .menu-glass-row:focus-visible,
 .menu-glass-row.is-open {
   background: var(--menu-glass-fill);
-  outline: none;
 }
-@media (prefers-reduced-transparency: reduce) {
-  .menu-glass {
+:where(html[data-effects-transparency="reduce"]) .menu-glass {
     background: var(--surface);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+.menu-glass.app-menu-glass {
+  --menu-glass-fill: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  background: color-mix(in srgb, var(--glass-base, var(--surface)) 84%, rgb(255 255 255 / 0.14));
+  -webkit-backdrop-filter: blur(32px) saturate(1.85);
+  backdrop-filter: blur(32px) saturate(1.85);
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 26%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 15%, transparent),
+    0 18px 48px rgb(0 0 0 / 0.34);
+}
+.dark .menu-glass.app-menu-glass {
+  background: color-mix(in srgb, var(--glass-base, var(--surface)) 82%, rgb(10 12 18 / 0.34));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    0 20px 54px rgb(0 0 0 / 0.56);
+}
+:where(html[data-effects-transparency="reduce"]) .menu-glass.app-menu-glass {
+  background: var(--surface);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.app-menu-row {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  border-radius: 10px;
+}
+.app-menu-row:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -2px;
 }
 
 /* ─── Glass chrome ────────────────────────────────────────────────────────────
@@ -874,7 +993,7 @@ input[type='range']:active::-moz-range-thumb {
    backdrop-filter makes its element the containing block for position:fixed
    descendants. Put it straight on an element only when nothing inside
    positions itself against the window: ContextMenu, Modal and the Themed*
-   pickers portal out, but NavPillGrip's drop targets, ClampedMenu and many
+   pickers portal out, but ClampedMenu and many
    views' popovers don't. A pane that may hold one of those takes
    .glass-backdrop, which blurs from a ::before layer instead. That layer
    loses its blur while an ancestor is fading (opacity < 1 makes the ancestor
@@ -983,10 +1102,158 @@ input[type='range']:active::-moz-range-thumb {
     inset 0 0 0 0.5px var(--glass-rim),
     inset 0 1px 0 var(--glass-edge);
 }
-.glass-lift { box-shadow: 0 10px 36px rgb(0 0 0 / 0.26); }
+.glass-lift { box-shadow: 0 6px 22px rgb(0 0 0 / 0.14); }
 /* The pill nav floats over pages, so it frosts them like the player. */
 .app-sidebar.glass-backdrop {
   --glass-tint: color-mix(in srgb, var(--glass-base) 55%, transparent);
+}
+.glass-compositor-stack {
+  /* The two fixed canvases must share the root stacking order with the player and dialogs. */
+  position: static;
+  pointer-events: none;
+}
+.glass-compositor-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 15;
+}
+.glass-compositor-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 48;
+}
+.app-player.gpu {
+  --text-muted: #2c3342;
+}
+.dark .app-player.gpu {
+  --text-muted: #dee2ec;
+}
+/* Keep a light CSS blur on the ::before layer so scrolling content underneath
+   is softly blurred and visible through the WebGPU glass surface. */
+.app-player.gpu.glass-backdrop::before,
+.glass-gpu-active .app-sidebar.glass-backdrop::before {
+  background-color: transparent;
+  box-shadow: none;
+  backdrop-filter: blur(14px) saturate(1.35);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+}
+.app-player.gpu.glass-specular::after,
+.glass-gpu-active .app-sidebar.glass-specular::after,
+.glass-gpu-active .modal-glass::after {
+  display: none;
+}
+/* Popover glass chrome (Filter, SearchHelp, Equalizer) with clean CSS fallback. */
+.glass-popover {
+  background: color-mix(in srgb, var(--glass-base, var(--surface)) 78%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.65);
+  backdrop-filter: blur(22px) saturate(1.65);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent),
+    inset 0 0 0 0.5px var(--glass-rim),
+    0 14px 36px rgb(0 0 0 / 0.28);
+}
+:where(html[data-effects-transparency="reduce"]) .glass-popover {
+  background: var(--surface-highest, var(--surface));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.glass-gpu-active .app-sidebar:not([data-glass-overflow]),
+.glass-gpu-active .glass-pane:not(.glass-pane .glass-pane):not([data-glass-overflow]),
+.glass-gpu-active .glass-field:not(.glass-pane .glass-field):not([data-glass-overflow]),
+.glass-gpu-active .glass-seg:not(.glass-pane .glass-seg):not([data-glass-overflow]),
+.glass-gpu-active .glass-button:not([data-glass-overflow]),
+.glass-gpu-active .glass-bar:not([data-glass-overflow]),
+.glass-gpu-active .glass-chip:not([data-glass-overflow]),
+.glass-gpu-active .glass-gpu:not([data-glass-overflow]),
+.glass-gpu-active .app-menu-glass[role="menu"]:not([data-glass-overflow]),
+.glass-gpu-active .menu-glass:not([data-glass-overflow]),
+.glass-gpu-active .glass-popover:not([data-glass-overflow]),
+.glass-gpu-active .modal-glass:not([data-glass-overflow]),
+.glass-gpu-active .modal-glass:not([data-glass-overflow]) .settings-shell {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  --text-muted: #2c3342;
+}
+.dark.glass-gpu-active .app-sidebar:not([data-glass-overflow]),
+.dark.glass-gpu-active .glass-pane:not(.glass-pane .glass-pane):not([data-glass-overflow]),
+.dark.glass-gpu-active .glass-field:not(.glass-pane .glass-field):not([data-glass-overflow]),
+.dark.glass-gpu-active .glass-seg:not(.glass-pane .glass-seg):not([data-glass-overflow]),
+.dark.glass-gpu-active .glass-button:not([data-glass-overflow]),
+.dark.glass-gpu-active .glass-bar:not([data-glass-overflow]),
+.dark.glass-gpu-active .glass-chip:not([data-glass-overflow]),
+.dark.glass-gpu-active .glass-gpu:not([data-glass-overflow]),
+.dark.glass-gpu-active .app-menu-glass[role="menu"]:not([data-glass-overflow]),
+.dark.glass-gpu-active .menu-glass:not([data-glass-overflow]),
+.dark.glass-gpu-active .glass-popover:not([data-glass-overflow]),
+.dark.glass-gpu-active .modal-glass:not([data-glass-overflow]),
+.dark.glass-gpu-active .modal-glass:not([data-glass-overflow]) .settings-shell {
+  --text-muted: #dee2ec;
+}
+.glass-gpu-active:not(.dark) .settings-content {
+  background-color: color-mix(in srgb, var(--surface-raised) 64%, transparent);
+}
+/* Menus opening above an active z-50 modal (Settings selects/context menus) blur the modal text behind them. */
+html.glass-gpu-active:has(.modal-glass) .app-menu-glass[role="menu"],
+html.glass-gpu-active:has(.modal-glass) .menu-glass {
+  -webkit-backdrop-filter: blur(22px) saturate(1.65);
+  backdrop-filter: blur(22px) saturate(1.65);
+  background-color: color-mix(in srgb, var(--surface) 76%, transparent) !important;
+}
+.glass-gpu-active .glass-pane:not(.glass-pane .glass-pane)::after,
+.glass-gpu-active .glass-seg:not(.glass-pane .glass-seg)::after {
+  display: none;
+}
+.glass-gpu-active .glass-field:not(.glass-pane .glass-field),
+.glass-gpu-active .glass-seg:not(.glass-pane .glass-seg),
+.glass-gpu-active .glass-button,
+.glass-gpu-active .glass-bar,
+.glass-gpu-active .glass-chip,
+.glass-gpu-active .glass-gpu {
+  position: relative;
+  z-index: 16;
+}
+.glass-gpu-active .wrld-toolbar {
+  position: absolute;
+  z-index: 40;
+}
+/* Tactile spring response on interactive glass buttons & chips (disabled in reduced motion). */
+.glass-button,
+.glass-chip {
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s;
+}
+.glass-button:active:not(:disabled),
+.glass-chip:active:not(:disabled) {
+  transform: scale(0.96);
+}
+:where(html[data-effects-motion="reduce"]) .glass-button,
+:where(html[data-effects-motion="reduce"]) .glass-chip {
+  transition: none;
+}
+:where(html[data-effects-motion="reduce"]) .glass-button:active:not(:disabled),
+:where(html[data-effects-motion="reduce"]) .glass-chip:active:not(:disabled) {
+  transform: none;
+}
+.glass-gpu-active .glass-pane:not(.glass-pane .glass-pane) {
+  z-index: 16;
+}
+.glass-gpu-active .app-sidebar {
+  position: relative;
+  z-index: 25;
+}
+.glass-gpu-active .app-player.gpu {
+  z-index: 30;
+}
+.glass-gpu-active .app-menu-glass[role="menu"],
+.glass-gpu-active .modal-glass,
+.glass-gpu-active .glass-popover {
+  z-index: 50;
 }
 
 /* Specular edge: a 1px ring painted over the element's own edge, bright where
@@ -1091,16 +1358,57 @@ input.glass-field:focus {
   z-index: -1;
   border-radius: 9999px;
   background-color: var(--control-thumb);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18), inset 0 0 0 0.5px var(--glass-rim);
+  box-shadow:
+    inset 0 1.5px 0 color-mix(in srgb, #fff 55%, transparent),
+    0 2px 8px rgb(56 110 190 / 0.16);
   pointer-events: none;
+}
+.dark .glass-seg-thumb {
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 255 255 / 0.45),
+    0 2px 8px rgb(0 0 0 / 0.18);
+}
+.glass-gpu-active .glass-seg-thumb.is-ready {
+  background-color: transparent;
+  box-shadow:
+    inset 0 1.5px 0 color-mix(in srgb, #fff 50%, transparent),
+    0 2px 8px rgb(0 0 0 / 0.14);
 }
 .glass-seg-thumb.is-ready {
   transition:
-    transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-    width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.26s cubic-bezier(0.22, 1, 0.36, 1);
 }
-@media (prefers-reduced-motion: reduce) {
-  .glass-seg-thumb.is-ready { transition: none; }
+.glass-seg:hover .glass-seg-thumb.is-ready {
+  box-shadow:
+    inset 0 1.5px 0 color-mix(in srgb, #fff 78%, transparent),
+    0 3px 10px rgb(0 0 0 / 0.20);
+}
+:where(html[data-effects-motion="reduce"]) .glass-seg-thumb.is-ready { transition: none; }
+
+/* Secondary catalogue tools share a quiet rail; only their selected option lifts. */
+.catalog-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 14px;
+  background-color: color-mix(in srgb, var(--surface-raised) 45%, transparent);
+}
+.glass-seg.glass-seg-quiet,
+.glass-field.catalog-tool {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.glass-seg.glass-seg-quiet::after,
+.glass-field.catalog-tool::after { display: none; }
+.glass-field.catalog-tool:hover { background-color: var(--fill); }
+.glass-field.catalog-tool.is-on {
+  background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+:where(html[data-effects-transparency="reduce"]) .catalog-toolbar {
+  background-color: var(--surface-raised);
 }
 
 /* The ambient backdrop behind the whole window (components/AmbientBackdrop):
@@ -1132,8 +1440,15 @@ body, #root, .app-shell {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(55% 60% at 88% 6%, rgb(var(--accent-rgb) / 0.55), transparent 70%),
-    radial-gradient(50% 55% at 6% 96%, rgb(var(--accent-rgb) / 0.4), transparent 70%);
+    radial-gradient(62% 58% at 86% 8%, rgb(var(--accent-rgb) / 0.48), transparent 68%),
+    radial-gradient(56% 56% at 10% 90%, color-mix(in srgb, rgb(var(--accent-rgb) / 0.38) 65%, #f43f5e 35%), transparent 70%),
+    radial-gradient(48% 52% at 46% 42%, rgb(56 189 248 / 0.14), transparent 72%);
+}
+.dark .app-ambient-glow {
+  background:
+    radial-gradient(64% 60% at 86% 8%, rgb(var(--accent-rgb) / 0.56), transparent 68%),
+    radial-gradient(58% 58% at 10% 92%, color-mix(in srgb, rgb(var(--accent-rgb) / 0.42) 60%, #ec4899 40%), transparent 70%),
+    radial-gradient(46% 50% at 44% 40%, rgb(56 189 248 / 0.18), transparent 72%);
 }
 .app-ambient-art {
   position: absolute;
@@ -1155,9 +1470,7 @@ body, #root, .app-shell {
      the skin's color. */
   background: color-mix(in srgb, color-mix(in srgb, var(--glass-accent) 7%, var(--surface)) var(--ambient-tint), transparent);
 }
-@media (prefers-reduced-motion: reduce) {
-  .app-ambient-art { transition-duration: 0.01s; }
-}
+:where(html[data-effects-motion="reduce"]) .app-ambient-art { transition-duration: 0.01s; }
 
 /* Behind a dialog: the page dims a little and frosts, instead of going dark. */
 .glass-scrim {
@@ -1198,26 +1511,61 @@ body, #root, .app-shell {
 /* Toasts and notices pinned to the bottom of the window clear the bar. */
 .above-player { bottom: calc(var(--player-dock, 0px) + 1.25rem); }
 
-@media (prefers-reduced-transparency: reduce) {
-  .glass, .glass-thick, .glass-bar, .glass-button {
+:where(html[data-effects-transparency="reduce"]) .glass,:where(html[data-effects-transparency="reduce"])  .glass-thick,:where(html[data-effects-transparency="reduce"])  .glass-bar,:where(html[data-effects-transparency="reduce"])  .glass-button {
     background: var(--surface-raised);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  .glass-backdrop::before {
+
+:where(html[data-effects-transparency="reduce"]) .glass-backdrop::before {
     background-color: var(--surface-raised);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  .glass-scrim {
+
+:where(html[data-effects-transparency="reduce"]) .glass-scrim {
     background-color: rgb(0 0 0 / 0.55);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  .app-ambient { display: none; }
-  .glass-pane { background-color: var(--pane-color, var(--surface-raised)); background-image: none; }
-  .glass-field, .glass-seg { background-color: var(--surface-raised); }
+
+:where(html[data-effects-transparency="reduce"]) .app-ambient { display: none; }
+
+:where(html[data-effects-transparency="reduce"]) .glass-pane { background-color: var(--pane-color, var(--surface-raised)); background-image: none; }
+
+:where(html[data-effects-transparency="reduce"]) .glass-field,:where(html[data-effects-transparency="reduce"])  .glass-seg { background-color: var(--surface-raised); }
+
+/* Glass only on what floats (2026-11-16): the bar, player, menus, dialogs and
+   the WRLD screen keep the WebGPU glass; inside every other page, fields,
+   segmented tracks and panes are plain, crisp fills (the compositor skips them
+   too, see FLAT_IN_PAGES). Same look in Dark, Light and the album themes. */
+/* Scoped to GPU mode (where these would otherwise be left transparent for the
+   compositor); the CSS fallback and reduced transparency keep their own looks.
+   Active (.is-on) fields keep their accent fill. */
+.glass-gpu-active [data-view]:not([data-view="wrld"]) :is(.glass-field, .glass-seg):not(.catalog-tool):not(.glass-seg-quiet):not(.is-on) {
+  background-color: var(--fill) !important;
+  background-image: none !important;
+  box-shadow: inset 0 0 0 0.5px var(--border) !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
+.glass-gpu-active [data-view]:not([data-view="wrld"]) .glass-field:not(.catalog-tool):not(.is-on):hover { background-color: var(--fill-strong) !important; }
+.glass-gpu-active [data-view]:not([data-view="wrld"]) .glass-field.is-on:not(.catalog-tool) {
+  background-color: color-mix(in srgb, var(--glass-accent) 22%, transparent) !important;
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--glass-accent) 45%, transparent) !important;
+}
+.glass-gpu-active [data-view]:not([data-view="wrld"]) .glass-field:not(.catalog-tool):is(:focus-visible, :has(:focus-visible)) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent) !important;
+}
+.glass-gpu-active [data-view]:not([data-view="wrld"]) .glass-pane:not(.glass-pane .glass-pane) {
+  background-color: color-mix(in srgb, var(--surface-raised) 72%, transparent) !important;
+  background-image: none !important;
+  box-shadow: inset 0 0 0 0.5px var(--border) !important;
+}
+.glass-gpu-active [data-view]:not([data-view="wrld"]) .glass-pane.glass-press:not(.glass-pane .glass-pane):hover {
+  background-color: color-mix(in srgb, var(--surface-raised) 88%, transparent) !important;
+}
+.glass-gpu-active [data-view]:not([data-view="wrld"]) .glass-seg-thumb.is-ready { background-color: var(--control-thumb); }
 
 /* The copy a closing modal or menu leaves behind to animate out on
    (hooks/useExitGhost). Inert, and frozen in the state it closed in: as a
@@ -1254,48 +1602,51 @@ img[data-img-fade="in"] { animation: img-fade-in 0.42s cubic-bezier(0.33, 0, 0.1
   animation: wordle-shake 0.3s ease-in-out both;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  /* Collapsed rather than removed: these all use fill-mode `both`, so the
+/* Collapsed rather than removed: these all use fill-mode `both`, so the
      element's resting appearance is the animation's end state - dropping the
      animation entirely would leave it stuck at `from` (invisible, offset, or
      translated off-screen). A near-zero duration lands on `to` immediately. */
-  .animate-wrld-queue-in,
-  .animate-wrld-panel-in,
-  .animate-wrld-panel-out,
-  .animate-wrld-view-in,
-  .animate-wrld-view-out,
-  .animate-wrld-icon-swap,
-  .wrld-q-row,
-  .animate-wordle-shake,
-  .animate-menu-pop,
-  .animate-disclosure-in,
-  .animate-fade-in,
-  .animate-slide-in-right,
-  .animate-slide-up,
-  .animate-scale-in,
-  .animate-sheet-in,
-  .animate-sheet-out,
-  .animate-scrim-in,
-  .animate-scrim-out,
-  .animate-lyric-line-in,
+
+:where(html[data-effects-motion="reduce"]) .animate-wrld-queue-in,:where(html[data-effects-motion="reduce"])
+  .animate-wrld-panel-in,:where(html[data-effects-motion="reduce"])
+  .animate-wrld-panel-out,:where(html[data-effects-motion="reduce"])
+  .animate-wrld-view-in,:where(html[data-effects-motion="reduce"])
+  .animate-wrld-view-out,:where(html[data-effects-motion="reduce"])
+  .animate-wrld-icon-swap,:where(html[data-effects-motion="reduce"])
+  .wrld-q-row,:where(html[data-effects-motion="reduce"])
+  .animate-wordle-shake,:where(html[data-effects-motion="reduce"])
+  .animate-menu-pop,:where(html[data-effects-motion="reduce"])
+  .animate-disclosure-in,:where(html[data-effects-motion="reduce"])
+  .animate-fade-in,:where(html[data-effects-motion="reduce"])
+  .animate-slide-in-right,:where(html[data-effects-motion="reduce"])
+  .animate-slide-up,:where(html[data-effects-motion="reduce"])
+  .animate-scale-in,:where(html[data-effects-motion="reduce"])
+  .animate-sheet-in,:where(html[data-effects-motion="reduce"])
+  .animate-sheet-out,:where(html[data-effects-motion="reduce"])
+  .animate-scrim-in,:where(html[data-effects-motion="reduce"])
+  .animate-scrim-out,:where(html[data-effects-motion="reduce"])
+  .animate-lyric-line-in,:where(html[data-effects-motion="reduce"])
   .view-enter { animation-duration: 0.01ms; animation-delay: 0ms; }
 
-  /* Decorative loops with nothing to land on - just stop them. eq-bar keeps a
+/* Decorative loops with nothing to land on - just stop them. eq-bar keeps a
      static mid-height so the "now playing" marker still reads as bars.
      The chat.* classes get the same treatment next to their own definitions
      in components/chat/chat.css, which loads after this file. */
-  .eq-bar { animation: none; transform: scaleY(0.7); }
-  /* Outranks the per-row delays above; a row's resting state is just shown. */
-  .rows-cascade > * { animation: none !important; }
-  .art-shimmer { animation: none; }
 
-  .pl-grid-panel,
-  .pl-grid-panel-inner,
-  .pl-grid-caret-track,
-  .nav-indicator,
-  .control-motion,
+:where(html[data-effects-motion="reduce"]) .eq-bar { animation: none; transform: scaleY(0.7); }
+
+/* Outranks the per-row delays above; a row's resting state is just shown. */
+
+:where(html[data-effects-motion="reduce"]) .rows-cascade > * { animation: none !important; }
+
+:where(html[data-effects-motion="reduce"]) .art-shimmer { animation: none; }
+
+:where(html[data-effects-motion="reduce"]) .pl-grid-panel,:where(html[data-effects-motion="reduce"])
+  .pl-grid-panel-inner,:where(html[data-effects-motion="reduce"])
+  .pl-grid-caret-track,:where(html[data-effects-motion="reduce"])
+  .nav-indicator,:where(html[data-effects-motion="reduce"])
+  .control-motion,:where(html[data-effects-motion="reduce"])
   .cover-fade { transition: none !important; }
-}
 
 /* Suspense fallback for a lazily-loaded view (components/ViewSkeleton).
    Starts invisible and only fades in after a beat: a chunk that's already
@@ -1311,13 +1662,13 @@ img[data-img-fade="in"] { animation: img-fade-in 0.42s cubic-bezier(0.33, 0, 0.1
   animation: view-skeleton-in 150ms ease 200ms forwards;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  /* Keep the delay - it's what suppresses the flash, not decoration - but
+/* Keep the delay - it's what suppresses the flash, not decoration - but
      drop the fade itself. Not folded into the block above, which zeroes
      animation-delay for animations where the delay IS decoration. */
-  .view-skeleton { animation-duration: 0.01ms; }
-  .view-skeleton .animate-pulse { animation: none; }
-}
+
+:where(html[data-effects-motion="reduce"]) .view-skeleton { animation-duration: 0.01ms; }
+
+:where(html[data-effects-motion="reduce"]) .view-skeleton .animate-pulse { animation: none; }
 
 /* ─── Clickable rows ─────────────────────────────────────────────────────────
    Rows, cards and list items that take a click but can't be a <button>,
@@ -1376,11 +1727,9 @@ img[data-img-fade="in"] { animation: img-fade-in 0.42s cubic-bezier(0.33, 0, 0.1
 }
 .animate-recog-in { animation: recog-in 0.45s cubic-bezier(0.33, 0, 0.15, 1) both; }
 .recog-level { transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1); }
-@media (prefers-reduced-motion: reduce) {
-  .recog-ripple { animation: none; opacity: 0; }
-  .animate-recog-in { animation-duration: 0.01ms; }
-  .recog-level { transition: none; }
-}
+:where(html[data-effects-motion="reduce"]) .recog-ripple { animation: none; opacity: 0; }
+:where(html[data-effects-motion="reduce"]) .animate-recog-in { animation-duration: 0.01ms; }
+:where(html[data-effects-motion="reduce"]) .recog-level { transition: none; }
 
 /* Now-playing bars on an album's tracklist row (AlbumsView). Transform only;
    they sit still while paused. */
@@ -1399,6 +1748,6 @@ img[data-img-fade="in"] { animation: img-fade-in 0.42s cubic-bezier(0.33, 0, 0.1
   from { transform: scaleY(0.3); }
   to   { transform: scaleY(1); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .album-eq-playing .album-eq-bar { animation: none; transform: scaleY(0.7); }
-}
+:where(html[data-effects-motion="reduce"]) .album-eq-playing .album-eq-bar { animation: none; transform: scaleY(0.7); }
+
+:where(html[data-effects-motion="reduce"]) img[data-img-fade="in"] { animation: none; }

@@ -232,7 +232,7 @@ token show prints it in full · token copy puts it on the clipboard`)
   {
     name: 'logout', aliases: ['kms'], group: 'App', usage: 'logout [-y]', description: 'Sign out of your account',
     run: async (args, ctx) => {
-      if (!confirmAction(ctx, 'Sign out of your account?', parseArgs(args).bool.has('y'))) return
+      if (!(await confirmAction(ctx, 'Sign out of your account?', parseArgs(args).bool.has('y')))) return
       await st().logoutAccount()
       ctx.print('signed out', 'ok')
     },
@@ -286,7 +286,7 @@ token show prints it in full · token copy puts it on the clipboard`)
         await (el.installUpdate ?? fail('install is not available in this build'))()
         return
       }
-      if (mode === 'force' && !confirmAction(ctx, 'Download the latest release and reinstall the app?', flags.includes('-y'))) return
+      if (mode === 'force' && !(await confirmAction(ctx, 'Download the latest release and reinstall the app?', flags.includes('-y')))) return
       // The updater reports through events; wait for one that ends the run.
       let lastPercent = -10
       await new Promise<void>((resolve) => {

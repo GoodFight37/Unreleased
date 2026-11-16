@@ -19,9 +19,9 @@ export interface StageSong { id: string; title: string; artist: string; lyrics: 
 /** Where the song is: `seconds` into it at `at` (epoch seconds), whether it runs on from there, and how fast. */
 export interface StageClock { seconds: number; at: number; running: boolean; rate?: number }
 
-/** The song's time now, by its clock. */
-export const clockTime = (clock: StageClock): number =>
-  clock.running ? clock.seconds + (epochNow() - clock.at) * (clock.rate ?? 1) : clock.seconds
+/** The song's time now (or at `now`), by its clock. */
+export const clockTime = (clock: StageClock, now = epochNow()): number =>
+  clock.running ? clock.seconds + (now - clock.at) * (clock.rate ?? 1) : clock.seconds
 export interface StageLook {
   clock: StageClock | null
   isSeen: boolean

@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import ErrorBoundary from './ErrorBoundary'
@@ -10,7 +11,7 @@ const ENTER_MS = 520
 const EXIT_MS = 340
 const ENTER_EASE = 'cubic-bezier(0.33, 0, 0.15, 1)'
 const EXIT_EASE = 'cubic-bezier(0.4, 0, 0.6, 1)'
-const reducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = (): boolean => effectsMotionMedia().matches
 
 // One side panel's place at the right of the main row. Only transform and
 // opacity ever move, so nothing reflows per frame:

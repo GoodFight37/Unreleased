@@ -76,8 +76,9 @@ test('caf desc chunk names alac and pcm apart', async () => {
   assert.equal(await codecFromSource(reader(pcm), pcm.length), 'other')
 })
 
-test('a live transcode can be read while it is still being written', async () => {
+test('a live transcode can be read while it is still being written', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'alac-tail-'))
+  t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }) } catch {} })
   const file = path.join(dir, 'out.flac')
   /** @type {(value?: void) => void} */
   let release = () => {}
@@ -85,20 +86,24 @@ test('a live transcode can be read while it is still being written', async () =>
   const body = await liveBody(file, job, null)
   assert.equal(body.status, 200)
   const chunks = []
+  /** @type {(value?: void) => void} */
+  let firstChunk = () => {}
+  const gotFirst = new Promise((resolve) => { firstChunk = resolve })
   const done = new Promise((resolve, reject) => {
-    body.stream.on('data', (chunk) => chunks.push(chunk))
+    body.stream.on('data', (chunk) => {
+      chunks.push(chunk)
+      firstChunk()
+    })
     body.stream.on('end', resolve)
     body.stream.on('error', reject)
   })
   body.stream.resume()
-  await new Promise((r) => setTimeout(r, 20))
   fs.writeFileSync(file, Buffer.from('hello'))
-  await new Promise((r) => setTimeout(r, 50))
+  await gotFirst
   fs.appendFileSync(file, Buffer.from(' world'))
   release()
   await done
   assert.equal(Buffer.concat(chunks).toString(), 'hello world')
-  fs.rmSync(dir, { recursive: true, force: true })
 })
 
 /** @type {string | null} */

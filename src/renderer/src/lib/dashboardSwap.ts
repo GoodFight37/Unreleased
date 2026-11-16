@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from './effectsPreference'
 import type { ViewType } from '../types'
 
 // Moving between Home and a staff dashboard (both built from Tile widgets)
@@ -23,8 +24,8 @@ const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 /** The new widgets start this long after the old ones begin to leave. */
 const ENTER_AFTER = 40
 const ENTER_MS = 320
-/** When a whole page swiping in (one widget, no stagger) has landed. */
-export const PAGE_SWAP_IN_MS = ENTER_AFTER + ENTER_MS
+/** When a whole page (a plain fade, no slide) has landed. */
+export const PAGE_SWAP_IN_MS = 180
 
 /** Which way a move between two swipe pages goes: 1 when `to`'s tab comes
  *  after `from`'s in the nav (`order`, the user's tab order), -1 when before.
@@ -48,7 +49,7 @@ export function isWholePageSwap(from: ViewType | null, to: ViewType): boolean {
 }
 
 export function reducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return effectsMotionMedia().matches
 }
 
 /** A page's [data-swap] widgets. A widget inside another moves with it. */
@@ -79,6 +80,12 @@ const enterDelay = (i: number): number => ENTER_AFTER + Math.min(i * 25, 150)
  *  in order again two frames later, once that has settled; every delay is
  *  still ahead then. */
 export function swapIn(root: HTMLElement, dir: 1 | -1, wholePage = false): void {
+  // A whole page (Home -> Tracker, Files, Playlists) only fades in, in place:
+  // no sideways slide, no copy of the old page (App.tsx skips captureLeaving).
+  if (wholePage) {
+    root.animate([{ opacity: 0 }, { opacity: 1 }], { duration: PAGE_SWAP_IN_MS, easing: 'cubic-bezier(0.33, 0, 0.15, 1)' })
+    return
+  }
   const runs = new Map<HTMLElement, Animation>()
   readingOrder(wholePage ? [root] : widgets(root)).forEach((el, i) => {
     runs.set(el, el.animate(

@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
@@ -42,6 +43,7 @@ import LyricStageView from './LyricStageView'
 import { playingSeconds } from '../desktop/playClock'
 import WordLyricLine from './WordLyricLine'
 import LyricsControls from './LyricsControls'
+import { useGlassCompositorReady, useGlassSurface } from '../lib/glass/compositor'
 import { useVizStore } from '../store/vizStore'
 import { setTermFullscreen } from '../lib/terminal/fullscreenStore'
 import {
@@ -56,9 +58,9 @@ const ShareLyricsModal = lazyOverlay(() => import('./ShareLyricsModal'))
 // What the desktop side panel is showing. The exit times are kept in sync with
 // the wrld-panel-out and wrld-view-out durations in index.css.
 type PanelView = 'queue' | 'lyrics' | 'radio'
-const PANEL_EXIT_MS = 360
+const PANEL_EXIT_MS = 280
 const VIEW_EXIT_MS = 220
-const SPLIT_GLIDE_MS = 650
+const SPLIT_GLIDE_MS = 280
 
 // One view in the desktop side panel (lyrics, queue, FM radio). Its entrance
 // plays only when it replaces another view in an already-open panel - when the
@@ -372,6 +374,10 @@ export default function WrldView(): JSX.Element {
   // empty gap even though the controls fit fine. Same reason the output-device
   // picker below is portaled.
   const songVersionBtnRef = useRef<HTMLButtonElement>(null)
+  const wrldPlayRef = useRef<HTMLButtonElement>(null)
+  const glassGpuReady = useGlassCompositorReady() && !fullscreen
+  useGlassSurface(songVersionBtnRef, { kind: 'pill', layer: 1, radius: 18 }, !radioFmActive && !fullscreen && songVersions.length > 0)
+  useGlassSurface(wrldPlayRef, { kind: 'pill', layer: 1, radius: 28 }, !radioFmActive && !fullscreen)
   const songVersionMenuRef = useRef<HTMLDivElement>(null)
   const [songVersionMenuPos, setSongVersionMenuPos] = useState({ top: 0, right: 0 })
 
@@ -460,7 +466,7 @@ export default function WrldView(): JSX.Element {
     splitWasOpen.current = showLyricsColumn
     const col = splitColRef.current
     const width = col?.parentElement?.clientWidth ?? 0
-    if (!col || !width || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!col || !width || effectsMotionMedia().matches) return
     // The column is max(50%, 320px) wide with the panel open, the full width
     // without, and centres its content - so the content moves by half the
     // difference.
@@ -481,9 +487,9 @@ export default function WrldView(): JSX.Element {
   // of the fixed black/white pair the art treatment picks between. The two
   // faintest steps stay alpha-based - there's no theme var that dim, and
   // fading the primary color keeps them right on any skin.
-  const txtPri   = useThemeBackground ? 'var(--text-primary)'   : textIsDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,1)'
-  const txtSec   = useThemeBackground ? 'var(--text-secondary)' : textIsDark ? 'rgba(0,0,0,0.5)'  : 'rgba(255,255,255,0.5)'
-  const txtTer   = useThemeBackground ? 'var(--text-muted)'     : textIsDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.3)'
+  const txtPri   = useThemeBackground ? 'var(--text-primary)'   : textIsDark ? 'rgba(0,0,0,0.88)' : 'rgba(255,255,255,1)'
+  const txtSec   = useThemeBackground ? 'var(--text-secondary)' : textIsDark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.82)'
+  const txtTer   = useThemeBackground ? 'var(--text-muted)'     : textIsDark ? 'rgba(0,0,0,0.66)' : 'rgba(255,255,255,0.72)'
   const txtFaint = textIsDark ? 'rgba(0,0,0,0.22)'  : 'rgba(255,255,255,0.2)'
   // Unplayed part of the progress/volume troughs. It used to be a hardcoded
   // white wash, which is invisible on a light surface - now it follows the
@@ -525,7 +531,7 @@ export default function WrldView(): JSX.Element {
     <div
       className={mobile
         ? 'w-14 h-14 rounded-xl overflow-hidden shrink-0 shadow-lg'
-        : 'rounded-3xl overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.8)] w-full'}
+        : 'rounded-3xl overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.35)] w-full'}
       style={mobile ? {} : { aspectRatio: '1' }}
       data-viz={mobile ? undefined : 'cover'}
       // Right-click → "Change cover", same as mobile's long-press. Only on
@@ -690,7 +696,7 @@ export default function WrldView(): JSX.Element {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   const inner = (
-    <div ref={pageRef} className="relative flex flex-col md:flex-row flex-1 h-full w-full overflow-hidden">
+    <div ref={pageRef} className="relative flex flex-col md:flex-row flex-1 h-full w-full overflow-hidden [--wrld-player-width:min(440px,46vh)]">
 
       {/* Lets the OS window be dragged from the top of the fullscreen overlay,
           since it now covers the normal draggable title-bar strip underneath. */}
@@ -715,7 +721,7 @@ export default function WrldView(): JSX.Element {
               needs something solid behind it here, because unlike mobile this
               page renders over a still-mounted bgView (App.tsx), so the page
               you came from bled through those corners. */}
-          <div className="absolute inset-0 overflow-hidden bg-black">
+          <div className="absolute inset-0 overflow-hidden bg-black" style={{ contain: 'strict' }}>
             {useThemeBackground ? (
               <div
                 className="absolute inset-0 bg-surface"
@@ -728,15 +734,15 @@ export default function WrldView(): JSX.Element {
               // Blurred to 60px, so resolution is meaningless here - always the
               // degraded copy, which also gets the backdrop up on the first frame.
               <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]}
-                className="absolute inset-0 w-full h-full object-cover"
-                style={{ filter: `blur(60px) brightness(${isDarkSkin ? 0.22 : 0.45}) saturate(${isDarkSkin ? 2.4 : 1.8})`, transform: 'scale(1.2)' }}
+                className="wrld-drift absolute inset-0 w-full h-full object-cover"
+                style={{ filter: `blur(60px) brightness(${isDarkSkin ? 0.22 : 0.34}) saturate(${isDarkSkin ? 2.4 : 1.8})`, willChange: 'transform' }}
                 onError={() => setArtError(true)}
               />
             ) : (
               <div className={`absolute inset-0 ${radioFmActive ? 'bg-gradient-to-br from-red-950/60 to-black dark:from-red-950/60 dark:to-black' : 'bg-gradient-to-br from-gray-200 to-gray-100 dark:from-gray-900 dark:to-black'}`} />
             )}
             {!useThemeBackground && (
-              <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/20 dark:from-black/40 dark:via-transparent dark:to-black/70" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/15 to-black/45 dark:from-black/40 dark:via-transparent dark:to-black/70" />
             )}
           </div>
 
@@ -759,13 +765,23 @@ export default function WrldView(): JSX.Element {
           {wrldWidgets && <WrldWidgets />}
           {wrldWidgets && <WrldFmWidget />}
 
+          {wrldWidgets && <div className="absolute left-8 top-10 z-20 hidden md:flex items-center gap-3 select-none pointer-events-none" style={{ color: txtTer }} data-viz-fade>
+            <span className="text-lg font-black tracking-[-0.08em]">999</span>
+            <span className="text-[10px] font-semibold tracking-[0.24em]">JUICE WRLD</span>
+          </div>}
+
           {/* Mobile layout */}
-          <div className="md:hidden relative z-10 flex flex-col h-full min-h-0" style={hideForViz}>
+          <div className="md:hidden relative z-20 flex flex-col h-full min-h-0" style={hideForViz}>
 
             <div className={showLyricsColumn ? 'contents' : 'flex-1 flex flex-col justify-center'}>
+              {!showLyricsColumn && (
+                <div className="w-full max-w-[min(380px,42vh)] mx-auto px-4 pt-14 pb-4">
+                  {ArtBox({ mobile: false })}
+                </div>
+              )}
               {/* Header: art + title */}
-              <div className="flex items-center gap-3 px-4 pt-12 pb-3 shrink-0">
-                {ArtBox({ mobile: true })}
+              <div className={`flex items-center gap-3 px-4 pb-3 shrink-0 ${showLyricsColumn ? 'pt-12' : 'w-full max-w-md mx-auto'}`}>
+                {showLyricsColumn && ArtBox({ mobile: true })}
                 <div className="flex-1 min-w-0">
                   {displayTitle  && <p className="font-bold text-sm leading-tight truncate" style={{ color: txtPri }} title={displayTitle}>{displayTitle}</p>}
                   {displayArtist && <p className="text-xs mt-0.5 truncate" style={{ color: txtSec }}>{displayArtist}</p>}
@@ -965,7 +981,7 @@ export default function WrldView(): JSX.Element {
           </div>
 
           {/* Desktop layout */}
-          <div className="hidden md:flex relative z-10 flex-1 h-full overflow-hidden" style={hideForViz}>
+          <div className="hidden md:flex relative z-20 flex-1 h-full overflow-hidden" style={hideForViz}>
 
             {/* Left column - Apple Music style. A true 50/50 split with the
                 lyrics column, not a narrow fixed-width sidebar next to a huge
@@ -982,8 +998,13 @@ export default function WrldView(): JSX.Element {
             <div ref={splitColRef} className="relative z-[1] flex flex-col items-center justify-center shrink-0 px-8 xl:px-12 gap-5 overflow-y-auto overflow-x-hidden"
               style={{ width: showLyricsColumn ? '50%' : '100%', minWidth: 320 }}>
 
+              <div className="w-full max-w-[var(--wrld-player-width)] flex items-center gap-3 select-none" style={{ color: txtTer }}>
+                <span className="text-lg font-black tracking-[-0.08em]">999</span>
+                <span className="text-[10px] font-semibold tracking-[0.24em]">JUICE WRLD</span>
+              </div>
+
               {/* Album art */}
-              <div className="relative w-full" style={{ maxWidth: 320 }}>
+              <div className="relative w-full max-w-[var(--wrld-player-width)]">
                 {ArtBox({ mobile: false })}
                 {!radioFmActive && songVersions.length > 0 && (
                   <div className="absolute right-full top-1/2 -translate-y-1/2 z-20">
@@ -1006,10 +1027,10 @@ export default function WrldView(): JSX.Element {
               </div>
 
               {/* Title + artist */}
-              <div className="w-full px-1" style={{ maxWidth: 320 }} data-viz="meta">
+              <div className="w-full max-w-[var(--wrld-player-width)] px-1" data-viz="meta">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    {displayTitle  && <p className="font-bold text-xl leading-tight truncate" style={{ color: txtPri }} title={displayTitle}>{displayTitle}</p>}
+                    {displayTitle  && <p className="font-semibold text-xl xl:text-2xl leading-tight truncate" style={{ color: txtPri }} title={displayTitle}>{displayTitle}</p>}
                     {displayArtist && <p className="text-sm mt-0.5 truncate" style={{ color: txtSec }}>{displayArtist}</p>}
                     {radioFmActive && !radioFmNowPlaying && <p className="text-sm mt-0.5" style={{ color: txtTer }}>Tuning in…</p>}
                   </div>
@@ -1041,14 +1062,14 @@ export default function WrldView(): JSX.Element {
               </div>
 
               {/* Progress bar - FM gets a read-only version (no scrubbing on live radio) */}
-              <div className="w-full" style={{ maxWidth: 320 }} data-viz="meta">
+              <div className="w-full max-w-[var(--wrld-player-width)]" data-viz="meta">
                 {radioFmActive
                   ? <FmProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />
                   : <ProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />}
               </div>
 
               {/* Playback controls */}
-              <div className="w-full flex flex-col gap-4" style={{ maxWidth: 320 }} data-viz="meta">
+              <div className="w-full max-w-[var(--wrld-player-width)] flex flex-col gap-4" data-viz="meta">
                 {/* Main controls row - hidden during 999FM; it's a live stream,
                     nothing here to locally play/pause/seek. Voting to skip
                     lives in the FM panel itself instead of a repurposed button. */}
@@ -1078,10 +1099,13 @@ export default function WrldView(): JSX.Element {
 
                   {/* Play / Pause */}
                   <button
+                    ref={wrldPlayRef}
                     onClick={() => setIsPlaying(!isPlaying)}
                     disabled={noTrack}
-                    className="w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-opacity hover:opacity-80 active:scale-95"
-                    style={{ background: txtPri, color: textIsDark ? 'white' : 'black' }}
+                    className={`w-14 h-14 rounded-full flex items-center justify-center transition-opacity hover:opacity-80 active:scale-95 ${glassGpuReady ? 'glass-gpu' : 'shadow-xl'}`}
+                    style={glassGpuReady
+                      ? { background: 'transparent', color: !isDarkSkin ? '#10121a' : '#ffffff' }
+                      : { background: txtPri, color: textIsDark ? 'white' : 'black' }}
                   >
                     <SwapIcon swapKey={isPlaying}>
                       {isPlaying
@@ -2000,9 +2024,14 @@ const FmProgressBar = memo(function FmProgressBar({ txtPri, txtTer, trackBg }: {
 })
 
 const ProgressBar = memo(function ProgressBar({ txtPri, txtTer, trackBg }: { txtPri: string; txtTer: string; trackBg: string }) {
-  const { progress, currentTime } = useStore(useShallow(s => ({ progress: s.progress, currentTime: s.currentTime })))
+  const { progress, currentTime, isPlaying } = useStore(useShallow(s => ({ progress: s.progress, currentTime: s.currentTime, isPlaying: s.isPlaying })))
   const loading = usePlayerLoading(s => s.on)
   const barRef = useRef<HTMLDivElement>(null)
+  const fillRef = useRef<HTMLDivElement>(null)
+  const thumbRef = useRef<HTMLDivElement>(null)
+  const elapsedRef = useRef<HTMLSpanElement>(null)
+  const remainRef = useRef<HTMLButtonElement>(null)
+  const barWidthRef = useRef(0)
   // Buffer the scrub position visually while dragging - only call seekAudio
   // on release, since seeking on every mousemove makes playback glitch/stutter.
   const [dragPct, setDragPct] = useState<number | null>(null)
@@ -2024,10 +2053,55 @@ const ProgressBar = memo(function ProgressBar({ txtPri, txtTer, trackBg }: { txt
     return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
   }, [])
 
+  useEffect(() => {
+    const bar = barRef.current
+    if (!bar) return
+    barWidthRef.current = bar.clientWidth
+    const ro = new ResizeObserver(() => {
+      if (barRef.current) barWidthRef.current = barRef.current.clientWidth
+    })
+    ro.observe(bar)
+    return () => ro.disconnect()
+  }, [])
+
+  // Smooth 120+ fps scrubber updates via compositor-only transforms without React re-renders.
+  useEffect(() => {
+    if (!isPlaying || dragPct !== null || effectsMotionMedia().matches) return
+    let raf = 0
+    let lastSec = -1
+    const tick = (): void => {
+      if (document.hidden) { raf = 0; return }
+      const dur = getAudioDuration()
+      if (dur > 0) {
+        const sec = Math.max(0, Math.min(dur, playingSeconds()))
+        const ratio = Math.max(0, Math.min(1, sec / dur))
+        if (fillRef.current) fillRef.current.style.transform = `scaleX(${ratio})`
+        if (thumbRef.current) thumbRef.current.style.transform = `translate3d(${ratio * barWidthRef.current}px, -50%, 0) translate(-50%, 0)`
+        const wholeSec = Math.floor(sec)
+        if (wholeSec !== lastSec) {
+          lastSec = wholeSec
+          if (elapsedRef.current) elapsedRef.current.textContent = formatDuration(sec)
+          if (remainRef.current && showLeft) remainRef.current.textContent = `-${formatDuration(Math.max(0, dur - sec))}`
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    const onVis = (): void => {
+      if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
+      else if (!raf) raf = requestAnimationFrame(tick)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    if (!document.hidden) raf = requestAnimationFrame(tick)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      cancelAnimationFrame(raf)
+    }
+  }, [isPlaying, dragPct, showLeft])
+
   const duration    = getAudioDuration()
   const displayTime = dragPct !== null && duration > 0 ? dragPct * duration : currentTime
   const remaining   = duration > 0 ? duration - displayTime : 0
-  const pct         = Math.min(100, (dragPct !== null ? dragPct : (progress || 0)) * 100)
+  const ratio       = Math.max(0, Math.min(1, dragPct !== null ? dragPct : (progress || 0)))
 
   return (
     <div className="w-full flex flex-col gap-1.5 select-none">
@@ -2082,20 +2156,30 @@ const ProgressBar = memo(function ProgressBar({ txtPri, txtTer, trackBg }: { txt
           document.addEventListener('touchcancel', onCancel)
         }}
       >
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: txtPri }} />
+        <div
+          ref={fillRef}
+          className="h-full w-full rounded-full origin-left"
+          style={{ transform: `scaleX(${ratio})`, background: txtPri, willChange: 'transform' }}
+        />
         {/* Same sweep as the player bars, in this screen's text color. */}
         <span
           className={`player-loading rounded-full ${loading ? 'on' : ''}`}
           style={{ '--sweep': `color-mix(in srgb, ${txtPri} 70%, transparent)` } as React.CSSProperties}
         />
         <div
-          className="absolute top-1/2 w-3 h-3 rounded-full shadow-lg opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none"
-          style={{ left: `${pct}%`, transform: 'translate(-50%, -50%)', background: txtPri }}
+          ref={thumbRef}
+          className="absolute top-1/2 left-0 w-3 h-3 rounded-full shadow-lg opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none"
+          style={{
+            transform: `translate3d(${ratio * (barWidthRef.current || 0)}px, -50%, 0) translate(-50%, 0)`,
+            background: txtPri,
+            willChange: 'transform',
+          }}
         />
       </div>
       <div className="flex justify-between">
-        <span className="text-[10px] tabular-nums" style={{ color: txtTer }}>{formatDuration(displayTime)}</span>
+        <span ref={elapsedRef} className="text-[10px] tabular-nums" style={{ color: txtTer }}>{formatDuration(displayTime)}</span>
         <button
+          ref={remainRef}
           type="button"
           onClick={toggleTimeEnd}
           title={showLeft ? 'Show song length' : 'Show time left'}
@@ -2137,6 +2221,8 @@ const LyricsPanel = memo(function LyricsPanel({
   const lyricsOffset = useStore(s => s.lyricsOffset)
   const { lyricsScale, lyricsAlign, lyricsBlur, lyricsBlurAmount, lyricsColorActive, lyricsColorInactive } =
     useStorePick('lyricsScale', 'lyricsAlign', 'lyricsBlur', 'lyricsBlurAmount', 'lyricsColorActive', 'lyricsColorInactive')
+  const theme = useStore(s => s.theme)
+  const isLightLyrics = txtSec.startsWith('rgba(0,0,0') || !getSkin(theme).dark
   // null = auto, i.e. the art-derived text colors this tab already picks.
   const activeColor   = lyricsColorActive ?? txtPri
   const inactiveColor = lyricsColorInactive ?? txtSec
@@ -2173,6 +2259,7 @@ const LyricsPanel = memo(function LyricsPanel({
     if (!inSight) return
     let raf = 0
     const tick = (): void => {
+      if (document.hidden) { raf = 0; return }
       const idx = getCurrentLineIndex(syncedLines, playingSeconds() - lyricsOffset)
       if (idx !== lineIdxRef.current) {
         lineIdxRef.current = idx
@@ -2180,8 +2267,16 @@ const LyricsPanel = memo(function LyricsPanel({
       }
       raf = requestAnimationFrame(tick)
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    const onVis = (): void => {
+      if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
+      else if (!raf) raf = requestAnimationFrame(tick)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    if (!document.hidden) raf = requestAnimationFrame(tick)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      cancelAnimationFrame(raf)
+    }
   }, [isSynced, syncedLines, lyricsOffset, inSight])
 
   // Center the active line by translating the whole lyric column rather than
@@ -2341,7 +2436,7 @@ const LyricsPanel = memo(function LyricsPanel({
           ref={linesRef}
           className={`relative flex flex-col ${padded ? 'gap-5 px-10' : 'gap-4 px-5 md:px-8'}`}
           style={{
-            transform: `translateY(${-displayTranslateY}px)`,
+            transform: `translate3d(0, ${-displayTranslateY}px, 0)`,
             transition: autoFollow && placed ? 'transform 0.6s cubic-bezier(0.22,1,0.36,1)' : 'none',
             willChange: 'transform',
             WebkitMaskImage: edgeMask,
@@ -2398,13 +2493,14 @@ const LyricsPanel = memo(function LyricsPanel({
                   fontWeight: isActive ? 800 : 500,
                   lineHeight: 1.25,
                   color:      isActive ? activeColor : inactiveColor,
-                  opacity:    isActive ? 1 : dist === 1 ? 0.55 : dist === 2 ? 0.35 : 0.2,
+                  opacity:    isActive ? 1 : dist === 1 ? (isLightLyrics ? 0.75 : 0.55) : dist === 2 ? (isLightLyrics ? 0.65 : 0.35) : (isLightLyrics ? 0.62 : 0.2),
                   // Every line except the one playing - played and upcoming
                   // alike - so the active line is the only sharp thing on
                   // screen.
                   filter:     (!isActive && lyricsBlur) ? `blur(${(0.6 * lyricsBlurAmount).toFixed(2)}px)` : 'none',
                   transform:  `scale(${scale})`,
-                  transition: 'opacity 0.4s cubic-bezier(0.4,0,0.2,1), color 0.4s cubic-bezier(0.4,0,0.2,1), transform 0.4s cubic-bezier(0.4,0,0.2,1), filter 0.4s cubic-bezier(0.4,0,0.2,1)',
+                  willChange: 'transform, opacity',
+                  transition: 'opacity 0.4s cubic-bezier(0.4,0,0.2,1), color 0.4s cubic-bezier(0.4,0,0.2,1), transform 0.4s cubic-bezier(0.4,0,0.2,1)',
                   textShadow: isActive ? '0 0 30px rgba(255,255,255,0.12)' : 'none',
                 }}
               >

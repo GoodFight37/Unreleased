@@ -107,13 +107,13 @@ ${got.count} match · page ${page} of ${Math.ceil(got.count / MY_PROPOSALS_PAGE_
       ctx.print(`proposal #${p.id} updated (${p.status}, edited ${p.edit_count}×)`, 'ok')
     } else if (sub === 'withdraw') {
       const id = idArg(rest[0], 'proposal withdraw <id>')
-      if (!confirmAction(ctx, `Withdraw proposal #${id}?`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Withdraw proposal #${id}?`, bool.has('y')))) return
       await withdrawProposal(id)
       ctx.print(`proposal #${id} withdrawn`, 'ok')
     } else if (sub === 'resubmit') {
       const id = idArg(rest[0], 'proposal resubmit <id>')
       const mine = (await getMyProposals(channel)).find((p) => p.id === id) ?? fail(`#${id} isn’t one of your proposals`)
-      if (!confirmAction(ctx, `Withdraw #${id} and send it again as a new proposal?`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Withdraw #${id} and send it again as a new proposal?`, bool.has('y')))) return
       const made = await resubmitProposal(mine)
       ctx.print(`#${id} resubmitted as #${made.id}`, 'ok')
     } else fail('usage: proposal [ls | show | new | edit | withdraw | resubmit] …')
@@ -200,7 +200,7 @@ const compCommand: TermCommand = {
       const paths = await compAudioAt(path, channel, bool.has('recursive'))
       if (paths.length === 0) fail(`no audio files at ${path}`)
       const cover = bool.has('cover') ? await readAsDataUrl(await pickLocalFile('image/png,image/jpeg')) : undefined
-      if (!confirmAction(ctx, `Propose tag changes on ${paths.length} file${paths.length === 1 ? '' : 's'}?`, bool.has('y') || paths.length === 1)) return
+      if (!(await confirmAction(ctx, `Propose tag changes on ${paths.length} file${paths.length === 1 ? '' : 's'}?`, bool.has('y') || paths.length === 1))) return
       const res = await proposeTagEdits(paths.map((p) => ({ path: p, tags, cover })), channel ?? '', value.get('note') ?? '')
       ctx.print(`${res.count} retag proposal${res.count === 1 ? '' : 's'} sent as batch ${res.batch_id.slice(0, 8)} (${res.auto_approved} applied, ${res.pending} pending)`, 'ok')
       if (res.auto_approve_error) ctx.print(`stopped at #${res.auto_approve_error.id}: ${res.auto_approve_error.detail}`, 'error')
@@ -267,7 +267,7 @@ const compCommand: TermCommand = {
       ctx.print(`comp proposal #${p.id} updated (${p.status}, edited ${p.edit_count}×)`, 'ok')
     } else if (sub === 'withdraw') {
       const id = idArg(rest[0], 'comp withdraw <id>')
-      if (!confirmAction(ctx, `Withdraw comp proposal #${id}?`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Withdraw comp proposal #${id}?`, bool.has('y')))) return
       await withdrawCompProposal(id)
       ctx.print(`comp proposal #${id} withdrawn`, 'ok')
     } else if (sub === 'staging') {
@@ -315,7 +315,7 @@ const compReplaceCommand: TermCommand = {
     if (plan.removed.length > 20) ctx.print(`  …and ${plan.removed.length - 20} more removed`, 'dim')
     for (const s of plan.skipped.slice(0, 10)) ctx.print(`skipped ${s.path}: ${s.reason}`, 'dim')
     if (bool.has('dry-run')) return
-    if (!confirmAction(ctx, `Replace the whole comp? ${plan.upload.length} files to upload, ${plan.removed.length} removed.`, bool.has('y'))) return
+    if (!(await confirmAction(ctx, `Replace the whole comp? ${plan.upload.length} files to upload, ${plan.removed.length} removed.`, bool.has('y')))) return
     const run = runCompReplace(plan, {
       channel,
       notes: value.get('note'),

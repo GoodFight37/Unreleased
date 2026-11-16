@@ -47,7 +47,7 @@ export const INTEGRATION_COMMANDS: TermCommand[] = [
       } else if (sub === 'unlink' || sub === 'rm') {
         const n = await nodeFrom(rest.join(' '))
         const text = sub === 'unlink' ? `Unlink ${n.name} from your account? It keeps running, unowned.` : `Delete ${n.name}? Its file list and history go with it.`
-        if (!confirmAction(ctx, text, bool.has('y'))) return
+        if (!(await confirmAction(ctx, text, bool.has('y')))) return
         if (sub === 'unlink') await unlinkMyNode(n.node_id)
         else await deleteMyNode(n.node_id)
         ctx.print(`${sub === 'unlink' ? 'unlinked' : 'deleted'} ${n.name}`, 'ok')

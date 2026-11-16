@@ -360,7 +360,7 @@ export default function AlbumsView(): JSX.Element {
                     onClick={(e) => { if (longPress.consumeFired()) return; activate(e) }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(e) } }}
                     onContextMenu={(e) => { e.preventDefault(); openMenu(e.clientX, e.clientY) }}
-                    className={`group flex items-center gap-3 h-11 px-2 md:px-3 md:rounded-md select-none ${isSelected ? 'bg-accent/10 md:bg-accent/10' : i % 2 === 0 ? 'md:bg-surface-raised' : ''} ${r.song ? `cursor-default ${isSelected ? '' : 'hover:bg-surface-overlay md:hover:bg-surface-overlay'}` : 'opacity-45'} transition-colors`}
+                    className={`group flex items-center gap-3 h-11 px-2 md:px-3 md:rounded-md select-none ${isSelected ? 'bg-accent/10 md:bg-accent/10' : i % 2 === 0 ? 'md:bg-[var(--fill)]' : ''} ${r.song ? `cursor-default ${isSelected ? '' : 'hover:bg-surface-overlay md:hover:bg-surface-overlay'}` : 'opacity-45'} transition-colors`}
                   >
                     <span className="w-6 shrink-0 flex items-center justify-center text-[13px] tabular-nums">
                       {selectMode && r.song ? (

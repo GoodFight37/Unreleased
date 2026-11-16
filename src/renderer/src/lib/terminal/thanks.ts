@@ -87,7 +87,7 @@ export const THANKS_COMMANDS: TermCommand[] = [
         return
       }
       if (sub === 'reset') {
-        if (!confirmAction(ctx, 'Remove the saved Thank you page? Players go back to the built-in page.', bool.has('y'))) return
+        if (!(await confirmAction(ctx, 'Remove the saved Thank you page? Players go back to the built-in page.', bool.has('y')))) return
         await resetThanksPage()
         ctx.print('reset: players show the built-in Thank you page', 'ok')
         return
@@ -133,7 +133,7 @@ export const THANKS_COMMANDS: TermCommand[] = [
         } else if (op === 'rm') {
           const i = findSection(page.sections, rest[0])
           const [gone] = page.sections.splice(i, 1)
-          if (gone.names.length && !confirmAction(ctx, `Remove "${gone.title || `section ${i + 1}`}" and its ${gone.names.length} names?`, bool.has('y'))) return
+          if (gone.names.length && !(await confirmAction(ctx, `Remove "${gone.title || `section ${i + 1}`}" and its ${gone.names.length} names?`, bool.has('y')))) return
           done = `removed ${gone.title || `section ${i + 1}`}`
         } else if (op === 'rename') {
           const i = findSection(page.sections, rest[0])

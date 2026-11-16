@@ -27,6 +27,7 @@ import { autoApproveApplies } from '../../hooks/useAdminUsersList'
 
 const EMOJI_NAMES = Object.keys(EMOJI_IMG).sort()
 import { ChatAvatar, errorText, formatBytes, useChatToast } from './ui'
+import { confirmGlass } from '../../lib/confirmModal'
 
 export interface ComposerHandle {
   addFiles: (files: File[]) => void
@@ -552,7 +553,12 @@ const Composer = forwardRef<ComposerHandle, {
       .reverse()
     const whose = target ? `${target.label}'s` : 'the latest'
     if (victims.length === 0) { toast(target ? `No loaded messages from ${target.label} in this room` : 'No messages to delete here'); return }
-    if (!window.confirm(`Delete ${victims.length} of ${whose} message${victims.length === 1 ? '' : 's'} in this room? This can't be undone.`)) return
+    if (!(await confirmGlass({
+      title: 'Purge messages',
+      message: `Delete ${victims.length} of ${whose} message${victims.length === 1 ? '' : 's'} in this room? This can't be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    }))) return
 
     let removed = 0
     for (const m of victims) {
@@ -831,7 +837,12 @@ const Composer = forwardRef<ComposerHandle, {
     if (!parsed.message) throw new Error('Usage: /broadcast [-l level] <message>  (or /broadcast -h for history)')
     if (parsed.message.length > BROADCAST_MAX_MESSAGE) throw new Error(`Broadcasts are limited to ${BROADCAST_MAX_MESSAGE} characters`)
     const level = parsed.level ?? 'info'
-    if (!window.confirm(`Send this ${level} broadcast to everyone connected? It can't be recalled.\n\n${parsed.message}`)) return
+    if (!(await confirmGlass({
+      title: 'Send broadcast',
+      message: `Send this ${level} broadcast to everyone connected? It can't be recalled.\n\n${parsed.message}`,
+      confirmLabel: 'Send broadcast',
+      destructive: true,
+    }))) return
     await sendBroadcast({ message: parsed.message, level })
     report('Broadcast', `Broadcast sent to everyone connected (${level}): ${parsed.message}`, parsed.share)
   }

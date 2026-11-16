@@ -60,7 +60,7 @@ async function codes(rest: string[], bool: Set<string>, value: Map<string, strin
     default: {
       const c = pickCode(await fetchBetaCodes(), words.join(' '))
       if (action === 'delete') {
-        if (!confirmAction(ctx, `Delete code ${c.code}? Anyone using it loses beta access.`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Delete code ${c.code}? Anyone using it loses beta access.`, bool.has('y')))) return
         await deleteBetaCode(c.id)
         print(`deleted ${c.code}`, 'ok'); return
       }
@@ -87,7 +87,7 @@ async function builds(rest: string[], bool: Set<string>, value: Map<string, stri
     }
     case 'delete': {
       const v = pickVersion(await fetchBetaVersions(), words.join(' '))
-      if (!confirmAction(ctx, `Delete beta ${v.version}? The build file stays on the server.`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Delete beta ${v.version}? The build file stays on the server.`, bool.has('y')))) return
       await deleteBetaVersion(v.id)
       print(`deleted ${v.version}`, 'ok'); return
     }

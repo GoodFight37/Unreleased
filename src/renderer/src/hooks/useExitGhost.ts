@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { RefObject, useLayoutEffect, useRef } from 'react'
 
 // The close for menus and popovers: fade in place without scaling their text
@@ -28,7 +29,7 @@ export function useExitGhost(
     const el = ref.current
     const play = exitRef.current
     const parent = el?.parentNode
-    if (!el || !play || !parent || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!el || !play || !parent || effectsMotionMedia().matches) return
     if (!el.getClientRects().length || getComputedStyle(el).visibility === 'hidden') return
 
     // Copied now, while the original is still laid out - a detached node

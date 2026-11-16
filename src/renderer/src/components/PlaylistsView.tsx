@@ -138,7 +138,7 @@ function FolderSlotImg({ src }: { src: string | null }): JSX.Element {
 // to fade to nothing.
 function HeroBackdrop({ src, isDarkSkin }: { src?: string | null; isDarkSkin: boolean }): JSX.Element {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none [mask-image:linear-gradient(to_bottom,#000_45%,transparent)]" style={{ zIndex: 0 }}>
+    <div className="absolute inset-0 overflow-hidden pointer-events-none [mask-image:linear-gradient(to_bottom,#000_65%,transparent)]" style={{ zIndex: 0 }}>
       {src && (
         <img
           // Blurred past recognition, so the degraded copy is indistinguishable

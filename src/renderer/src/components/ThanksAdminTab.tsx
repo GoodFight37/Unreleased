@@ -6,6 +6,7 @@ import {
 } from '../lib/thanksApi'
 import { errorMessage } from '../lib/format'
 import { showAppToast } from '../lib/appToast'
+import { confirmGlass } from '../lib/confirmModal'
 import { relativeTime } from './adminShared'
 import ThemedSelect from './ThemedSelect'
 
@@ -80,7 +81,12 @@ export default function ThanksAdminTab(): JSX.Element {
   }
 
   const reset = async (): Promise<void> => {
-    if (!window.confirm('Remove the saved page? Players go back to the built-in Thank you page.')) return
+    if (!(await confirmGlass({
+      title: 'Reset Thank you page',
+      message: 'Remove the saved page? Players go back to the built-in Thank you page.',
+      confirmLabel: 'Reset page',
+      destructive: true,
+    }))) return
     setBusy('reset')
     try {
       load(await resetThanksPage())

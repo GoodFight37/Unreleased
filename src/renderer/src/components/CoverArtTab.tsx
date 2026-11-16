@@ -8,6 +8,7 @@ import {
 } from '../lib/coverArtApi'
 import { errorMessage, formatBytes } from '../lib/format'
 import { showAppToast } from '../lib/appToast'
+import { confirmGlass } from '../lib/confirmModal'
 import { Empty, QueueSearch, StatusChip, matchesQuery, relativeTime, shortDate } from './adminShared'
 import { CoverArtImage, SongImage } from './coverArtShared'
 
@@ -109,7 +110,7 @@ export default function CoverArtTab({ onCountsChanged }: { onCountsChanged: () =
   }
 
   const reverse = async (sub: CoverArtSubmission): Promise<void> => {
-    if (!confirm('Take back this approval? The cover is taken out of Files (Cover Arts/Community-Made).')) return
+    if (!(await confirmGlass({ title: 'Reverse approval', message: 'Take back this approval? The cover is taken out of Files (Cover Arts/Community-Made).', confirmLabel: 'Reverse', destructive: true }))) return
     setActionId(sub.id)
     try {
       applyUpdate(await adminReverseCoverArt(sub.id))

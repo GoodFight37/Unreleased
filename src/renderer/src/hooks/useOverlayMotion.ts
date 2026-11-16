@@ -1,5 +1,7 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { RefObject, useLayoutEffect } from 'react'
 import { useExitGhost } from './useExitGhost'
+import { syncGlassLayout } from '../lib/glass/compositor'
 
 const ENTER_EASE = 'cubic-bezier(0.33, 0, 0.15, 1)'
 const EXIT_EASE = 'cubic-bezier(0.4, 0, 0.6, 1)'
@@ -26,7 +28,7 @@ function isSheet(panel: HTMLElement): boolean {
 export function useOverlayMotion(ref: RefObject<HTMLElement>, enabled = true): void {
   useLayoutEffect(() => {
     const root = ref.current
-    if (!enabled || !root || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!enabled || !root || effectsMotionMedia().matches) return
     const panel = panelOf(root)
     const sheet = !!panel && isSheet(panel)
     root.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: ENTER_EASE })
@@ -34,6 +36,8 @@ export function useOverlayMotion(ref: RefObject<HTMLElement>, enabled = true): v
       [{ transform: sheet ? 'translateY(100%)' : 'translateY(14px)' }, { transform: 'translateY(0)' }],
       { duration: sheet ? 420 : 340, easing: ENTER_EASE, composite: 'add' },
     )
+    // Element.animate() fires no animationstart, so the glass layer is told to follow the lift.
+    syncGlassLayout(sheet ? 460 : 380)
     // Mount only - the dialog's own re-renders aren't openings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -46,6 +50,7 @@ export function useOverlayMotion(ref: RefObject<HTMLElement>, enabled = true): v
       [{ transform: 'translateY(0)' }, { transform: sheet ? 'translateY(100%)' : 'translateY(10px)' }],
       { duration, easing: EXIT_EASE, fill: 'forwards', composite: 'add' },
     )
+    syncGlassLayout(duration + 40)
     return ghost.animate([{ opacity: 0 }], { duration, easing: EXIT_EASE, fill: 'forwards' })
   } : null)
 }

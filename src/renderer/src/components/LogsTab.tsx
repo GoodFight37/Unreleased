@@ -15,6 +15,7 @@ import { copyText } from '../lib/clipboard'
 import { useLogStream, type LiveItem } from '../hooks/useLogStream'
 import { useVisitedTabs } from '../hooks/useVisitedTabs'
 import { useContentMotion } from '../hooks/useContentMotion'
+import { useVariableVirtualWindow } from '../hooks/useVirtualWindow'
 import { relativeTime } from './adminShared'
 import ThemedSelect from './ThemedSelect'
 import {
@@ -165,18 +166,120 @@ function ToolButton({ onClick, disabled, icon: Icon, label, spin, title }: {
   )
 }
 
-/** Entries newest first, with a day label wherever the local date changes. */
-function LogItems({ items, onFilter }: { items: LiveItem[]; onFilter: AddLogFilter }): JSX.Element {
-  const out: JSX.Element[] = []
-  let day = ''
-  for (const it of items) {
-    if (it.kind === 'gap') { out.push(<GapNote key={it.key} text={it.text} />); continue }
-    const d = new Date(it.entry.ts)
-    const ds = d.toDateString()
-    if (ds !== day) { day = ds; out.push(<DayDivider key={`day-${ds}`} date={d} />) }
-    out.push(<LogRow key={it.key} entry={it.entry} onFilter={onFilter} />)
-  }
-  return <>{out}</>
+type VirtualLogRow =
+  | { kind: 'day'; key: string; date: Date }
+  | { kind: 'gap'; key: string; text: string }
+  | { kind: 'entry'; key: string; entry: LogEntry }
+
+function VirtualLogItem({
+  rowKey,
+  top,
+  onHeight,
+  children,
+}: {
+  rowKey: string
+  top: number
+  onHeight: (key: string, height: number) => void
+  children: ReactNode
+}): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = (): void => {
+      const h = el.offsetHeight
+      if (h > 0) onHeight(rowKey, h)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [rowKey, onHeight])
+
+  return (
+    <div ref={ref} style={{ position: 'absolute', top, left: 0, right: 0 }}>
+      {children}
+    </div>
+  )
+}
+
+/** Virtualized log list (supports day dividers, gap notes, and expandable details). */
+function LogItems({
+  items,
+  scrollRef,
+  onFilter,
+  footer,
+}: {
+  items: LiveItem[]
+  scrollRef: React.RefObject<HTMLDivElement>
+  onFilter: AddLogFilter
+  footer?: ReactNode
+}): JSX.Element {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [measured, setMeasured] = useState<Map<string, number>>(() => new Map())
+
+  const onHeight = useCallback((key: string, height: number) => {
+    setMeasured((prev) => {
+      if (prev.get(key) === height) return prev
+      const next = new Map(prev)
+      next.set(key, height)
+      return next
+    })
+  }, [])
+
+  const rows = useMemo<VirtualLogRow[]>(() => {
+    const out: VirtualLogRow[] = []
+    let day = ''
+    for (const it of items) {
+      if (it.kind === 'gap') {
+        out.push({ kind: 'gap', key: it.key, text: it.text })
+        continue
+      }
+      const d = new Date(it.entry.ts)
+      const ds = d.toDateString()
+      if (ds !== day) {
+        day = ds
+        out.push({ kind: 'day', key: `day-${ds}`, date: d })
+      }
+      out.push({ kind: 'entry', key: it.key, entry: it.entry })
+    }
+    return out
+  }, [items])
+
+  const { offsets, totalHeight } = useMemo(() => {
+    const offs = new Array<number>(rows.length + 1)
+    offs[0] = 0
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]
+      const fallback = r.kind === 'day' ? 26 : r.kind === 'gap' ? 28 : 34
+      offs[i + 1] = offs[i] + (measured.get(r.key) ?? fallback)
+    }
+    return { offsets: offs, totalHeight: offs[rows.length] }
+  }, [rows, measured])
+
+  const { start, end } = useVariableVirtualWindow(scrollRef, contentRef, offsets, totalHeight)
+
+  return (
+    <>
+      <div ref={contentRef} style={{ height: totalHeight, position: 'relative' }}>
+        {rows.slice(start, end).map((r, i) => {
+          const idx = start + i
+          return (
+            <VirtualLogItem key={r.key} rowKey={r.key} top={offsets[idx]} onHeight={onHeight}>
+              {r.kind === 'day' ? (
+                <DayDivider date={r.date} />
+              ) : r.kind === 'gap' ? (
+                <GapNote text={r.text} />
+              ) : (
+                <LogRow entry={r.entry} onFilter={onFilter} />
+              )}
+            </VirtualLogItem>
+          )
+        })}
+      </div>
+      {footer}
+    </>
+  )
 }
 
 function ListCard({ children, overlay }: { children: ReactNode; overlay?: ReactNode }): JSX.Element {
@@ -248,7 +351,7 @@ function LiveView({ live, onFilter }: { live: ReturnType<typeof useLogStream>; o
         </button>
       )}>
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          {live.items.length === 0 ? empty : <LogItems items={live.items} onFilter={onFilter} />}
+          {live.items.length === 0 ? empty : <LogItems items={live.items} scrollRef={scrollRef} onFilter={onFilter} />}
         </div>
       </ListCard>
     </div>
@@ -339,6 +442,7 @@ function SearchView({ active, filters, range, setRange, onFilter }: {
     })
   }, [res])
 
+  const searchScrollRef = useRef<HTMLDivElement>(null)
   const nextScan = Math.min(512, (scanMb ?? 64) * 2)
 
   return (
@@ -381,7 +485,7 @@ function SearchView({ active, filters, range, setRange, onFilter }: {
       )}
 
       <ListCard>
-        <div className="flex-1 overflow-y-auto relative">
+        <div ref={searchScrollRef} className="flex-1 overflow-y-auto relative">
           {loading && res && (
             <div className="sticky top-0 z-[2] h-0.5 bg-accent/60 motion-safe:animate-pulse" />
           )}
@@ -392,19 +496,23 @@ function SearchView({ active, filters, range, setRange, onFilter }: {
           ) : items.length === 0 ? (
             <LogsNotice icon={SearchIcon} title="No matching entries">Try a wider time range or fewer filters.</LogsNotice>
           ) : (
-            <>
-              <LogItems items={items} onFilter={onFilter} />
-              <div className="flex justify-center py-4">
-                {res.next ? (
-                  <button onClick={() => void run(res.next ?? undefined)} disabled={loadingMore}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-overlay text-[11px] font-semibold text-text-primary hover:bg-surface-raised transition-colors disabled:opacity-50">
-                    {loadingMore ? <Loader2 size={12} className="animate-spin" /> : <ArrowDown size={12} />} Load older
-                  </button>
-                ) : (
-                  <span className="text-[10px] text-text-muted">End of results</span>
-                )}
-              </div>
-            </>
+            <LogItems
+              items={items}
+              scrollRef={searchScrollRef}
+              onFilter={onFilter}
+              footer={
+                <div className="flex justify-center py-4">
+                  {res.next ? (
+                    <button onClick={() => void run(res.next ?? undefined)} disabled={loadingMore}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-overlay text-[11px] font-semibold text-text-primary hover:bg-surface-raised transition-colors disabled:opacity-50">
+                      {loadingMore ? <Loader2 size={12} className="animate-spin" /> : <ArrowDown size={12} />} Load older
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-text-muted">End of results</span>
+                  )}
+                </div>
+              }
+            />
           )}
         </div>
       </ListCard>

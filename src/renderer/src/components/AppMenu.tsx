@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState, type ReactNode } from 'react'
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Menu, Check, RefreshCw, AlertTriangle } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
 import { useCatalogSync } from '../store/catalogSyncStore'
@@ -7,7 +8,10 @@ import { trackIdToSongId } from '../lib/userApi'
 import { orderedNavItems } from '../lib/navItems'
 import type { ViewType } from '../types'
 import { APP_VERSION } from '../lib/appVersion'
-import ContextMenu, { type ContextMenuEntry } from './ContextMenu'
+import { useSlidingIndicator } from '../hooks/useSlidingIndicator'
+import { useEscapeToClose } from '../hooks/useEscapeToClose'
+import { popOut, useExitGhost } from '../hooks/useExitGhost'
+import { ClampedMenu } from './ClampedMenu'
 
 // View tabs that have a dedicated navigation hotkey — the rest navigate via
 // setActiveView. Keyed by the nav item's `view` id.
@@ -92,7 +96,6 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
     eqEnabled, setEqEnabled, eqMono, setEqMono,
     skipSilence, setSkipSilence, reverbEnabled, setReverbEnabled,
     pitchShift, setPitchShift,
-    sidebarPosition, setSidebarPosition,
     lastfmEnabled, setLastfmEnabled,
     globalHotkeysEnabled, setGlobalHotkeysEnabled,
     developerMode, setDeveloperMode,
@@ -111,7 +114,6 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
     'eqEnabled', 'setEqEnabled', 'eqMono', 'setEqMono',
     'skipSilence', 'setSkipSilence', 'reverbEnabled', 'setReverbEnabled',
     'pitchShift', 'setPitchShift',
-    'sidebarPosition', 'setSidebarPosition',
     'lastfmEnabled', 'setLastfmEnabled',
     'globalHotkeysEnabled', 'setGlobalHotkeysEnabled',
     'developerMode', 'setDeveloperMode',
@@ -131,7 +133,10 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
   // Discord Rich Presence on/off lives in main-process app settings, not the
   // store — mirror it here so the Tools entry can show a checkmark.
   const [discordOn, setDiscordOn] = useState(false)
+  const [activeTab, setActiveTab] = useState('file')
+  const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const el = (window as any).electron
 
   // Follow updater progress so the "Check for updates" row reflects it live
@@ -212,6 +217,9 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
   // actions here are the bare behavior.
   const run = (fn: () => void) => fn
   const hk = (id: string) => (): void => runHotkeyAction(id)
+  const openGlassLab = (): void => { window.dispatchEvent(new Event('open-glass-lab')) }
+  const openShareStudio = (): void => { window.dispatchEvent(new Event('open-share-studio')) }
+  const openCommandPalette = (): void => { window.dispatchEvent(new Event('open-command-palette')) }
 
   const pickLibraryFolder = async (): Promise<void> => {
     const picked = await el?.pickFolder()
@@ -280,12 +288,6 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
         { kind: 'item', label: 'Now playing', onClick: run(() => setShowNowPlaying(!showNowPlaying)), checked: showNowPlaying },
         { kind: 'item', label: 'Equalizer panel', hotkey: 'equalizer', onClick: hk('equalizer'), checked: showEqPanel },
         { kind: 'sep' },
-        // Mirrors Settings → Appearance → Navigation position.
-        { kind: 'item', label: 'Menu on the left', onClick: run(() => setSidebarPosition('left')), checked: sidebarPosition === 'left' },
-        { kind: 'item', label: 'Menu on the right', onClick: run(() => setSidebarPosition('right')), checked: sidebarPosition === 'right' },
-        { kind: 'item', label: 'Menu on top', onClick: run(() => setSidebarPosition('top')), checked: sidebarPosition === 'top' },
-        { kind: 'item', label: 'Menu on bottom', onClick: run(() => setSidebarPosition('bottom')), checked: sidebarPosition === 'bottom' },
-        { kind: 'sep' },
         { kind: 'item', label: 'Full screen', onClick: run(toggleFullscreen) },
       ],
     },
@@ -337,6 +339,9 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
     {
       id: 'tools', label: 'Tools',
       entries: [
+        { kind: 'item', label: 'Command Palette…', combo: 'Ctrl+K', onClick: openCommandPalette },
+        { kind: 'item', label: 'Share Studio (PNG/MP4)…', onClick: openShareStudio, disabled: !currentTrack && !useStore.getState().radioFmActive },
+        { kind: 'sep' },
         { kind: 'item', label: 'Identify song…', onClick: () => useStore.getState().setShowRecognition(true) },
         { kind: 'item', label: 'Convert current song…', onClick: run(() => { if (canConvert && currentTrack) openConvert({ id: currentTrack.id, path: currentTrack.path, title: currentTrack.title }) }), disabled: !canConvert },
         // Timing lyrics by hand is for everyone; its Whisper side is a donor
@@ -353,11 +358,15 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
         { kind: 'item', label: 'Global shortcuts', onClick: run(() => setGlobalHotkeysEnabled(!globalHotkeysEnabled)), checked: globalHotkeysEnabled },
         { kind: 'sep' },
         { kind: 'item', label: 'Developer mode', onClick: run(() => setDeveloperMode(!developerMode)), checked: developerMode },
-        { kind: 'item', label: 'Diagnostics', hotkey: 'open-diagnostics', onClick: hk('open-diagnostics') },
-        { kind: 'item', label: 'Open logs folder', onClick: run(() => el?.openLogsFolder?.()) },
-        { kind: 'item', label: 'Clear image cache', onClick: run(() => el?.clearImageCache?.()) },
+        // Developer tools stay hidden until Developer mode is on.
         ...(developerMode
-          ? [{ kind: 'item' as const, label: 'Toggle DevTools', hotkey: 'toggle-devtools', onClick: hk('toggle-devtools') }]
+          ? [
+              { kind: 'item' as const, label: 'Glass Lab', onClick: openGlassLab },
+              { kind: 'item' as const, label: 'Diagnostics', hotkey: 'open-diagnostics', onClick: hk('open-diagnostics') },
+              { kind: 'item' as const, label: 'Open logs folder', onClick: run(() => el?.openLogsFolder?.()) },
+              { kind: 'item' as const, label: 'Clear image cache', onClick: run(() => el?.clearImageCache?.()) },
+              { kind: 'item' as const, label: 'Toggle DevTools', hotkey: 'toggle-devtools', onClick: hk('toggle-devtools') },
+            ]
           : []),
         { kind: 'sep' },
         { kind: 'item', label: 'Restart app', hotkey: 'restart-app', onClick: hk('restart-app') },
@@ -383,19 +392,92 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
     },
   ]
 
-  const toItems = (entries: Entry[]): ContextMenuEntry[] => entries.map((e): ContextMenuEntry => {
-    if (e.kind === 'sep') return 'divider'
-    if (e.kind === 'submenu') return { label: e.label, disabled: e.disabled, children: toItems(e.entries) }
-    return {
-      label: e.label,
-      disabled: e.disabled,
-      checked: e.checked,
-      trailing: e.trailing,
-      keepOpen: e.keepOpen,
-      kbd: comboTokens(e.combo ?? (e.hotkey ? effectiveBinding(e.hotkey, hotkeyBindings) : '')),
-      onSelect: e.onClick,
+  useExitGhost(panelRef, popOut)
+  useEscapeToClose(close, open)
+
+  useEffect(() => {
+    if (!open) return
+    setHoveredRowKey(null)
+    const raf = requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }))
+    const onDown = (e: MouseEvent): void => {
+      const target = e.target as Node | null
+      if (!target) return
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return
+      close()
     }
-  })
+    const onScroll = (e: Event): void => {
+      const target = e.target as Node | null
+      if (target && panelRef.current?.contains(target)) return
+      close()
+    }
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    setHoveredRowKey(null)
+  }, [activeTab])
+
+  const activeMenu = menus.find((m) => m.id === activeTab) ?? menus[0]
+
+  type FlatEntry =
+    | { kind: 'sep'; id: string }
+    | { kind: 'header'; id: string; label: string; disabled?: boolean }
+    | { kind: 'item'; id: string; entry: Extract<Entry, { kind: 'item' }> }
+
+  const flatEntries = useMemo<FlatEntry[]>(() => {
+    const out: FlatEntry[] = []
+    let idx = 0
+    const pushSep = (): void => {
+      if (out.length === 0 || out[out.length - 1].kind === 'sep') return
+      out.push({ kind: 'sep', id: `sep-${idx++}` })
+    }
+    const walk = (entries: Entry[]): void => {
+      for (const entry of entries) {
+        if (entry.kind === 'sep') {
+          pushSep()
+        } else if (entry.kind === 'submenu') {
+          pushSep()
+          out.push({ kind: 'header', id: `hdr-${idx++}`, label: entry.label, disabled: entry.disabled })
+          walk(entry.entries)
+        } else {
+          out.push({ kind: 'item', id: `item-${idx++}`, entry })
+        }
+      }
+    }
+    walk(activeMenu.entries)
+    while (out.length > 0 && out[out.length - 1].kind === 'sep') out.pop()
+    return out
+  }, [activeMenu])
+
+  const { containerRef: tabsRef, indicatorRef: tabIndicatorRef } = useSlidingIndicator<HTMLDivElement>(activeMenu.id, String(open))
+  const { containerRef: listRef, indicatorRef: rowIndicatorRef } = useSlidingIndicator<HTMLDivElement>(hoveredRowKey, `${open}:${activeMenu.id}`)
+
+  const handlePanelKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      const idx = menus.findIndex((m) => m.id === activeMenu.id)
+      const next = (idx + (e.key === 'ArrowRight' ? 1 : -1) + menus.length) % menus.length
+      setActiveTab(menus[next].id)
+      return
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const items = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? [])
+      if (items.length === 0) return
+      e.preventDefault()
+      const curIdx = items.indexOf(document.activeElement as HTMLButtonElement)
+      const nextIdx = curIdx < 0
+        ? (e.key === 'ArrowDown' ? 0 : items.length - 1)
+        : (curIdx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+      items[nextIdx]?.focus()
+      items[nextIdx]?.scrollIntoView({ block: 'nearest' })
+    }
+  }
 
   if (!el) return null
 
@@ -423,6 +505,8 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
           setOpen((o) => !o)
         }}
         title="Menu"
+        aria-expanded={open}
+        aria-haspopup="menu"
         className={btnClass}
       >
         <span className={isPill ? 'shrink-0' : variant === 'sidebar-icon' ? 'flex items-center justify-center' : 'w-6 h-6 flex items-center justify-center shrink-0'}>
@@ -441,21 +525,110 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
         )}
       </button>
 
-      {open && anchorRect && (
-        <ContextMenu
+      {open && anchorRect && createPortal(
+        <ClampedMenu
+          ref={panelRef}
           x={anchorRect.left}
           y={anchorRect.bottom + 2}
           anchor={anchorRect}
-          ignoreRef={triggerRef}
-          onClose={close}
           zIndex={10000}
-          popAnimation
-          checkColumn
-          compact
-          className="!min-w-0 !max-w-none w-44"
-          flyoutClassName="w-60"
-          items={menus.map((m): ContextMenuEntry => ({ label: m.label, children: toItems(m.entries) }))}
-        />
+          glass
+          role="menu"
+          aria-label="Application menu"
+          tabIndex={-1}
+          onKeyDown={handlePanelKeyDown}
+          className="app-menu-glass animate-menu-pop !p-0 !min-w-0 !max-w-none w-[356px] max-w-[calc(100vw-16px)] flex flex-col !overflow-hidden outline-none"
+        >
+          {/* Category tabs with sliding liquid halo */}
+          <div
+            ref={tabsRef}
+            role="tablist"
+            aria-label="Menu categories"
+            className="relative isolate flex items-center justify-between gap-0.5 px-2 py-1.5 border-b border-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] shrink-0"
+          >
+            {menus.map((m) => {
+              const isSelected = m.id === activeMenu.id
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  data-indicator-key={m.id}
+                  onMouseEnter={() => setActiveTab(m.id)}
+                  onClick={() => setActiveTab(m.id)}
+                  className={`flex-1 px-1.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${isSelected ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                >
+                  {m.label}
+                </button>
+              )
+            })}
+            <div ref={tabIndicatorRef} className="nav-indicator rounded-lg bg-[var(--menu-glass-fill)]" aria-hidden="true" />
+          </div>
+
+          {/* Scrollable single-pane item list */}
+          <div className="flex-1 min-h-0 max-h-[min(460px,calc(100vh-140px))] overflow-y-auto slim-scroll p-1.5">
+            <div
+              ref={listRef}
+              onMouseLeave={() => setHoveredRowKey(null)}
+              className="relative isolate flex flex-col gap-0.5"
+            >
+              {flatEntries.map((row) => {
+                if (row.kind === 'sep') {
+                  return <div key={row.id} role="separator" className="h-px mx-2 my-1 bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)]" />
+                }
+                if (row.kind === 'header') {
+                  return (
+                    <div
+                      key={row.id}
+                      className={`px-2.5 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted ${row.disabled ? 'opacity-40' : ''}`}
+                    >
+                      {row.label}
+                    </div>
+                  )
+                }
+                const { entry } = row
+                const tokens = comboTokens(entry.combo ?? (entry.hotkey ? effectiveBinding(entry.hotkey, hotkeyBindings) : ''))
+                return (
+                  <button
+                    key={row.id}
+                    type="button"
+                    role="menuitem"
+                    aria-checked={entry.checked !== undefined ? entry.checked : undefined}
+                    disabled={entry.disabled}
+                    data-indicator-key={!entry.disabled ? row.id : undefined}
+                    onMouseEnter={() => { if (!entry.disabled) setHoveredRowKey(row.id) }}
+                    onFocus={() => { if (!entry.disabled) setHoveredRowKey(row.id) }}
+                    onClick={() => {
+                      if (entry.disabled) return
+                      entry.onClick()
+                      if (!entry.keepOpen) close()
+                    }}
+                    className={`app-menu-row w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] text-left transition-colors ${entry.disabled ? 'opacity-40 cursor-not-allowed text-text-muted' : 'text-text-primary cursor-pointer'}`}
+                  >
+                    <span className="w-4 shrink-0 flex items-center justify-center text-accent">
+                      {entry.checked ? <Check size={13} strokeWidth={2.5} /> : null}
+                    </span>
+                    <span className="flex-1 min-w-0 truncate">{entry.label}</span>
+                    {entry.trailing ? (
+                      <span className="shrink-0 flex items-center">{entry.trailing}</span>
+                    ) : tokens.length > 0 ? (
+                      <span className="shrink-0 flex items-center gap-0.5">
+                        {tokens.map((t, i) => (
+                          <kbd key={i} className="px-1.5 py-0.5 text-[10px] font-medium leading-none rounded bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] text-text-secondary">
+                            {t}
+                          </kbd>
+                        ))}
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
+              <div ref={rowIndicatorRef} className="nav-indicator rounded-[10px] bg-[var(--menu-glass-fill)]" aria-hidden="true" />
+            </div>
+          </div>
+        </ClampedMenu>,
+        document.body,
       )}
     </div>
   )

@@ -1121,11 +1121,13 @@ export const CATEGORY_LABELS: Record<string, string> = {
   recording_session: 'Session',
 }
 
+// Light themes (Light, Goodbye & Good Riddance) take the -700 shades: the -400
+// ones fall well under WCAG AA on a pale page.
 export const CATEGORY_COLORS: Record<string, string> = {
-  released:          'text-emerald-400 bg-emerald-400/10 border-emerald-400/25',
-  unreleased:        'text-blue-400   bg-blue-400/10   border-blue-400/25',
-  unsurfaced:        'text-amber-400  bg-amber-400/10  border-amber-400/25',
-  recording_session: 'text-purple-400 bg-purple-400/10 border-purple-400/25',
+  released:          'text-emerald-700 bg-emerald-600/10 border-emerald-600/30 dark:text-emerald-400 dark:bg-emerald-400/10 dark:border-emerald-400/25',
+  unreleased:        'text-blue-700 bg-blue-600/10 border-blue-600/30 dark:text-blue-400 dark:bg-blue-400/10 dark:border-blue-400/25',
+  unsurfaced:        'text-amber-700 bg-amber-600/10 border-amber-600/30 dark:text-amber-400 dark:bg-amber-400/10 dark:border-amber-400/25',
+  recording_session: 'text-purple-700 bg-purple-600/10 border-purple-600/30 dark:text-purple-400 dark:bg-purple-400/10 dark:border-purple-400/25',
 }
 
 // ─── Site deep links ──────────────────────────────────────────────────────────

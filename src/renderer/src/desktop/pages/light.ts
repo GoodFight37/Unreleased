@@ -5,14 +5,14 @@ import './base.css'
 import { EdgeLight } from '../light/renderer'
 import { DEFAULT_LIGHT, type LightStyle } from '../light/engine'
 import { clockTime } from '../lyrics/scene'
-import { Live } from './page'
+import { Live, effectsMotionMedia, isReducedMotion, isReducedTransparency } from './page'
 
 const live = new Live()
 const canvas = document.createElement('canvas')
 canvas.className = 'full'
 document.body.appendChild(canvas)
 
-const style = (): LightStyle => ({ ...DEFAULT_LIGHT, ...(live.settings?.light ?? {}) })
+const style = (): LightStyle => ({ ...DEFAULT_LIGHT, ...(live.settings?.light ?? {}), ...(isReducedMotion() ? { motion: 'still' as const } : {}) })
 
 /** The Lyrics Ticker's line: the one being sung now, else the song's name and artist. */
 function ticker(): string {
@@ -51,7 +51,7 @@ function follow(): void {
   if (playing) pausedAt = 0
   else if (!pausedAt) pausedAt = Date.now()
   const resting = !playing && Date.now() - pausedAt > 3000
-  light.fadeTo(live.settings?.light?.isOn && !live.hidden && !resting ? 1 : 0)
+  light.fadeTo(!isReducedTransparency() && live.settings?.light?.isOn && !live.hidden && !resting ? 1 : 0)
   if (!playing && !resting) fadeTimer = window.setTimeout(follow, 3000 - (Date.now() - pausedAt) + 30)
   light.wake()
 }
@@ -72,4 +72,5 @@ window.setInterval(() => {
   if (style().look === 'ticker') light.wake()
 }, 33)
 window.addEventListener('resize', () => light.wake())
+effectsMotionMedia().addEventListener('change', follow)
 void live.start().then(follow)

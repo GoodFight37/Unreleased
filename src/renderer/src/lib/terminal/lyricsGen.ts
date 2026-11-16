@@ -402,7 +402,7 @@ async function runAdminJobs(args: string, ctx: TermCtx): Promise<void> {
   if (sub === 'cancel' || sub === 'stop') {
     const id = adminRef(words[0])
     const row = adminRows.find((j) => j.id === id)
-    if (!confirmAction(ctx, `Cancel ${row ? `${row.user.username}'s ${row.filename}` : 'this lyrics job'}?`, bool.has('y'))) return
+    if (!(await confirmAction(ctx, `Cancel ${row ? `${row.user.username}'s ${row.filename}` : 'this lyrics job'}?`, bool.has('y')))) return
     const job = await cancelAdminLyricsJob(id)
     ctx.print(`cancelled ${job.filename} (${job.user.username})`, 'ok')
     if (row) row.status = job.status
@@ -493,7 +493,7 @@ export const LYRICS_GEN_COMMANDS: TermCommand[] = [
         await runTiming(ctx, words, bool.has('json'))
       } else if (sub === 'rm' || sub === 'delete') {
         const ref = jobRef(words[0])
-        if (!confirmAction(ctx, `Delete the lyrics preview for ${ref.filename || ref.id}?`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Delete the lyrics preview for ${ref.filename || ref.id}?`, bool.has('y')))) return
         await deleteLyricsJob(ref.id)
         remember(remembered().filter((j) => j.id !== ref.id))
         ctx.print(`deleted ${ref.filename || ref.id}`, 'ok')

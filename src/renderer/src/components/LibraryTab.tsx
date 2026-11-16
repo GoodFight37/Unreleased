@@ -18,6 +18,7 @@ import { formatDuration, formatTotalDuration } from '../lib/format'
 import { AnchoredContextMenu } from './ContextMenu'
 import { addTracksInBackground } from '../lib/optimisticPlaylist'
 import { Tile } from './Tile'
+import { GLASS_SEARCH_WRAP } from './glassControls'
 import './LibraryTab.css'
 
 // Windowing geometry — kept in sync with the row/card markup below.
@@ -548,25 +549,25 @@ function LibraryOverview({ tracks, albums, artists, onNav, onOpenAlbum, onOpenAr
       </nav>
       <div className="library-overview">
         <div className="min-w-0 flex flex-col gap-4">
-          <Tile title="Recently added" icon={<Disc3 size={15} />} action={{ label: 'All albums', onClick: () => onNav({ kind: 'lib', key: 'recent' }) }} span="shrink-0">
+          <Tile plain title="Recently added" icon={<Disc3 size={15} />} action={{ label: 'All albums', onClick: () => onNav({ kind: 'lib', key: 'recent' }) }} span="shrink-0">
             <div className="library-album-grid">
               {recentAlbums.map(album => <AlbumCard key={album.key} album={album} onOpen={() => onOpenAlbum(album)} onPlay={() => onPlayAlbum(album)} />)}
             </div>
           </Tile>
-          <Tile title="Latest songs" icon={<Music size={15} />} action={{ label: 'All songs', onClick: () => onNav({ kind: 'lib', key: 'songs' }) }} span="shrink-0">
+          <Tile plain title="Latest songs" icon={<Music size={15} />} action={{ label: 'All songs', onClick: () => onNav({ kind: 'lib', key: 'songs' }) }} span="shrink-0">
             <div className="-mx-2">
               {shownTracks.map((t, i) => <SongRow key={t.id} track={t} index={i} queue={recentTracks} onContext={onContext} showAlbum={false} />)}
             </div>
           </Tile>
         </div>
         <div className="library-overview-side min-w-0 flex flex-col gap-4">
-          <Tile span="shrink-0">
+          <Tile plain span="shrink-0">
             <div className="flex items-center gap-2 text-xs text-text-muted mb-3"><HardDrive size={14} /> On this device</div>
             <h2 className="text-lg font-semibold text-text-primary">Your collection</h2>
             <p className="text-xs text-text-secondary mt-1.5 mb-4">{tracks.length.toLocaleString()} songs · {formatTotalDuration(duration)}</p>
             <button onClick={onShuffle} className="flex items-center justify-center gap-2 py-2.5 rounded-full bg-accent text-black text-xs font-semibold hover:bg-accent-hover"><Shuffle size={14} /> Shuffle your library</button>
           </Tile>
-          <Tile title="Artists" icon={<User size={15} />} action={{ label: 'All', onClick: () => onNav({ kind: 'lib', key: 'artists' }) }} span="shrink-0">
+          <Tile plain title="Artists" icon={<User size={15} />} action={{ label: 'All', onClick: () => onNav({ kind: 'lib', key: 'artists' }) }} span="shrink-0">
             <div className="space-y-1 -mx-1">
               {featuredArtists.map(artist => <button key={artist.name} onClick={() => onOpenArtist(artist.name)} className="w-full flex items-center gap-3 p-2 rounded-xl text-left hover:bg-surface-raised">
                 <span className="w-10 h-10 shrink-0 rounded-full overflow-hidden"><AlbumArtThumb track={artist.coverTrack} size={40} /></span>
@@ -575,7 +576,15 @@ function LibraryOverview({ tracks, albums, artists, onNav, onOpenAlbum, onOpenAr
               </button>)}
             </div>
           </Tile>
-          <Tile title="Music folders" icon={<FolderOpen size={15} />} action={{ label: 'Manage', onClick: onSettings }} span="shrink-0">
+          <details className="library-folders shrink-0">
+            <summary className="library-folders-summary">
+              <FolderOpen size={15} className="text-text-muted" />
+              <span className="flex-1">Music folders</span>
+              <span className="text-xs text-text-muted tabular-nums">{libraryFolders.length}</span>
+              {libraryScanning ? <Loader2 size={14} className="animate-spin text-text-muted" aria-label="Scanning" /> : <ChevronDown size={14} className="library-folders-chevron text-text-muted" />}
+            </summary>
+            <div className="pt-4">
+            <button onClick={onSettings} className="mb-4 text-xs font-semibold text-text-secondary hover:text-text-primary">Manage music folders <ChevronRight size={12} className="inline" /></button>
             {libraryFolders.length > 0 ? <div className="space-y-3 mb-4">
               {libraryFolders.slice(0, 3).map(folder => <div key={folder} className="flex items-start gap-2.5" title={folder}>
                 <FolderOpen size={15} className="shrink-0 text-text-muted mt-0.5" />
@@ -583,11 +592,12 @@ function LibraryOverview({ tracks, albums, artists, onNav, onOpenAlbum, onOpenAr
               </div>)}
               {libraryFolders.length > 3 && <button onClick={onSettings} className="text-xs text-text-secondary hover:text-text-primary">{libraryFolders.length - 3} more folders</button>}
             </div> : <p className="text-xs text-text-muted leading-relaxed mb-4">Add your music folders to keep this collection up to date.</p>}
-            <button onClick={() => scanLibrary()} disabled={libraryScanning || libraryFolders.length === 0} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-surface-raised text-xs font-medium text-text-secondary hover:text-text-primary disabled:opacity-40">
+            <button onClick={() => scanLibrary()} disabled={libraryScanning || libraryFolders.length === 0} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-surface-raised text-xs font-medium text-text-secondary hover:text-text-primary disabled:opacity-40">
               <RefreshCw size={13} className={libraryScanning ? 'animate-spin' : undefined} />{libraryScanning ? 'Scanning…' : 'Scan for music'}
             </button>
             {!!libraryLastScanned && <p className="text-[11px] text-text-muted mt-2.5" title={new Date(libraryLastScanned).toLocaleString()}>Last scan {new Date(libraryLastScanned).toLocaleDateString()}</p>}
-          </Tile>
+            </div>
+          </details>
         </div>
       </div>
     </div>
@@ -936,15 +946,15 @@ export default function LibraryTab(): JSX.Element {
                 </select>}
           </>}
         </div>
-        {!drill && libraryTracks.length > 0 && <div className="relative flex-1 min-w-[11rem] ml-auto" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+        {!drill && libraryTracks.length > 0 && <div className={`${GLASS_SEARCH_WRAP} flex-1 min-w-[11rem] ml-auto`} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none z-20" />
           <input value={searchQ} onChange={e => {
             if (isOverview) navTo({ kind: 'lib', key: 'songs' })
             setSearchQ(e.target.value)
           }} aria-label="Search library"
             placeholder={nav.key === 'artists' ? 'Find an artist…' : nav.key === 'albums' || nav.key === 'recent' ? 'Find an album…' : 'Find music in your library…'}
-            className="w-full pl-9 pr-8 py-2 rounded-full bg-surface-raised border border-[var(--border)] text-sm text-text-primary placeholder:text-text-muted" />
-          {searchQ && <button onClick={() => setSearchQ('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-text-muted hover:text-text-primary"><X size={13} /></button>}
+            className="glass-field w-full pl-9 pr-8 py-2 rounded-full bg-surface-raised border border-[var(--border)] text-sm text-text-primary placeholder:text-text-muted" />
+          {searchQ && <button onClick={() => setSearchQ('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-text-muted hover:text-text-primary z-20"><X size={13} /></button>}
         </div>}
         <div className={'relative shrink-0 ' + (drill || libraryTracks.length === 0 ? 'ml-auto' : '')} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <button ref={libraryMenuRef} onClick={() => setShowLibraryMenu(v => !v)} aria-haspopup="menu" aria-expanded={showLibraryMenu}

@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from './effectsPreference'
 // iOS-like wheel scrolling, app-wide. A mouse wheel notch normally jumps
 // ~100px in a short fixed animation and stops dead; here each notch moves a
 // target and the scroller under the pointer glides toward it, slowing down
@@ -90,7 +91,7 @@ function startGlide(el: HTMLElement, px: number): void {
 }
 
 export function installSmoothWheel(): () => void {
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
+  const reduced = effectsMotionMedia()
   const onWheel = (e: WheelEvent): void => {
     if (e.defaultPrevented || e.ctrlKey || reduced.matches) return
     if (e.deltaY === 0 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return

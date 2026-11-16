@@ -7,6 +7,7 @@ import { DEFAULT_TRUST_SCORE } from '../lib/cdnAdminApi'
 import { isNodeOnline, type CdnOwnedNode } from '../lib/cdnAccountApi'
 import { buildHaystack, matchesHaystack } from '../components/adminShared'
 import { errorMessage } from '../lib/format'
+import { confirmGlass } from '../lib/confirmModal'
 
 export type CdnNodeFilter = 'all' | 'pending' | 'online' | 'offline' | 'disabled'
 
@@ -123,12 +124,12 @@ export function useCdnNodesAdmin(): {
   const approve = useCallback((n: CdnAdminNode) => patch(n, { is_approved: true }), [patch])
 
   const revoke = useCallback(async (n: CdnAdminNode) => {
-    if (!confirm(`Revoke approval for "${n.name}"? It stops receiving listeners until approved again.`)) return
+    if (!(await confirmGlass({ title: 'Revoke CDN node', message: `Revoke approval for "${n.name}"? It stops receiving listeners until approved again.`, confirmLabel: 'Revoke', destructive: true }))) return
     await patch(n, { is_approved: false })
   }, [patch])
 
   const setActive = useCallback(async (n: CdnAdminNode, active: boolean) => {
-    if (!active && !confirm(`Disable "${n.name}"? The node is told to deactivate and its API key stops working until re-enabled.`)) return
+    if (!active && !(await confirmGlass({ title: 'Disable CDN node', message: `Disable "${n.name}"? The node is told to deactivate and its API key stops working until re-enabled.`, confirmLabel: 'Disable', destructive: true }))) return
     await patch(n, { is_active: active })
   }, [patch])
 
@@ -145,7 +146,7 @@ export function useCdnNodesAdmin(): {
   )
 
   const remove = useCallback(async (n: CdnAdminNode) => {
-    if (!confirm(`Permanently delete "${n.name}"? Its file list, speed samples, violations and download logs are wiped and its API key stops working. Disable it instead to keep the history.`)) return
+    if (!(await confirmGlass({ title: 'Delete CDN node', message: `Permanently delete "${n.name}"? Its file list, speed samples, violations and download logs are wiped and its API key stops working. Disable it instead to keep the history.`, confirmLabel: 'Delete permanently', destructive: true }))) return
     setBusyId(n.node_id)
     setActionError(null)
     try {

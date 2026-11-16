@@ -256,7 +256,7 @@ export const LIBRARY_COMMANDS: TermCommand[] = [
         case 'delete': case 'rm': {
           const { text, yes } = takeYes(rest)
           const pl = await playlistFromArg(text)
-          if (!confirmAction(ctx, `Delete the playlist "${pl.name}"? This can't be undone.`, yes)) return
+          if (!(await confirmAction(ctx, `Delete the playlist "${pl.name}"? This can't be undone.`, yes))) return
           await deletePlaylist(pl.id)
           await st().refreshPlaylists()
           ctx.print(`deleted "${pl.name}"`, 'ok')

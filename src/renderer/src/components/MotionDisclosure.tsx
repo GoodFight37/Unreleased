@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { usePresence } from '../hooks/usePresence'
 
@@ -11,14 +12,14 @@ export function MotionDisclosure({ open, children, className }: {
   children: ReactNode
   className?: string
 }): JSX.Element | null {
-  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const [reducedMotion, setReducedMotion] = useState(() => effectsMotionMedia().matches)
   const { mounted } = usePresence(open, reducedMotion ? 0 : EXIT_MS)
   const ref = useRef<HTMLDivElement>(null)
   const previousOpen = useRef(open)
   const animation = useRef<Animation | null>(null)
 
   useEffect(() => {
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const media = effectsMotionMedia()
     const update = (): void => setReducedMotion(media.matches)
     media.addEventListener('change', update)
     update()

@@ -11,4 +11,4 @@
 /* As WRLD's: blurred so far that the small cover is plenty, and scaled past the blur's soft edges. */
 #curtain .backdrop { filter: blur(60px) brightness(0.22) saturate(2.4); transform: scale(1.2); }
 #curtain .wash { position: absolute; inset: 0; background: linear-gradient(to bottom, rgb(0 0 0 / 0.4), transparent 50%, rgb(0 0 0 / 0.7)); }
-@media (prefers-reduced-motion: reduce) { #curtain .stage { transition-duration: 0.01s; } }
+:where(html[data-effects-motion="reduce"]) #curtain .stage { transition-duration: 0.01s; }

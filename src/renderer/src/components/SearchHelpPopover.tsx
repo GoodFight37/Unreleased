@@ -71,7 +71,7 @@ export default function SearchHelpPopover({ onClose, kind = 'songs' }: { onClose
           // this doesn't blur (and, in playlists, close) the search.
           onMouseDown={(e) => e.preventDefault()}
           style={{ top: pos.top, left: pos.left, width: WIDTH, maxHeight: pos.maxHeight }}
-          className="fixed overflow-y-auto bg-surface border border-[var(--border)] rounded-xl shadow-2xl z-[200] p-3 animate-menu-pop"
+          className="fixed overflow-y-auto glass-popover bg-surface border border-[var(--border)] rounded-xl shadow-2xl z-[200] p-3 animate-menu-pop"
         >
           <p className="text-text-primary text-xs font-semibold mb-1">Search syntax</p>
           {kind === 'files' ? (

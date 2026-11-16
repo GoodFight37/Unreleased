@@ -229,12 +229,26 @@ export class Visualizer {
     this.artPal = pal;
   }
 
+  private onVisibility = () => {
+    if (!this.running) return;
+    if (document.hidden) {
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+    } else if (!this.raf) {
+      this.lastFrame = performance.now();
+      this.raf = requestAnimationFrame(this.loop);
+    }
+  };
+
   start() {
     if (this.running) return;
     this.running = true;
-    this.lastFrame = performance.now();
-    this.layoutAt = 0;
-    this.raf = requestAnimationFrame(this.loop);
+    document.addEventListener("visibilitychange", this.onVisibility);
+    if (!document.hidden) {
+      this.lastFrame = performance.now();
+      this.layoutAt = 0;
+      this.raf = requestAnimationFrame(this.loop);
+    }
   }
 
   /** Slows the picture down while something covers it, and lets it go at full rate again. */
@@ -244,7 +258,9 @@ export class Visualizer {
 
   stop() {
     this.running = false;
+    document.removeEventListener("visibilitychange", this.onVisibility);
     cancelAnimationFrame(this.raf);
+    this.raf = 0;
     this.c2d.clear();
     this.gl.clear();
     this.showEngine(null);
@@ -286,7 +302,7 @@ export class Visualizer {
   }
 
   private loop = (now: number) => {
-    if (!this.running) return;
+    if (!this.running || document.hidden) { this.raf = 0; return; }
     this.raf = requestAnimationFrame(this.loop);
 
     const q = QUALITY[this.quality];
@@ -294,7 +310,7 @@ export class Visualizer {
     const elapsed = now - this.lastFrame;
     if (fps > 0 && elapsed < 1000 / fps - 1) return; // frame cap
     this.lastFrame = now;
-    if (document.hidden || this.mode === "none") return;
+    if (this.mode === "none") return;
 
     const dt = Math.min(0.05, elapsed / 1000); // clamp after stalls
     this.time += dt;
@@ -391,7 +407,14 @@ export class Visualizer {
     this.prevBeat = frame.beat;
     while (this.drops.length && this.time - this.drops[0].born > RIPPLE_LIFE) this.drops.shift();
     this.ripples.fill(0); // unused slots have zero strength
-    this.drops.forEach((d, i) => this.ripples.set([d.angle, d.dist, this.time - d.born, d.strength], i * 4));
+    for (let i = 0; i < this.drops.length; i++) {
+      const d = this.drops[i];
+      const base = i * 4;
+      this.ripples[base] = d.angle;
+      this.ripples[base + 1] = d.dist;
+      this.ripples[base + 2] = this.time - d.born;
+      this.ripples[base + 3] = d.strength;
+    }
   }
 
   /** Cover centre in canvas px, or screen centre when there's no artwork shown. */

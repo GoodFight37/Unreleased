@@ -7,6 +7,7 @@ import { copyText } from '../lib/clipboard'
 import * as betaAdminApi from '../lib/betaAdminApi'
 import type { BetaCode, BetaVersion } from '../lib/betaAdminApi'
 import { errorMessage } from '../lib/format'
+import { confirmGlass } from '../lib/confirmModal'
 import { shortDate, Empty } from './adminShared'
 
 // Admin tab for beta gating (/beta/admin/): publish installer builds that
@@ -126,7 +127,7 @@ function BuildsSection({ versions, setVersions, loading }: {
   }
 
   const remove = async (v: BetaVersion): Promise<void> => {
-    if (!confirm(`Delete beta ${v.version}? Code holders can no longer download it.`)) return
+    if (!(await confirmGlass({ title: 'Delete beta build', message: `Delete beta ${v.version}? Code holders can no longer download it.`, confirmLabel: 'Delete', destructive: true }))) return
     setRowBusy(v.id)
     try {
       await betaAdminApi.deleteBetaVersion(v.id)
@@ -237,7 +238,7 @@ function CodesSection({ codes, setCodes, loading }: {
   }
 
   const remove = async (c: BetaCode): Promise<void> => {
-    if (!confirm(`Delete code ${c.code}? Anyone using it loses beta access. Turning it off does the same but keeps the record.`)) return
+    if (!(await confirmGlass({ title: 'Delete beta code', message: `Delete code ${c.code}? Anyone using it loses beta access. Turning it off does the same but keeps the record.`, confirmLabel: 'Delete', destructive: true }))) return
     setRowBusy(c.id)
     try {
       await betaAdminApi.deleteBetaCode(c.id)

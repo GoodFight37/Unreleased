@@ -13,7 +13,6 @@ import { lazyOverlay } from '../lib/lazyView'
 import { accountDisplayName, initial } from '../lib/format'
 import { ELECTRON_TITLEBAR_CLEARANCE_X } from '../lib/platform'
 import ContextMenu from './ContextMenu'
-import NavPillGrip from './NavPillGrip'
 import { useSlidingIndicator } from '../hooks/useSlidingIndicator'
 import { MotionDisclosure } from './MotionDisclosure'
 import { useUnreadNotificationCount } from '../hooks/useNotificationHistory'
@@ -247,7 +246,7 @@ export default function Sidebar(): JSX.Element {
   }
 
   // Icon-only control button for the horizontal (top/bottom) bar cluster.
-  const barIconBtn = 'flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors shrink-0'
+  const barIconBtn = 'nav-btn flex items-center justify-center w-8 h-8 rounded-full text-text-secondary hover:text-text-primary shrink-0'
   const renderControlIcon = (id: NavControlId): JSX.Element | null => {
     switch (id) {
       case 'profile':
@@ -291,7 +290,7 @@ export default function Sidebar(): JSX.Element {
     }
   }
 
-  // ── Floating pill (Settings → Appearance → Navigation style). Icon-only, rounded,
+  // ── Floating pill (Settings → Appearance → Navigation style). Rounded,
   // laid out along the chosen edge; AutoHideNav floats it over the page.
   if (navStyle === 'pill') {
     const horizontal = sidebarPosition === 'top' || sidebarPosition === 'bottom'
@@ -301,42 +300,34 @@ export default function Sidebar(): JSX.Element {
       <aside
         ref={navRef}
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        // Frosted from a ::before layer (.glass-backdrop): NavPillGrip's drop
-        // targets are position:fixed inside it.
-        className={`app-sidebar glass-backdrop glass-specular glass-lift pointer-events-auto relative isolate flex ${horizontal ? 'flex-row max-w-full overflow-x-auto' : 'flex-col max-h-full overflow-y-auto'} items-center gap-1 p-1.5 rounded-full`}
+        // Frosted from a ::before layer (.glass-backdrop). Fixed in place: the
+        // bar can't be dragged to another edge and its tabs aren't draggable.
+        className={`app-sidebar glass-backdrop glass-specular pointer-events-auto relative isolate flex ${horizontal ? 'flex-row max-w-full overflow-x-auto' : 'flex-col max-h-full overflow-y-auto'} items-center gap-1 p-1.5 rounded-full`}
       >
-        <NavPillGrip horizontal={horizontal} />
         {isElectron && appMenuPosition === 'sidebar' && (
           <>
             <div className="w-10 h-10 shrink-0 flex items-center justify-center"><AppMenu variant="sidebar-icon" /></div>
             <div className={`shrink-0 bg-[var(--border)] ${horizontal ? 'w-px h-6 mx-1' : 'h-px w-6 my-1'}`} />
           </>
         )}
-        {items.map(({ icon, label, view }, idx) => (
+        {items.map(({ icon, label, view }) => (
           <button
             key={view}
-            draggable
-            onDragStart={(e) => { setNavDragIdx(idx); e.dataTransfer.effectAllowed = 'move' }}
-            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setNavOverIdx(idx) }}
-            onDrop={(e) => { e.preventDefault(); if (navDragIdx !== null) moveNavItem(navDragIdx, idx); setNavDragIdx(null); setNavOverIdx(null) }}
-            onDragEnd={() => { setNavDragIdx(null); setNavOverIdx(null) }}
             onClick={() => navClick(view)}
             {...warmOnIntent(view)}
             onContextMenu={openNavMenu(view, label)}
             title={label}
             aria-label={label}
+            aria-current={activeTab === view ? 'page' : undefined}
             data-indicator-key={view}
-            className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-full transition-colors cursor-grab active:cursor-grabbing ${
-              navDragIdx === idx ? 'opacity-40' : ''
-            } ${
-              navOverIdx === idx && navDragIdx !== null && navDragIdx !== idx ? 'ring-1 ring-inset ring-accent' : ''
-            } ${
+            className={`nav-btn ${horizontal && activeTab === view ? 'px-3 gap-2' : 'w-10'} h-10 shrink-0 flex items-center justify-center rounded-full ${
               activeTab === view
                 ? 'text-accent'
-                : 'text-text-secondary hover:text-text-primary hover:bg-surface-raised'
+                : 'text-text-secondary hover:text-text-primary'
             }`}
           >
             {icon}
+            {horizontal && activeTab === view && <span className="text-xs font-semibold text-text-primary whitespace-nowrap">{label}</span>}
           </button>
         ))}
         <div className={`shrink-0 bg-[var(--border)] ${horizontal ? 'w-px h-6 mx-1' : 'h-px w-6 my-1'}`} />
@@ -356,7 +347,7 @@ export default function Sidebar(): JSX.Element {
   // Nav items keep icon+label; the account/admin/settings cluster goes
   // icon-only, and the collapse toggle + inline playlist tree don't apply.
   if (sidebarPosition === 'top' || sidebarPosition === 'bottom') {
-    const iconBtn = 'flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors shrink-0'
+    const iconBtn = 'nav-btn flex items-center justify-center w-8 h-8 rounded-full text-text-secondary hover:text-text-primary shrink-0'
     return (
       <aside className="hidden md:flex flex-col shrink-0 min-w-0">
         {/* Bar touches the frameless window's top edge, so it carries the
@@ -374,33 +365,25 @@ export default function Sidebar(): JSX.Element {
             <div className="shrink-0 mr-0.5"><AppMenu variant="sidebar-icon" /></div>
           )}
           <nav ref={navRef} className="relative isolate flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
-            {items.map(({ icon, label, view }, idx) => (
+            {items.map(({ icon, label, view }) => (
               <button
                 key={view}
-                draggable
-                onDragStart={(e) => { setNavDragIdx(idx); e.dataTransfer.effectAllowed = 'move' }}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setNavOverIdx(idx) }}
-                onDrop={(e) => { e.preventDefault(); if (navDragIdx !== null) moveNavItem(navDragIdx, idx); setNavDragIdx(null); setNavOverIdx(null) }}
-                onDragEnd={() => { setNavDragIdx(null); setNavOverIdx(null) }}
                 onClick={() => navClick(view)}
                 {...warmOnIntent(view)}
                 onContextMenu={openNavMenu(view, label)}
+                aria-current={activeTab === view ? 'page' : undefined}
                 data-indicator-key={view}
-                className={`flex items-center gap-2 pl-2 pr-3 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors cursor-grab active:cursor-grabbing ${
-                  navDragIdx === idx ? 'opacity-40' : ''
-                } ${
-                  navOverIdx === idx && navDragIdx !== null && navDragIdx !== idx ? 'ring-1 ring-accent' : ''
-                } ${
+                className={`nav-btn flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${
                   activeTab === view
                     ? 'text-text-primary'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-raised'
+                    : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
                 <span className="w-6 h-6 shrink-0 flex items-center justify-center">{icon}</span>
                 <span>{label}</span>
               </button>
             ))}
-            <div ref={navIndicatorRef} className="nav-indicator rounded bg-surface-raised" aria-hidden />
+            <div ref={navIndicatorRef} className="nav-indicator rounded-full nav-active-fill" aria-hidden />
           </nav>
           <div className="flex items-center gap-1 shrink-0">
             {/* Log in stays pinned (never hideable) so signing in is always

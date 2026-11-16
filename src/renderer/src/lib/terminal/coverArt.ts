@@ -110,7 +110,7 @@ const coverArtCommand: TermCommand = {
       ctx.print(`cover art #${made.id} sent for review: ${made.song_name ?? song.name}`, 'ok')
     } else if (sub === 'withdraw') {
       const id = idArg(rest[0], 'coverart withdraw <id>')
-      if (!confirmAction(ctx, `Withdraw cover art #${id}? Its image is deleted.`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Withdraw cover art #${id}? Its image is deleted.`, bool.has('y')))) return
       await withdrawCoverArt(id)
       dropCoverArtImage(id)
       ctx.print(`cover art #${id} withdrawn`, 'ok')
@@ -129,7 +129,7 @@ const coverArtCommand: TermCommand = {
       ctx.print(`cover art #${id} ${s.status}: ${s.song_name ?? 'deleted song'}${s.comp_path ? ` · filed at ${s.comp_channel ?? '?'}:${s.comp_path}` : ''}`, 'ok')
     } else if (sub === 'reverse') {
       const id = idArg(rest[0], 'coverart reverse <id>')
-      if (!confirmAction(ctx, `Take back cover art #${id}? It is taken out of Files (Cover Arts/Community-Made).`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Take back cover art #${id}? It is taken out of Files (Cover Arts/Community-Made).`, bool.has('y')))) return
       const s = await adminReverseCoverArt(id)
       ctx.print(`cover art #${id} reversed: ${s.song_name ?? 'deleted song'}`, 'ok')
     } else fail(`usage: ${USAGE}`)

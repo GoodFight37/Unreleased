@@ -1,0 +1,38 @@
+name: Windows test build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [arena/9e8c9299-unreleased]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        env:
+          YOUTUBE_DL_SKIP_DOWNLOAD: '1'
+        run: npm ci
+      - name: Build renderer
+        run: npm run build
+      - name: Check Electron types and desktop tests
+        run: npm run typecheck:electron && npm run test:electron && node --test scripts/glass-lab/*.test.mjs
+      - name: Launch Electron on Windows
+        run: npm run electron:smoke -- --no-sandbox
+      - name: Package test installer without publishing
+        run: npx electron-builder --win nsis --x64 --publish never
+      - name: Upload installer as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-installer
+          path: release/*Setup*.exe
+          if-no-files-found: error
+          retention-days: 14

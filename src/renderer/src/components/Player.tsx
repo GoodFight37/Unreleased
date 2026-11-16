@@ -17,7 +17,6 @@ import {
   Heart,
   ChevronUp,
   MoreHorizontal,
-  PictureInPicture2,
   Radio,
   Info,
   SlidersHorizontal,
@@ -27,6 +26,7 @@ import { useVizStore } from '../store/vizStore'
 import { registerPlayerCommandHandler, runPlayerCommand } from '../lib/windowSync'
 import { eventToCombo, resolveAction, getAction, effectiveGlobalBinding, comboToAccelerator, registerHotkeyDispatch, HOTKEY_ACTIONS } from '../lib/hotkeys'
 import { formatDuration } from '../lib/format'
+import { audioQualityLabel } from '../lib/audioQuality'
 import { takeEqAnchor } from '../lib/eqAnchor'
 import { apiFetch, fullCoverUrl, JWApiSong, fileStem } from '../lib/juicewrldApi'
 import { trackIdToSongId, showStaffProfile, staffProfileView } from '../lib/userApi'
@@ -56,6 +56,8 @@ import { runLog } from '../lib/runLog'
 import { isOfflineCopyUnreadable, markOfflineCopyUnreadable } from '../lib/offlineCopies'
 import { CoverFade, LikePop, SwapIcon, TrackSwap } from './PlayerMotion'
 import { PopLayer } from './PopLayer'
+import { useGlassSurface, useGlassCompositorReady, setCompositorPlayEl, setCompositorLens, setCompositorSlider, scheduleGlassCompositor } from '../lib/glass/compositor'
+import { useEffectsState } from '../lib/effectsPreference'
 
 // Downloaded-for-offline audio always wins over streaming — same track id,
 // just playing from local disk instead of the API. Donor cloud files can't be
@@ -222,6 +224,7 @@ const MAX_CONSECUTIVE_SKIPS = 3
 let _seek: ((t: number) => void) | null = null
 let _getAudioDuration: (() => number) | null = null
 let _getAudioCurrentTime: (() => number) | null = null
+let _getAudioSourceUrl: (() => string | null) | null = null
 export function seekAudio(t: number): void { _seek?.(t) }
 export function getAudioDuration(): number { return _getAudioDuration?.() ?? 0 }
 // "Loading" = the app wants to play but the active slot isn't producing sound
@@ -232,6 +235,12 @@ export const usePlayerLoading = create<{ on: boolean }>(() => ({ on: false }))
 // the native 'timeupdate' event, ~4x/sec) — used to drive smooth per-frame
 // synced-lyrics highlighting instead of choppy ~250ms jumps.
 export function getAudioCurrentTime(): number { return _getAudioCurrentTime?.() ?? 0 }
+export function getAudioSourceUrl(): string | null {
+  const active = _getAudioSourceUrl?.()
+  if (active) return active
+  const track = useStore.getState().currentTrack
+  return track ? (resolvePlaybackUrl(track) || null) : null
+}
 
 // Cache of the API-derived lyrics for tracker songs, keyed by numeric song
 // id. The metadata-load effect runs on every track change; without this,
@@ -317,14 +326,25 @@ interface SeekRangeProps {
   onMouseUp?: () => void
   onTouchEnd?: () => void
   onKeyUp?: () => void
+  onPointerEnter?: React.PointerEventHandler<HTMLInputElement>
+  onPointerMove?: React.PointerEventHandler<HTMLInputElement>
+  onPointerDown?: React.PointerEventHandler<HTMLInputElement>
+  onPointerUp?: React.PointerEventHandler<HTMLInputElement>
+  onPointerLeave?: React.PointerEventHandler<HTMLInputElement>
 }
 function SeekRange({ seekDrag, radioFmActive, ...rest }: SeekRangeProps): JSX.Element {
   const progress = useStore((s) => s.progress)
   const fmProgress = useFmProgress()
   const v = radioFmActive ? fmProgress : (seekDrag !== null ? seekDrag : progress)
+  useEffect(() => {
+    scheduleGlassCompositor()
+  }, [v])
   return (
     <input
       type="range" min={0} max={1} step={0.001} value={v} className="w-full"
+      data-glass-slider="seek"
+      aria-label="Playback position"
+      aria-valuetext={formatDuration(v * getAudioDuration())}
       style={{ '--val': `${v * 100}%`, ...(radioFmActive ? { pointerEvents: 'none' as const } : {}) } as React.CSSProperties}
       {...rest}
     />
@@ -772,7 +792,11 @@ export default function Player(): JSX.Element {
     }
     _getAudioDuration = () => getActive()?.duration ?? 0
     _getAudioCurrentTime = () => resumeTrackId.current ? useStore.getState().currentTime : getActive()?.currentTime ?? 0
-    return () => { _seek = null; _getAudioDuration = null; _getAudioCurrentTime = null }
+    _getAudioSourceUrl = () => {
+      const a = getActive()
+      return a?.currentSrc || a?.src || null
+    }
+    return () => { _seek = null; _getAudioDuration = null; _getAudioCurrentTime = null; _getAudioSourceUrl = null }
   }, []) // stable — only depends on refs
 
   // Load full metadata when track changes or currentTrackFull is cleared
@@ -2328,7 +2352,7 @@ export default function Player(): JSX.Element {
       if (typing && !combo.startsWith('Media') && !isFKey && resolveAction(combo, useStore.getState().hotkeyBindings) !== 'open-terminal') return
       // Leave Space/Enter alone when a button/link/select is focused so they
       // still activate it (native keyboard behavior) instead of toggling play.
-      const clickable = tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || target?.getAttribute('role') === 'button'
+      const clickable = tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || tag === 'SUMMARY' || target?.getAttribute('role') === 'button'
       if (clickable && (combo === 'Space' || combo === 'Enter')) return
       const id = resolveAction(combo, useStore.getState().hotkeyBindings)
       if (!id) return
@@ -2496,7 +2520,8 @@ export default function Player(): JSX.Element {
   useEffect(() => { setCoverArtError(false) }, [currentTrack?.id, coverArt])
   // What the title/artist blocks animate on: the song (or the 999FM now-
   // playing line), with its queue position telling next from previous.
-  const swapKey = radioFmActive ? `fm:${radioFmNowPlaying?.title ?? ''}:${radioFmNowPlaying?.artist ?? ''}` : (currentTrack?.id ?? '')
+  const playerQuality = audioQualityLabel(currentTrackFull)
+  const swapKey = radioFmActive ?`fm:${radioFmNowPlaying?.title ?? ''}:${radioFmNowPlaying?.artist ?? ''}` : (currentTrack?.id ?? '')
   const swapOrder = radioFmActive ? undefined : queueIndex
 
   // Output device picker
@@ -2536,6 +2561,36 @@ export default function Player(): JSX.Element {
   // reads as height 0).
   const dockRef = useRef<HTMLDivElement>(null)
   const barShown = activeView !== 'wrld'
+  const { reducedTransparency } = useEffectsState()
+  const playBtnRef = useRef<HTMLButtonElement>(null)
+  const glassGpuReady = useGlassCompositorReady()
+  useGlassSurface(dockRef, { kind: 'player', layer: 1, radius: 22, playFusion: true }, barShown && !reducedTransparency)
+
+  useEffect(() => {
+    setCompositorPlayEl(barShown && !reducedTransparency ? playBtnRef.current : null)
+    return () => setCompositorPlayEl(null)
+  }, [barShown, reducedTransparency])
+
+  const handlePlayerPointerMove = (): void => {}
+
+  const handlePlayerLens = (e: React.PointerEvent<HTMLInputElement>, strength: number, sliderId?: 'seek' | 'volume'): void => {
+    const input = e.currentTarget
+    const slider = input.getBoundingClientRect()
+    const vw = Math.max(1, window.innerWidth), vh = Math.max(1, window.innerHeight)
+    const min = Number(input.min || 0), max = Number(input.max || 1)
+    const val = Number.isFinite(input.valueAsNumber) ? input.valueAsNumber : min
+    const ratio = max > min ? Math.max(0, Math.min(1, (val - min) / (max - min))) : 0
+    const thumbX = slider.left + 13 + ratio * Math.max(0, slider.width - 26)
+    const x = sliderId && strength >= 0.8 ? thumbX : Math.max(slider.left, Math.min(slider.right, e.clientX || thumbX))
+    setCompositorLens(x / vw, (slider.top + slider.height / 2) / vh, strength)
+    if (sliderId) {
+      setCompositorSlider(sliderId, strength > 0 ? 1 : 0, strength >= 0.8 ? 1 : 0)
+    }
+  }
+
+  const handlePlayBtnTarget = (merge: number): void => {
+    setCompositorLens(null, null, null, merge)
+  }
   useLayoutEffect(() => {
     const root = document.documentElement
     const el = dockRef.current
@@ -2604,7 +2659,7 @@ export default function Player(): JSX.Element {
           <div className="fixed inset-0 z-40" onClick={() => setShowEqPanel(false)} />
           <PopLayer
             onMouseDown={(e) => e.stopPropagation()}
-            className="fixed z-50 bg-surface-highest border border-[var(--border)] rounded-xl shadow-2xl overflow-y-auto slim-scroll animate-menu-pop"
+            className="fixed z-50 glass-popover bg-surface-highest border border-[var(--border)] rounded-xl shadow-2xl overflow-y-auto slim-scroll animate-menu-pop"
             // Cap below the title bar so a full panel scrolls internally
             // instead of growing under the window controls. Grows out of the
             // corner nearest the EQ button.
@@ -2762,7 +2817,7 @@ export default function Player(): JSX.Element {
           them to it. Expanding (the chevron) grows the bar into WRLD, see
           expandToWrld; the cover opens the Now Playing panel (999 FM has none,
           so there it still opens WRLD). */}
-      <div ref={dockRef} className={`app-player hidden md:flex glass-backdrop glass-specular glass-lift absolute z-30 left-2 right-2 bottom-2 mx-auto max-w-[1080px] items-center h-[88px] rounded-[22px] px-4 gap-4`} data-wrld-expand="bar" onContextMenu={(e) => { e.preventDefault(); if (currentTrack) { setCtxMenuPos({ x: e.clientX, y: e.clientY }); setShowContextMenu(true) } }}>
+      <div ref={dockRef} onPointerMove={handlePlayerPointerMove} className={`app-player hidden md:flex glass-backdrop glass-specular glass-lift ${glassGpuReady && !reducedTransparency ? 'gpu' : ''} absolute z-30 left-2 right-2 bottom-2 mx-auto max-w-[1080px] items-center h-[88px] rounded-[22px] px-4 gap-4`} data-wrld-expand="bar" onContextMenu={(e) => { e.preventDefault(); if (currentTrack) { setCtxMenuPos({ x: e.clientX, y: e.clientY }); setShowContextMenu(true) } }}>
         {/* Track info */}
         <div className="flex items-center gap-3 w-72 min-w-0 shrink-0">
           <button
@@ -2869,6 +2924,11 @@ export default function Player(): JSX.Element {
                   <Radio size={9} /> {radioFmActive ? '999 FM' : 'Random'}
                 </span>
               )}
+              {!radioFmActive && playerQuality && (
+                <span className="text-[9px] font-semibold tracking-wide px-1.5 py-px rounded-md border border-[var(--border)] text-text-secondary shrink-0" title="Audio quality of this file">
+                  {playerQuality}
+                </span>
+              )}
             </div>
           </TrackSwap>
         </div>
@@ -2880,31 +2940,39 @@ export default function Player(): JSX.Element {
         <div className="flex-1 flex flex-col items-center gap-1.5">
           <div className="flex items-center gap-5">
             {!radioFmActive && <button onClick={toggleShuffle}
+              aria-label="Shuffle" aria-pressed={shuffle}
               className={`transition-colors ${shuffle ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}>
               <Shuffle size={18} />
             </button>}
 
-            <button onClick={handlePrev} disabled={radioFmActive} className="text-text-secondary hover:text-text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+            <button onClick={handlePrev} aria-label="Previous track" disabled={radioFmActive} className="text-text-secondary hover:text-text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
               <SkipBack size={20} fill="currentColor" />
             </button>
 
             <button
+              ref={playBtnRef}
               onClick={() => setIsPlaying(!isPlaying)}
+              aria-label={isPlaying ? 'Pause' : 'Play'}
+              onPointerEnter={() => handlePlayBtnTarget(0.8)}
+              onPointerDown={() => handlePlayBtnTarget(1)}
+              onPointerUp={() => handlePlayBtnTarget(0.8)}
+              onPointerLeave={() => handlePlayBtnTarget(0)}
               disabled={!currentTrack || radioFmActive}
-              className="w-9 h-9 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform disabled:opacity-30"
+              className={`w-9 h-9 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-transform disabled:opacity-30 ${glassGpuReady && !reducedTransparency ? 'bg-white/15 text-text-primary ring-1 ring-white/25' : 'bg-white text-black'}`}
             >
               <SwapIcon swapKey={isPlaying}>
                 {isPlaying
-                  ? <Pause size={18} fill="#000" className="text-black" />
-                  : <Play  size={18} fill="#000" className="text-black ml-0.5" />}
+                  ? <Pause size={18} fill="currentColor" />
+                  : <Play  size={18} fill="currentColor" className="ml-0.5" />}
               </SwapIcon>
             </button>
 
-            <button onClick={handleNext} disabled={radioFmActive} className="text-text-secondary hover:text-text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+            <button onClick={handleNext} aria-label="Next track" disabled={radioFmActive} className="text-text-secondary hover:text-text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
               <SkipForward size={20} fill="currentColor" />
             </button>
 
             {!radioFmActive && <button onClick={toggleRepeat}
+              aria-label={repeat === 'one' ? 'Repeat one track' : 'Repeat'} aria-pressed={repeat !== 'none'}
               className={`transition-colors ${repeat !== 'none' ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}>
               {repeat === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
             </button>}
@@ -2926,6 +2994,11 @@ export default function Player(): JSX.Element {
                 onMouseUp={radioFmActive ? undefined : handleSeekCommit}
                 onTouchEnd={radioFmActive ? undefined : handleSeekCommit}
                 onKeyUp={radioFmActive ? undefined : handleSeekCommit}
+                onPointerEnter={(e) => handlePlayerLens(e, 0.35, 'seek')}
+                onPointerMove={(e) => handlePlayerLens(e, e.buttons ? 1 : 0.35, 'seek')}
+                onPointerDown={(e) => handlePlayerLens(e, 1, 'seek')}
+                onPointerUp={(e) => handlePlayerLens(e, 0.35, 'seek')}
+                onPointerLeave={(e) => handlePlayerLens(e, 0, 'seek')}
                 disabled={!currentTrack}
               />
               <span className={`player-loading player-loading--range ${audioLoading ? 'on' : ''}`} />
@@ -2937,7 +3010,8 @@ export default function Player(): JSX.Element {
         </div>
 
         {/* Right: equalizer + queue + NP + volume */}
-        <div className="flex items-center gap-3 w-72 justify-end">
+        <div className="flex items-center gap-3 w-64 justify-end">
+          <div className="player-secondary-controls flex items-center gap-3 pr-3 border-r border-[var(--border)]">
           {/* Equalizer (EQ, balance, mono, skip silence, playback speed).
               Stays visible during FM — the effects chain applies to the live
               stream too; only the speed row hides inside the panel. */}
@@ -2966,32 +3040,31 @@ export default function Player(): JSX.Element {
             title="Now Playing">
             <Maximize2 size={16} />
           </button>}
-
-          {/* Desktop only: pop the compact always-on-top mini player window. */}
-          {(window as any).electron?.openFloatWindow && (
-            <button
-              onClick={() => (window as any).electron.openFloatWindow('mini-player')}
-              className="text-text-secondary hover:text-text-primary transition-colors"
-              title="Pop out mini player"
-            >
-              <PictureInPicture2 size={16} />
-            </button>
-          )}
+          </div>
 
           {/* Volume: mute + slider + output picker */}
           <div className="flex items-center gap-1.5">
-            <button onClick={toggleMute} className="text-text-secondary hover:text-text-primary transition-colors" title="Mute">
+            <button onClick={toggleMute} className="text-text-secondary hover:text-text-primary transition-colors" title={isMuted ? 'Unmute' : 'Mute'} aria-label={isMuted ? 'Unmute' : 'Mute'} aria-pressed={isMuted}>
               {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
 
             <div className="relative w-20 progress-track flex items-center group/vol">
               <span
-                className="absolute -top-8 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-surface-highest border border-[var(--border)] text-text-primary text-sm font-semibold tabular-nums opacity-0 group-hover/vol:opacity-100 transition-opacity pointer-events-none"
+                className="absolute -top-8 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg glass-thick glass-specular text-text-primary text-sm font-semibold tabular-nums opacity-0 group-hover/vol:opacity-100 transition-opacity pointer-events-none"
               >
                 {Math.round(volume * 100)}%
               </span>
               <input type="range" min={0} max={1} step={0.01} value={volume}
-                onChange={handleVolumeChange} className="w-full block"
+                data-glass-slider="volume"
+                aria-label="Volume"
+                aria-valuetext={`${Math.round(volume * 100)}%`}
+                onChange={handleVolumeChange}
+                onPointerEnter={(e) => handlePlayerLens(e, 0.35, 'volume')}
+                onPointerMove={(e) => handlePlayerLens(e, e.buttons ? 1 : 0.35, 'volume')}
+                onPointerDown={(e) => handlePlayerLens(e, 1, 'volume')}
+                onPointerUp={(e) => handlePlayerLens(e, 0.35, 'volume')}
+                onPointerLeave={(e) => handlePlayerLens(e, 0, 'volume')}
+                className="w-full block"
                 style={{ '--val': `${volume * 100}%` } as React.CSSProperties} />
             </div>
 

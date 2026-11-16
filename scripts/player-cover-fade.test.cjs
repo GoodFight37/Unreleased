@@ -40,7 +40,12 @@ function mount(src, cached = new Set()) {
   const jsx = (type, props, key) => ({ type, props, key })
   vm.runInNewContext(compiled, {
     module, exports: module.exports,
-    require: name => name === 'react' ? react : name === 'react/jsx-runtime' ? { jsx, jsxs: jsx } : require(name),
+    require: name => name === 'react' ? react
+      : name === 'react/jsx-runtime' ? { jsx, jsxs: jsx }
+      : name === '../lib/effectsPreference' ? require('../src/renderer/src/lib/effectsPreference.ts')
+      : name === '../lib/juicewrldApi' ? { smallCoverUrl: s => s }
+      : name === './ProgressiveCover' ? { FallbackImg: 'img' }
+      : require(name),
   })
   const render = (next = src) => {
     src = next
@@ -51,9 +56,9 @@ function mount(src, cached = new Set()) {
       cursor = 0
       tree = module.exports.CoverFade({ src })
       if (dirty) continue
-      tree.props.ref.current = { querySelectorAll: () => tree.props.children.map(img => ({
-        complete: cached.has(img.props.src), naturalWidth: cached.has(img.props.src) ? 100 : 0,
-        getAttribute: () => img.props.src,
+      tree.props.ref.current = { querySelectorAll: () => tree.props.children.map(span => ({
+        dataset: { cover: span.props['data-cover'] },
+        querySelector: () => ({ complete: cached.has(span.props['data-cover']), naturalWidth: cached.has(span.props['data-cover']) ? 100 : 0 }),
       })) }
       const pending = [...effects.values()]
       effects.clear()
@@ -63,7 +68,9 @@ function mount(src, cached = new Set()) {
   render()
   return {
     render,
-    images: () => tree.props.children,
+    images: () => tree.props.children.map(span => ({
+      props: { ...span.props.children.props, src: span.props['data-cover'], onTransitionEnd: span.props.onTransitionEnd },
+    })),
     writes: () => writes,
     event(img, name) { img.props[name](); render() },
   }

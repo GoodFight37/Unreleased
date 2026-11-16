@@ -43,7 +43,7 @@ export const CATALOG_COMMANDS: TermCommand[] = [
         ctx.print(`updated era #${e.id} ${e.name}`, 'ok')
       } else if (sub === 'rm') {
         const id = idArg(rest[0], 'era rm <id>')
-        if (!confirmAction(ctx, `Delete era #${id}? Songs in it lose their era.`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Delete era #${id}? Songs in it lose their era.`, bool.has('y')))) return
         await adminDeleteEra(id)
         ctx.print(`deleted era #${id}`, 'ok')
       } else fail('usage: era [ls | new | edit | rm]')
@@ -94,7 +94,7 @@ export const CATALOG_COMMANDS: TermCommand[] = [
         ctx.print(`updated album #${a.id} ${a.title}`, 'ok')
       } else if (sub === 'rm') {
         const id = idArg(rest[0], 'album rm <id>')
-        if (!confirmAction(ctx, `Delete album #${id}?`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Delete album #${id}?`, bool.has('y')))) return
         await adminDeleteAlbum(id)
         ctx.print(`deleted album #${id}`, 'ok')
       } else fail('usage: album [ls | show | artists | new | edit | rm]')
@@ -126,7 +126,7 @@ export const CATALOG_COMMANDS: TermCommand[] = [
         ctx.print(`updated channel #${c.id} (${c.slug})`, 'ok')
       } else if (sub === 'rm') {
         const id = idArg(rest[0], 'channels rm <id>')
-        if (!confirmAction(ctx, `Deactivate channel #${id}?`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Deactivate channel #${id}?`, bool.has('y')))) return
         await adminDeactivateChannel(id)
         ctx.print(`channel #${id} deactivated`, 'ok')
       } else if (sub === 'members') {

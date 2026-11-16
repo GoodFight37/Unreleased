@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, shell, dialog, Menu, Tray, ipcMain, nativeImage, protocol, net, globalShortcut, screen, clipboard, session, powerMonitor, desktopCapturer } = require('electron')
+﻿const { app, BrowserWindow, shell, dialog, Menu, Tray, ipcMain: rawIpcMain, nativeImage, protocol, net, globalShortcut, screen, clipboard, session, powerMonitor, desktopCapturer } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { loadOfflineLibraryFile, updateOfflineLibraryFile } = require('./offlineLibrary')
 const { spawn } = require('child_process')
@@ -11,11 +11,12 @@ const discordRpc = require('./discordRpc')
 const { configureRuntime } = require('./platform')
 const { registerPasskeyIpc } = require('./passkey')
 const { createDiscordBrowserLogin } = require('./discordLogin')
-const { canRequestMicrophone, canCaptureSystemAudio, canUseFileSystem } = require('./microphonePermission')
+const { isAppMainFrame, canRequestMicrophone, canCaptureSystemAudio, canUseFileSystem } = require('./microphonePermission')
 const { createLaunchGate } = require('./launchUpdate')
 const { resolveTypedPath } = require('./localPaths')
 const { isAlacContainerExt } = require('./alac')
 const { createAlacPlayback, liveBody } = require('./alacPlayback')
+const { createShareVideoManager } = require('./shareVideo')
 
 // One playback cache for the process. A plain play uses ffmpeg if it is
 // already installed; prepare-playback downloads it the first time a file
@@ -39,7 +40,40 @@ function alacPlayback() {
 const webStreamFromNode = (stream) => Readable.toWeb(stream)
 
 const isSmokeTest = process.argv.includes('--smoke-test')
-const isDev = (!app.isPackaged || process.env.NODE_ENV === 'development') && !isSmokeTest
+const isVerifyDist = process.argv.includes('--load-dist')
+const isUiVerify = process.argv.includes('--ui-verify')
+const isDev = !app.isPackaged && !isSmokeTest && !isVerifyDist && !isUiVerify
+const winPowerShellPath = () => path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+
+if (isUiVerify && process.env.UNRELEASED_UI_VERIFY_DIR) {
+  app.setPath('userData', process.env.UNRELEASED_UI_VERIFY_DIR)
+} else if (app.isPackaged) {
+  // Packaged fork builds use their own userData directory and single-instance
+  // lock, copying initial user settings/library from the official install once
+  // (read-only on the official directory). Dev mode continues sharing.
+  const officialUserData = app.getPath('userData')
+  const forkUserData = path.join(app.getPath('appData'), 'unreleased-glass')
+  try {
+    const migratedMarker = path.join(forkUserData, '.migrated-from-official')
+    if (!fs.existsSync(migratedMarker)) {
+      fs.mkdirSync(forkUserData, { recursive: true })
+      for (const file of ['app-settings.json', 'library-data.json', 'local-playlists.json', 'offline-library.json']) {
+        const src = path.join(officialUserData, file)
+        const dst = path.join(forkUserData, file)
+        if (fs.existsSync(src) && !fs.existsSync(dst)) {
+          try { fs.copyFileSync(src, dst) } catch {}
+        }
+      }
+      const srcCovers = path.join(officialUserData, 'offline-covers')
+      const dstCovers = path.join(forkUserData, 'offline-covers')
+      if (fs.existsSync(srcCovers) && !fs.existsSync(dstCovers)) {
+        try { fs.cpSync(srcCovers, dstCovers, { recursive: true }) } catch {}
+      }
+      try { fs.writeFileSync(migratedMarker, new Date().toISOString(), 'utf-8') } catch {}
+    }
+    app.setPath('userData', forkUserData)
+  } catch {}
+}
 
 // Must run before ready: Chromium reads Ozone/GPU switches while booting.
 // Explicit --ozone-platform flags are preserved; see platform.js.
@@ -51,7 +85,12 @@ const runtimePlatform = configureRuntime(app)
 // and pinning. Sharing it let a stray dev run poison the shell's cached icon
 // for the real installed app (dev's raw node_modules/electron/dist/electron.exe
 // showing up in place of the installed Unreleased.exe).
-if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'Unreleased' : 'Unreleased.Dev')
+if (process.platform === 'win32') {
+  // electron-builder removes the build field from packaged package.json.
+  // Keep this in sync with build.appId; notificationIdentity.test.js checks it.
+  const appId = 'com.goodfight37.unreleased.glasslab'
+  app.setAppUserModelId(app.isPackaged ? appId : (isUiVerify ? `${appId}.UiVerify` : `${appId}.Dev`))
+}
 Menu.setApplicationMenu(null)
 
 // Only one instance may run at a time — launching a second copy (e.g. double-
@@ -78,7 +117,7 @@ protocol.registerSchemesAsPrivileged([
 // ── Settings persistence ──────────────────────────────────────────────────────
 const settingsPath = path.join(app.getPath('userData'), 'app-settings.json')
 let appSettings = {
-  downloadPath: app.getPath('downloads'),
+  downloadPath: (() => { try { return app.getPath('downloads') } catch { return path.join(app.getPath('userData'), 'downloads') } })(),
   autoDownload: true,
   minimizeToTray: false,
   // 'taskbar' | 'tray' — where minimizing sends the window. 'tray' hides it to
@@ -115,22 +154,42 @@ let appSettings = {
   // confirmation dialog isn't repeated on every Listen. Cancel is never stored.
   recognitionMicGranted: false,
 }
+function writeJsonAtomic(filePath, data, pretty = false) {
+  const tmp = `${filePath}.${process.pid}.tmp`
+  const json = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data)
+  fs.writeFileSync(tmp, json, 'utf-8')
+  try {
+    fs.renameSync(tmp, filePath)
+  } catch (err) {
+    try { fs.unlinkSync(tmp) } catch {}
+    throw err
+  }
+}
+
+function readJsonWithBackup(filePath, fallback, onCorrupt) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+  } catch (e) {
+    if (e && e.code !== 'ENOENT') {
+      try { fs.copyFileSync(filePath, `${filePath}.bak`) } catch {}
+      onCorrupt?.(e)
+    }
+    return fallback
+  }
+}
+
+/** @type {any} */
 let settingsLoadError = null
-try {
-  const saved = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
-  appSettings = { ...appSettings, ...saved }
-} catch (e) {
-  // ENOENT on first run is normal and not worth logging; anything else means
-  // app-settings.json exists but is unreadable/corrupt, silently reverting to
-  // defaults — worth a trail once runLog exists (defined further down).
-  if (e && e.code !== 'ENOENT') settingsLoadError = e
+const savedSettings = readJsonWithBackup(settingsPath, null, (e) => { settingsLoadError = e })
+if (savedSettings && typeof savedSettings === 'object' && !Array.isArray(savedSettings)) {
+  appSettings = { ...appSettings, ...savedSettings }
 }
 // Migrate the removed 'notification' minimize mode (an always-pin-the-tray-icon
 // experiment that Windows wouldn't reliably honor) down to plain 'tray'.
 if (appSettings.minimizeTo === 'notification') appSettings.minimizeTo = 'tray'
 
 function saveSettings() {
-  try { fs.writeFileSync(settingsPath, JSON.stringify(appSettings, null, 2)) } catch {}
+  try { writeJsonAtomic(settingsPath, appSettings, true) } catch {}
 }
 
 // ── Logging ───────────────────────────────────────────────────────────────────
@@ -188,11 +247,12 @@ function handOffToRunningUpdateInstall() {
     return false
   }
   log(`Launched while the ${marker.version} installer is running (pid ${pids.join(',')}); relaunching when it finishes`)
-  const exe = process.execPath.replace(/'/g, "''")
+  const safePids = pids.filter(p => /^\d+$/.test(p))
+  if (!safePids.length) return false
   try {
-    spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command',
-      `Wait-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue; Start-Process -FilePath '${exe}'`],
-      { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+    spawn(winPowerShellPath(), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command',
+      `Wait-Process -Id ${safePids.join(',')} -ErrorAction SilentlyContinue; Start-Process -FilePath $env:UNRELEASED_RELAUNCH_EXE`],
+      { detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, UNRELEASED_RELAUNCH_EXE: process.execPath } }).unref()
   } catch (e) {
     log('Relaunch watcher failed:', e.message)
   }
@@ -212,6 +272,7 @@ if (gotSingleInstanceLock && app.isPackaged && process.platform === 'win32' && h
 // tracker's "sort by name" full-library load leaves a trail too.
 const runLogPath = path.join(app.getPath('userData'), 'current-run.log')
 const prevRunLogPath = path.join(app.getPath('userData'), 'previous-run.log')
+let runLogBytes = 0
 try {
   if (fs.existsSync(runLogPath)) fs.renameSync(runLogPath, prevRunLogPath)
 } catch {}
@@ -221,7 +282,16 @@ function runLog(scope, ...args) {
     .map((a) => (typeof a === 'string' ? a : (() => { try { return JSON.stringify(a) } catch { return String(a) } })()))
     .join(' ')
   const line = `[${new Date().toISOString()}] [${scope}] ${msg}\n`
-  try { fs.appendFileSync(runLogPath, line) } catch {}
+  const bytes = Buffer.byteLength(line)
+  try {
+    if (runLogBytes + bytes > MAX_LOG_BYTES) {
+      fs.writeFileSync(runLogPath, line)
+      runLogBytes = bytes
+    } else {
+      fs.appendFileSync(runLogPath, line)
+      runLogBytes += bytes
+    }
+  } catch {}
   if (isDev) console.log(`[${scope}]`, ...args)
 }
 
@@ -270,11 +340,27 @@ function downloadFile(url, dest, onProgress, headers, signal) {
     }
     const ok = settle(resolve)
     const ko = settle(reject)
-    function doGet(u, extra) {
-      const opts = new URL(u)
-      req = https.get({ hostname: opts.hostname, path: opts.pathname + opts.search, headers: { 'User-Agent': 'Unreleased-App', ...extra } }, (res) => {
+    const enforceLibraryHost = isAllowedLibraryDownloadHost(url)
+    function doGet(u, extra, redirects = 5) {
+      let opts
+      try { opts = new URL(u) } catch (e) { return ko(e) }
+      if (opts.protocol !== 'https:') return ko(new Error('Unsupported protocol'))
+      if (enforceLibraryHost && !isAllowedLibraryDownloadHost(u)) return ko(new Error('Download blocked: untrusted redirect host'))
+      req = https.get({
+        hostname: opts.hostname,
+        port: opts.port || undefined,
+        path: opts.pathname + opts.search,
+        timeout: 30000,
+        headers: { 'User-Agent': 'Unreleased-App', ...extra },
+      }, (res) => {
         // Location may be relative.
-        if (res.statusCode === 302 || res.statusCode === 301) { res.resume(); return doGet(new URL(res.headers.location || '', u).href, null) }
+        if ((res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307 || res.statusCode === 308) && res.headers.location) {
+          res.resume()
+          if (redirects <= 0) return ko(new Error('Too many redirects'))
+          let nextUrl
+          try { nextUrl = new URL(res.headers.location, u).href } catch (e) { return ko(e) }
+          return doGet(nextUrl, null, redirects - 1)
+        }
         if (res.statusCode !== 200) { res.resume(); return ko(new Error(`HTTP ${res.statusCode}`)) }
         const total = parseInt(res.headers['content-length'] || '0', 10)
         let received = 0
@@ -299,16 +385,20 @@ function downloadFile(url, dest, onProgress, headers, signal) {
         // An abort mid-body may surface on the request alone.
         req.on('error', fail)
       })
+      req.on('timeout', () => req.destroy(new Error('Download timed out')))
       req.on('error', ko)
     }
-    doGet(url, headers)
+    doGet(url, headers, 5)
   })
 }
 
+// Fork builds must never install upstream releases, including beta and manual paths.
+const FORK_UPDATES_DISABLED = true
+
 // ── Auto-updater setup ────────────────────────────────────────────────────────
 autoUpdater.logger = { info: log, warn: log, error: log, debug: () => {} }
-autoUpdater.autoDownload = appSettings.autoDownload
-autoUpdater.autoInstallOnAppQuit = true
+autoUpdater.autoDownload = !FORK_UPDATES_DISABLED && appSettings.autoDownload
+autoUpdater.autoInstallOnAppQuit = !FORK_UPDATES_DISABLED
 
 // Startup-only checking meant a user who left the app running (or asleep on a
 // laptop) for days never saw an update until their next full relaunch. These
@@ -323,7 +413,7 @@ let pendingUpdate = null
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
 async function runUpdateCheck(reason) {
-  if (isDev || updateCheckInProgress || updateDownloadedPending) return
+  if (FORK_UPDATES_DISABLED || isDev || updateCheckInProgress || updateDownloadedPending) return
   log(`Checking for updates (${reason})...`)
   updateCheckInProgress = true
   try {
@@ -363,6 +453,7 @@ const UPDATE_REPO = { owner: 'Juice-WRLD-API', repo: 'Unreleased' }
 let activeBetaCode = null
 function applyUpdateFeed(code) {
   activeBetaCode = code || null
+  if (FORK_UPDATES_DISABLED) return
   const { owner, repo } = UPDATE_REPO
   autoUpdater.setFeedURL({ provider: 'github', owner, repo })
   autoUpdater.requestHeaders = null
@@ -828,6 +919,7 @@ function createFloatWindow(view, params) {
     backgroundColor: '#0a0a0a', icon: iconPath, frame: false,
     webPreferences: {
       nodeIntegration: false, contextIsolation: true, webSecurity: true, preload: preloadPath,
+      ...(isUiVerify ? { backgroundThrottling: false } : {}),
     },
     show: false,
   })
@@ -1039,6 +1131,32 @@ function createTray() {
   }
 }
 
+function isTrustedIpcSender(event) {
+  if (!event || !event.sender) return false
+  const frame = event.senderFrame
+  if (frame && event.sender.mainFrame && frame.routingId !== event.sender.mainFrame.routingId) return false
+  const rawUrl = frame?.url || event.sender.getURL?.() || ''
+  if (!rawUrl) return true
+  try {
+    const u = new URL(rawUrl)
+    return isDev ? u.origin === 'http://localhost:3018' : u.protocol === 'file:' && u.host === ''
+  } catch {
+    return false
+  }
+}
+const ipcMain = /** @type {import('electron').IpcMain} */ (/** @type {unknown} */ ({
+  handle: (channel, listener) => rawIpcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedIpcSender(event)) throw new Error(`Untrusted IPC sender for ${channel}`)
+    return listener(event, ...args)
+  }),
+  on: (channel, listener) => rawIpcMain.on(channel, (event, ...args) => {
+    if (!isTrustedIpcSender(event)) return
+    return listener(event, ...args)
+  }),
+  removeHandler: (channel) => rawIpcMain.removeHandler(channel),
+  removeAllListeners: (channel) => rawIpcMain.removeAllListeners(channel),
+}))
+
 ipcMain.on('tray-playback-state', (_, state) => {
   if (!state || typeof state !== 'object') return
   trayPlayback = {
@@ -1090,10 +1208,21 @@ function safeOpenExternal(url) {
 // not this one's.
 // Compared parsed, not by prefix: "file://" also matched file://host/share
 // paths, and "http://localhost:3018" matched http://localhost:3018.evil.test.
+const ALLOWED_FILE_PATHNAMES = new Set([
+  new URL(pathToFileURL(path.join(__dirname, '../dist/index.html')).href).pathname,
+  new URL(pathToFileURL(path.join(__dirname, 'updating/updating.html')).href).pathname,
+  new URL(pathToFileURL(path.join(__dirname, '../dist/desktop/host.html')).href).pathname,
+  new URL(pathToFileURL(path.join(__dirname, '../dist/desktop/player.html')).href).pathname,
+  new URL(pathToFileURL(path.join(__dirname, '../dist/desktop/playlist.html')).href).pathname,
+  new URL(pathToFileURL(path.join(__dirname, '../dist/desktop/clock.html')).href).pathname,
+  new URL(pathToFileURL(path.join(__dirname, '../dist/desktop/light.html')).href).pathname,
+  new URL(pathToFileURL(path.join(__dirname, '../dist/desktop/curtain.html')).href).pathname,
+])
 function isAppNavigation(url) {
   try {
     const u = new URL(url)
-    return isDev ? u.origin === 'http://localhost:3018' : u.protocol === 'file:' && u.host === ''
+    if (isDev) return u.origin === 'http://localhost:3018'
+    return u.protocol === 'file:' && u.host === '' && ALLOWED_FILE_PATHNAMES.has(u.pathname)
   } catch {
     return false
   }
@@ -1150,6 +1279,7 @@ function createWindow() {
     backgroundColor: '#0a0a0a', icon: iconPath, frame: false,
     webPreferences: {
       nodeIntegration: false, contextIsolation: true, webSecurity: true, preload: preloadPath,
+      ...(isUiVerify ? { backgroundThrottling: false } : {}),
     },
     show: false,
   })
@@ -1195,7 +1325,8 @@ function createWindow() {
     // Maximize before showing so the window doesn't visibly snap open at its
     // restored size first.
     if (appSettings.rememberWindowSizes && appSettings.windowSizes?.main?.maximized) mainWindow.maximize()
-    mainWindow.show()
+    if (isUiVerify) mainWindow.showInactive()
+    else mainWindow.show()
     updateMainWindowTitle()
   })
 
@@ -1290,7 +1421,7 @@ function createWindow() {
     const win = mainWindow
     devStorageSeedReady.then(() => { if (!win.isDestroyed()) win.loadURL('http://localhost:3018') })
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), isUiVerify ? { query: { uiVerify: '1' } } : undefined)
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1365,6 +1496,7 @@ function trackDownload(_event, item) {
 // ── IPC: window controls ──────────────────────────────────────────────────────
 
 ipcMain.handle('force-update', async () => {
+  if (FORK_UPDATES_DISABLED) throw new Error('Updates are disabled in this fork build')
   const https = require('https')
   log('Force update requested')
 
@@ -1455,6 +1587,7 @@ ipcMain.handle('force-update', async () => {
 })
 
 ipcMain.handle('check-for-updates', async () => {
+  if (FORK_UPDATES_DISABLED) throw new Error('Updates are disabled in this fork build')
   log('Manual update check triggered')
   if (await checkBetaUpdate()) return
   if (process.platform === 'darwin') {
@@ -1468,6 +1601,7 @@ ipcMain.handle('check-for-updates', async () => {
   return autoUpdater.checkForUpdatesAndNotify()
 })
 ipcMain.handle('install-update', () => {
+  if (FORK_UPDATES_DISABLED) throw new Error('Updates are disabled in this fork build')
   log('Manual install-update triggered')
   installUpdateAndRestart()
 })
@@ -1909,9 +2043,14 @@ const EXECUTABLE_EXTENSIONS = new Set([
   '.exe', '.bat', '.cmd', '.com', '.msi', '.msp', '.ps1', '.psm1', '.vbs', '.vbe',
   '.js', '.jse', '.wsf', '.wsh', '.scr', '.jar', '.lnk', '.reg', '.sh', '.bash',
   '.command', '.app', '.appimage', '.deb', '.rpm', '.apk', '.dmg', '.pkg', '.gadget',
+  '.hta', '.cpl', '.msc', '.chm', '.inf', '.ins', '.isp', '.pif', '.sct', '.shb',
+  '.sys', '.vb', '.vxd', '.wsc', '.ps1xml', '.ps2', '.ps2xml', '.psc1', '.psc2',
+  '.msh', '.msh1', '.msh2', '.mshxml', '.py', '.pyw', '.rb', '.pl',
 ])
 ipcMain.handle('open-path', (_, p) => {
-  if (EXECUTABLE_EXTENSIONS.has(path.extname(String(p)).toLowerCase())) {
+  if (typeof p !== 'string' || !p.trim()) return 'Refused: invalid path'
+  const ext = path.extname(p.trim().replace(/[.\s]+$/, '')).toLowerCase()
+  if (EXECUTABLE_EXTENSIONS.has(ext)) {
     return 'Refused: this file type is not opened directly'
   }
   return shell.openPath(p)
@@ -1931,6 +2070,7 @@ ipcMain.handle('show-item-in-folder', (_, p) => {
 // macOS/Linux have no bundled repair stub (nothing analogous to the NSIS
 // installer), so they always fall back to the releases page.
 ipcMain.handle('open-online-installer', async () => {
+  if (FORK_UPDATES_DISABLED) throw new Error('The upstream installer is disabled in this fork build')
   const { owner, repo } = UPDATE_REPO
   if (process.platform === 'win32') {
     const bundled = app.isPackaged ? path.join(process.resourcesPath, 'Unreleased-Setup.exe') : null
@@ -1975,13 +2115,28 @@ ipcMain.handle('clear-image-cache', async () => {
 // ── IPC: app settings ─────────────────────────────────────────────────────────
 ipcMain.handle('get-app-settings', () => appSettings)
 
+const ALLOWED_SETTING_KEYS = new Set([
+  'downloadPath',
+  'autoDownload',
+  'minimizeToTray',
+  'minimizeTo',
+  'startupView',
+  'discordRpcEnabled',
+  'discordRpcLabel',
+  'miniPlayerHidesWindows',
+  'confirmCloseWhilePlaying',
+  'windowTitleNowPlaying',
+  'rememberWindowSizes',
+])
+
 ipcMain.handle('set-app-setting', (_, key, value) => {
+  if (typeof key !== 'string' || !ALLOWED_SETTING_KEYS.has(key)) return false
   appSettings[key] = value
   // Turning the option off drops what was recorded, so windows go straight back
   // to their built-in default sizes instead of silently keeping the old ones.
   if (key === 'rememberWindowSizes' && !value) appSettings.windowSizes = {}
   saveSettings()
-  if (key === 'autoDownload') autoUpdater.autoDownload = value
+  if (key === 'autoDownload') autoUpdater.autoDownload = !FORK_UPDATES_DISABLED && value
   if (key === 'discordRpcEnabled') discordRpc.setEnabled(value)
   if (key === 'discordRpcLabel') discordRpc.refreshLabel(value)
   if (key === 'windowTitleNowPlaying') updateMainWindowTitle()
@@ -2015,6 +2170,7 @@ function checkBetaCode(code) {
 ipcMain.handle('beta-get-status', () => !!readBetaCode())
 
 ipcMain.handle('beta-join', async (_, code) => {
+  if (FORK_UPDATES_DISABLED) return 'unavailable'
   const trimmed = String(code ?? '').trim()
   if (!trimmed) return false
   try {
@@ -2076,7 +2232,7 @@ ipcMain.handle('beta-leave', () => {
   try { fs.rmSync(betaMarkerPath, { force: true }) } catch {}
   applyUpdateFeed(null)
   log('Left beta channel')
-  if (!isDev && process.platform === 'win32' && app.getVersion().includes('-')) installLatestStable()
+  if (!FORK_UPDATES_DISABLED && !isDev && process.platform === 'win32' && app.getVersion().includes('-')) installLatestStable()
   return true
 })
 
@@ -2100,16 +2256,18 @@ const libraryDataPath = path.join(app.getPath('userData'), 'library-data.json')
 const localPlaylistsPath = path.join(app.getPath('userData'), 'local-playlists.json')
 
 function loadLibraryData() {
-  try { return JSON.parse(fs.readFileSync(libraryDataPath, 'utf-8')) } catch { return { tracks: [], folders: [], lastScanned: null } }
+  const data = readJsonWithBackup(libraryDataPath, null, (e) => log('loadLibraryData corrupt, backed up to .bak:', e.message))
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : { tracks: [], folders: [], lastScanned: null }
 }
 function saveLibraryData(data) {
-  try { fs.writeFileSync(libraryDataPath, JSON.stringify(data)) } catch(e) { log('saveLibraryData error:', e.message) }
+  try { writeJsonAtomic(libraryDataPath, data) } catch(e) { log('saveLibraryData error:', e.message) }
 }
 function loadLocalPlaylists() {
-  try { return JSON.parse(fs.readFileSync(localPlaylistsPath, 'utf-8')) } catch { return [] }
+  const data = readJsonWithBackup(localPlaylistsPath, null, (e) => log('loadLocalPlaylists corrupt, backed up to .bak:', e.message))
+  return Array.isArray(data) ? data : []
 }
 function saveLocalPlaylists(playlists) {
-  try { fs.writeFileSync(localPlaylistsPath, JSON.stringify(playlists)) } catch(e) { log('saveLocalPlaylists error:', e.message) }
+  try { writeJsonAtomic(localPlaylistsPath, playlists) } catch(e) { log('saveLocalPlaylists error:', e.message) }
 }
 
 ipcMain.handle('load-library-data', () => loadLibraryData())
@@ -2387,13 +2545,12 @@ async function copyFileToClipboard(filePath) {
   if (typeof filePath !== 'string' || !filePath) return { error: 'No file path' }
   if (!fs.existsSync(filePath)) return { error: 'File not found' }
   const { execFile } = require('child_process')
-  const run = (cmd, args) => new Promise((resolve) => {
-    execFile(cmd, args, { windowsHide: true }, (err) => resolve(err ? { error: err.message } : { ok: true }))
+  const run = (cmd, args, extraEnv) => new Promise((resolve) => {
+    execFile(cmd, args, { windowsHide: true, env: extraEnv ? { ...process.env, ...extraEnv } : process.env }, (err) => resolve(err ? { error: err.message } : { ok: true }))
   })
   if (process.platform === 'win32') {
-    // Single-quoted PowerShell literal — the only escape needed is doubling '.
-    return run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-      `Set-Clipboard -LiteralPath '${filePath.replace(/'/g, "''")}'`])
+    return run(winPowerShellPath(), ['-NoProfile', '-NonInteractive', '-Command',
+      'Set-Clipboard -LiteralPath $env:UNRELEASED_CLIP_PATH'], { UNRELEASED_CLIP_PATH: filePath })
   }
   if (process.platform === 'darwin') {
     const esc = filePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
@@ -2447,15 +2604,21 @@ ipcMain.handle('save-image-file', async (event, payload) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow
   const safeName = String(defaultName || 'cover.jpg').replace(/[/\\:*?"<>|]/g, '_').trim() || 'cover.jpg'
   const ext = path.extname(safeName).slice(1).toLowerCase() || 'jpg'
-  const result = await dialog.showSaveDialog(win, {
-    title: 'Save cover art',
-    defaultPath: path.join(appSettings.downloadPath, safeName),
-    filters: [{ name: 'Image', extensions: [ext] }, { name: 'All files', extensions: ['*'] }],
-  })
-  if (result.canceled || !result.filePath) return { canceled: true }
+  let targetPath
+  if (isUiVerify) {
+    targetPath = path.join(app.getPath('userData'), safeName)
+  } else {
+    const result = await dialog.showSaveDialog(win, {
+      title: 'Save cover art',
+      defaultPath: path.join(appSettings.downloadPath, safeName),
+      filters: [{ name: 'Image', extensions: [ext] }, { name: 'All files', extensions: ['*'] }],
+    })
+    if (result.canceled || !result.filePath) return { canceled: true }
+    targetPath = result.filePath
+  }
   try {
-    fs.writeFileSync(result.filePath, Buffer.from(base64, 'base64'))
-    return { ok: true, path: result.filePath }
+    fs.writeFileSync(targetPath, Buffer.from(base64, 'base64'))
+    return { ok: true, path: targetPath }
   } catch (e) {
     return { error: e.message }
   }
@@ -2488,8 +2651,16 @@ function fetchImageBuffer(url) {
   return new Promise((resolve, reject) => {
     const MAX_BYTES = 20 * 1024 * 1024 // guard against a non-image response
     function doGet(u, redirects) {
-      const opts = new URL(u)
-      https.get({ hostname: opts.hostname, path: opts.pathname + opts.search, headers: { 'User-Agent': 'Unreleased-App' } }, (res) => {
+      let opts
+      try { opts = new URL(u) } catch (e) { return reject(e) }
+      if (opts.protocol !== 'https:') return reject(new Error('Unsupported protocol'))
+      const req = https.get({
+        hostname: opts.hostname,
+        port: opts.port || undefined,
+        path: opts.pathname + opts.search,
+        timeout: 15000,
+        headers: { 'User-Agent': 'Unreleased-App' },
+      }, (res) => {
         if ((res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) && res.headers.location) {
           res.resume()
           if (redirects <= 0) return reject(new Error('Too many redirects'))
@@ -2505,7 +2676,9 @@ function fetchImageBuffer(url) {
         })
         res.on('end', () => resolve(Buffer.concat(chunks)))
         res.on('error', reject)
-      }).on('error', reject)
+      })
+      req.on('timeout', () => req.destroy(new Error('Image request timed out')))
+      req.on('error', reject)
     }
     doGet(url, 5)
   })
@@ -3122,7 +3295,8 @@ ipcMain.handle('write-track-metadata', async (_, filePath, metadata) => {
     // is distinct from the key being absent ("leave the cover alone").
     const clearImage = metadata.albumArtBase64 !== undefined && !metadata.albumArtBase64
 
-    const result = NodeID3.update(tags, filePath)
+    /** @type {boolean | Buffer | Error} */
+    const result = /** @type {boolean | Buffer | Error} */ (NodeID3.update(tags, filePath))
     // writeSync returns true on success and the fs Error on failure (false only
     // comes from older paths) — treat anything that isn't success as an error,
     // otherwise a failed write is reported back as a save.
@@ -3137,14 +3311,14 @@ ipcMain.handle('write-track-metadata', async (_, filePath, metadata) => {
       // the same read/modify/write update() itself performs, so it's no more
       // lossy than an ordinary save.)
       const current = NodeID3.read(filePath)
-      const raw = (current && current.raw) || {}
+      const raw = /** @type {Record<string, any>} */ ((current && current.raw) || {})
       // APIC is the v2.3/v2.4 identifier, PIC the v2.2 one. Skip the rewrite
       // entirely when there's no cover to remove, so saving an artless file
       // doesn't rewrite its whole tag every time.
       if (raw.APIC !== undefined || raw.PIC !== undefined) {
         delete raw.APIC
         delete raw.PIC
-        const cleared = NodeID3.write(raw, filePath)
+        const cleared = /** @type {boolean | Buffer | Error} */ (NodeID3.write(raw, filePath))
         if (cleared === false) return { error: 'Failed to remove album art' }
         if (cleared instanceof Error) return { error: cleared.message }
       }
@@ -3174,9 +3348,10 @@ ipcMain.handle('download-to-library', async (_, { url, songName, artist, songPat
   try { fs.mkdirSync(libraryFolder, { recursive: true }) } catch {}
 
   // Build filename from songPath (keeps original extension)
-  const ext = path.extname(songPath || '').toLowerCase() || '.mp3'
-  const baseName = (songName || 'track').replace(/[/\\:*?"<>|]/g, '_').trim()
-  const savePath = path.join(libraryFolder, baseName + ext)
+  const rawExt = path.extname(songPath || '').toLowerCase()
+  const ext = AUDIO_EXTS.has(rawExt) ? rawExt : '.mp3'
+  const baseName = (songName || 'track').replace(/[/\\:*?"<>|]/g, '_').trim() || 'track'
+  const savePath = uniqueDestPath(libraryFolder, baseName + ext)
 
   // Download
   try {
@@ -3338,7 +3513,7 @@ function downloadedToolPath(tool) {
 
 function devFfmpegPath() {
   let p
-  try { p = require('ffmpeg-static') } catch { return null }
+  try { p = /** @type {string | null} */ (/** @type {unknown} */ (require('ffmpeg-static'))) } catch { return null }
   if (!p) return null
   if (app.isPackaged) p = p.replace('app.asar', 'app.asar.unpacked')
   return fs.existsSync(p) ? p : null
@@ -3401,13 +3576,20 @@ function downloadTool(tool, onProgress) {
         try { fs.unlinkSync(gzPath) } catch {}
       }
     } else {
-      await downloadAnyUrl(spec.url(), dest, onProgress, 0, false, true)
+      const part = dest + '.part'
+      await downloadAnyUrl(spec.url(), part, onProgress, 0, false, true)
       const expected = await fetchYtDlpChecksum(spec.checksumFileName())
-      if (!expected) { try { fs.unlinkSync(dest) } catch {}; throw new Error('Could not fetch yt-dlp release checksum — refusing to trust an unverified binary') }
-      const actual = await sha256File(dest)
+      if (!expected) { try { fs.unlinkSync(part) } catch {}; throw new Error('Could not fetch yt-dlp release checksum — refusing to trust an unverified binary') }
+      const actual = await sha256File(part)
       if (actual !== expected) {
-        try { fs.unlinkSync(dest) } catch {}
+        try { fs.unlinkSync(part) } catch {}
         throw new Error(`Checksum mismatch for ${tool} — downloaded file discarded`)
+      }
+      try {
+        fs.renameSync(part, dest)
+      } catch (e) {
+        try { fs.unlinkSync(part) } catch {}
+        throw e
       }
     }
     if (process.platform !== 'win32') { try { fs.chmodSync(dest, 0o755) } catch {} }
@@ -3613,6 +3795,93 @@ ipcMain.handle('convert-audio', async (event, { id, filePath, format, bitrate, s
 
   if (!event.sender.isDestroyed()) event.sender.send('convert-progress', { id, percent: 100 })
   return { track: trackMeta, outPath }
+})
+
+// ── Share Studio MP4 export (deterministic renderer frames + audio excerpt) ───
+let shareVideoInstance
+function shareVideo() {
+  if (!shareVideoInstance) {
+    shareVideoInstance = createShareVideoManager({
+      getFfmpegPath: () => resolveFfmpegPath(),
+      parseDuration: async (filePath) => {
+        const mm = require('music-metadata')
+        const probe = await mm.parseFile(filePath, { duration: true, skipCovers: true })
+        return probe.format.duration || 0
+      },
+    })
+  }
+  return shareVideoInstance
+}
+
+ipcMain.handle('share-studio-capabilities', () => ({
+  ffmpeg: !!resolveFfmpegPath(),
+}))
+
+ipcMain.handle('share-video-start', async (event, payload) => {
+  const opts = payload || {}
+  if (!resolveFfmpegPath()) {
+    return { error: 'FFmpeg is not installed yet — download it to export MP4 videos.' }
+  }
+  const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow
+  const rawName = String(opts.defaultName || 'share-lyrics.mp4').replace(/[/\\:*?"<>|]/g, '_').trim() || 'share-lyrics.mp4'
+  const safeName = rawName.toLowerCase().endsWith('.mp4') ? rawName : `${rawName}.mp4`
+  let outPath
+  if (isUiVerify) {
+    outPath = path.join(app.getPath('userData'), safeName)
+  } else {
+    const res = await dialog.showSaveDialog(win, {
+      title: 'Export Share Studio Video',
+      defaultPath: path.join(appSettings.downloadPath, safeName),
+      filters: [{ name: 'MP4 Video', extensions: ['mp4'] }],
+    })
+    if (res.canceled || !res.filePath) return { canceled: true }
+    outPath = res.filePath.toLowerCase().endsWith('.mp4') ? res.filePath : `${res.filePath}.mp4`
+  }
+  try {
+    const started = await shareVideo().start({
+      width: opts.width,
+      height: opts.height,
+      fps: opts.fps,
+      durationSec: opts.durationSec,
+      startSec: opts.startSec,
+      includeAudio: opts.includeAudio !== false,
+      audioUrl: typeof opts.audioUrl === 'string' ? opts.audioUrl : null,
+      audioBytes: opts.audioBytes instanceof Uint8Array ? opts.audioBytes : null,
+      outPath,
+    })
+    return { ok: true, id: started.id, hasAudio: started.hasAudio, outPath }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
+})
+
+ipcMain.handle('share-video-frame', async (_event, payload) => {
+  const { id, frame } = payload || {}
+  if (typeof id !== 'string' || !(frame instanceof Uint8Array)) {
+    return { error: 'Invalid video frame payload' }
+  }
+  try {
+    await shareVideo().writeFrame(id, frame)
+    return { ok: true }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
+})
+
+ipcMain.handle('share-video-finish', async (_event, payload) => {
+  const { id } = payload || {}
+  if (typeof id !== 'string') return { error: 'Invalid video session id' }
+  try {
+    return await shareVideo().finish(id)
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
+})
+
+ipcMain.handle('share-video-abort', async (_event, payload) => {
+  const { id } = payload || {}
+  if (typeof id !== 'string') return { ok: true }
+  return await shareVideo().abort(id)
 })
 
 
@@ -3891,7 +4160,7 @@ ipcMain.handle('url-import', async (event, { id, url, format, bitrate }) => {
           if (code === 0) return resolve()
           const tail = stderr.split('\n').map(l => l.trim())
             .filter(l => l && !l.startsWith('[download]')).slice(-3).join(' ')
-          const err = new Error(tail || `yt-dlp exited with code ${code}`)
+          const err = /** @type {Error & { needsUpdate?: boolean }} */ (new Error(tail || `yt-dlp exited with code ${code}`))
           if (looksOutdated(stderr)) err.needsUpdate = true
           reject(err)
         })
@@ -4124,7 +4393,7 @@ function closeUpdatingWindow() {
 // Resolves when the main window may open: true when this launch checked for
 // updates itself, false when it skipped the check.
 async function updateBeforeLaunch() {
-  if (isDev || isSmokeTest || !appSettings.autoDownload) return false
+  if (FORK_UPDATES_DISABLED || isDev || isSmokeTest || !appSettings.autoDownload) return false
   // A Mac update is installed by hand from its DMG (checkMacUpdate), so don't
   // hold the launch for it: the startup check runs once the app is open.
   if (process.platform === 'darwin') return false
@@ -4176,7 +4445,7 @@ function launchApp(checkedForUpdates) {
     closeUpdatingWindow()
     releaseInstallStandIn()
   })
-  if (isSmokeTest) return
+  if (isSmokeTest || isUiVerify) return
   startDesktop()
   createTray()
   discordRpc.setOnConnected(() => {
@@ -4198,14 +4467,19 @@ function launchApp(checkedForUpdates) {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   // Deny every permission request by default. Nothing in this app needs
-  // notifications/geolocation/etc. granted to loaded web content, and
+  // geolocation/etc. granted to loaded web content, and
   // Electron's built-in default handler grants most of them — this closes
   // that gap explicitly rather than relying on the default.
-  // The exceptions are audio-only access from the main app frame:
+  // Notifications are allowed only from the trusted main app frame.
+  // Other exceptions are audio-only access from the main app frame:
   // recognition requests a microphone only on Listen, and on Windows can
   // record device audio (loopback) instead. And writing to a file the user
   // picked in a save dialog (ZIP downloads), from the app's own pages.
   const appDocumentUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href
+  const notificationAllowed = (webContents, url, isMainFrame) => isAppMainFrame({
+    url, mainUrl: mainDocumentUrl, appUrl: appDocumentUrl, isDev,
+    isMainWindow: !!mainWindow && webContents === mainWindow.webContents, isMainFrame,
+  })
   const microphoneAllowed = (webContents, url, isMainFrame, mediaTypes) => canRequestMicrophone({
     url, mainUrl: mainDocumentUrl, appUrl: appDocumentUrl, isDev,
     isMainWindow: !!mainWindow && webContents === mainWindow.webContents,
@@ -4219,6 +4493,7 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((webContents, permission, origin, details) => {
     // A denied check marks the picked file read-only, and createWritable then
     // fails without ever reaching the request handler.
+    if (permission === 'notifications') return notificationAllowed(webContents, details.requestingUrl || webContents?.getURL() || '', details.isMainFrame)
     if (permission === 'fileSystem') {
       const ok = canUseFileSystem({ origin, isDev })
       if (!ok) runLog('permissions', 'fileSystem check denied', JSON.stringify({ origin, access: details.fileAccessType }))
@@ -4236,6 +4511,7 @@ app.whenReady().then(() => {
       && microphoneAllowed(webContents, details.requestingUrl || '', details.isMainFrame, ['audio'])
   })
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (permission === 'notifications') { callback(notificationAllowed(webContents, details.requestingUrl, details.isMainFrame)); return }
     if (permission === 'fileSystem' && canUseFileSystem({ origin: details.requestingUrl, isDev })) {
       callback(true)
       return
@@ -4317,9 +4593,10 @@ app.whenReady().then(() => {
   // present at startup is abandoned. Runs before the renderer loads, so no
   // download can be mid-write yet.
   try {
-    for (const name of fs.readdirSync(getOfflineAudioDir())) {
-      if (name.endsWith('.part')) {
-        try { fs.unlinkSync(path.join(getOfflineAudioDir(), name)) } catch {}
+    const offlineAudioDir = getOfflineAudioDir()
+    for (const name of fs.readdirSync(offlineAudioDir)) {
+      if (/^[a-z0-9_-]+\.[a-z0-9]{2,5}\.part$/i.test(name)) {
+        try { fs.unlinkSync(path.join(offlineAudioDir, name)) } catch {}
       }
     }
   } catch {}
@@ -4337,7 +4614,14 @@ app.whenReady().then(() => {
   protocol.handle('local-media', async (request) => {
     try {
       const requestedPath = new URL(request.url).searchParams.get('p')
-      if (!requestedPath) return new Response('Missing path', { status: 400 })
+      if (!requestedPath || !path.isAbsolute(requestedPath)) return new Response('Missing path', { status: 400 })
+      const ALLOWED_MEDIA_EXTS = new Set([
+        '.mp3', '.flac', '.wav', '.m4a', '.ogg', '.aac', '.opus', '.wma', '.aiff', '.aif', '.caf', '.alac',
+        '.mp4', '.mov', '.webm', '.m4v', '.mkv', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp',
+      ])
+      if (!ALLOWED_MEDIA_EXTS.has(path.extname(requestedPath).toLowerCase())) {
+        return new Response('Forbidden media type', { status: 403 })
+      }
 
       // CORS header on every response, including the ALAC transcode below:
       // <audio> loads with crossOrigin="anonymous". Scoped to the app origin.
@@ -4401,7 +4685,7 @@ app.whenReady().then(() => {
           return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}`, ...corsHeaders } })
         }
         const stream = fs.createReadStream(filePath, { start, end })
-        return new Response(webStreamFromNode(stream), {
+        return new Response(/** @type {BodyInit} */ (/** @type {unknown} */ (webStreamFromNode(stream))), {
           status: 206,
           headers: {
             'Content-Type': mime,
@@ -4414,7 +4698,7 @@ app.whenReady().then(() => {
       }
 
       const stream = fs.createReadStream(filePath)
-      return new Response(webStreamFromNode(stream), {
+      return new Response(/** @type {BodyInit} */ (/** @type {unknown} */ (webStreamFromNode(stream))), {
         status: 200,
         headers: {
           'Content-Type': mime,
@@ -4491,7 +4775,7 @@ app.on('second-instance', () => {
   }
 })
 
-app.on('before-quit', () => { isQuitting = true; skipCloseConfirm = true; discordRpc.setEnabled(false); globalShortcut.unregisterAll() })
+app.on('before-quit', () => { isQuitting = true; skipCloseConfirm = true; discordRpc.setEnabled(false); globalShortcut.unregisterAll(); shareVideoInstance?.abortAll() })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
@@ -4690,6 +4974,7 @@ function recoverFromStuckInstall() {
 }
 
 async function installUpdateAndRestart() {
+  if (FORK_UPDATES_DISABLED) return
   // Startup install, the "Restart now" prompt and the renderer's install
   // button can race; a second handoff would start a second installer.
   if (installingUpdate) return

@@ -229,7 +229,7 @@ export const ACCOUNT_COMMANDS: TermCommand[] = [
       }
       if (a.username_next_change_at) fail(`you can change your username again on ${new Date(a.username_next_change_at).toLocaleDateString()}`)
       const action = a.username_chosen === false ? `choose ${first} as your username` : `change your username from ${a.username} to ${first}`
-      if (!confirmAction(ctx, `${action}? It can't change again for 14 days.`, yes)) return
+      if (!(await confirmAction(ctx, `${action}? It can't change again for 14 days.`, yes))) return
       const updated = await changeUsername(first)
       useStore.setState({ account: updated })
       ctx.print(`username is now ${updated.username}`, 'ok')
@@ -423,7 +423,7 @@ export const ACCOUNT_COMMANDS: TermCommand[] = [
       }
       if (sub === 'rm' || sub === 'delete') {
         const k = await findApiKey(rest.join(' '))
-        if (!confirmAction(ctx, `Delete API key ${k.name} for good?`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Delete API key ${k.name} for good?`, bool.has('y')))) return
         await deleteApiKey(k.id)
         ctx.print(`deleted ${k.name}`, 'ok')
         return
@@ -467,7 +467,7 @@ export const ACCOUNT_COMMANDS: TermCommand[] = [
       }
       if (sub === 'rm' || sub === 'remove' || sub === 'delete') {
         const p = await findPasskey(rest.join(' '))
-        if (!confirmAction(ctx, `Remove passkey ${p.name}? You won't be able to sign in with it any more.`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Remove passkey ${p.name}? You won't be able to sign in with it any more.`, bool.has('y')))) return
         await deletePasskey(p.id)
         ctx.print(`removed ${p.name}`, 'ok')
         return
@@ -526,7 +526,7 @@ export const ACCOUNT_COMMANDS: TermCommand[] = [
         ctx.print(`♥ liked ${song.name}`, 'ok')
       } else {
         if (!liked) { ctx.print(`${song.name} isn’t in your liked songs`, 'dim'); return }
-        if (!confirmAction(ctx, `Remove ${song.name} from your liked songs?`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Remove ${song.name} from your liked songs?`, bool.has('y')))) return
         st().toggleLike(id)
         ctx.print(`♡ removed ${song.name}`, 'ok')
       }

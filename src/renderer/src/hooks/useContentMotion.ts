@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { useLayoutEffect, useRef, type RefObject } from 'react'
 
 // Animate a content change, not the first mount: the surrounding view or
@@ -17,7 +18,7 @@ export function useContentMotion(ref: RefObject<HTMLElement>, contentKey: string
     hasContent.current = true
     pending.current = false
     const el = ref.current
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const reducedMotion = effectsMotionMedia()
     if (!changed || !el?.getClientRects().length || reducedMotion.matches) return
 
     const animation = el.animate([{ opacity: 0 }, { opacity: 1 }], {

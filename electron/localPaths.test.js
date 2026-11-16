@@ -53,3 +53,37 @@ test('reads file:// URLs for this platform', () => {
   const ctx = process.platform === 'win32' ? win : posix
   assert.equal(resolveTypedPath(pathToFileURL(here).href, ctx), here)
 })
+
+test('copyFileToClipboard passes Windows paths (including curly apostrophe \u2019) via env instead of string interpolation', async () => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  const vm = require('node:vm')
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
+  const start = main.indexOf('async function copyFileToClipboard(filePath)')
+  const end = main.indexOf('ipcMain.handle(\'copy-file-to-clipboard\'', start)
+  assert.ok(start >= 0 && end > start)
+  const calls = []
+  const ctx = {
+    process: { platform: 'win32', env: { SystemRoot: 'C:\\Windows' } },
+    fs: { existsSync: () => true },
+    winPowerShellPath: () => 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    require: (id) => {
+      assert.equal(id, 'child_process')
+      return {
+        execFile: (cmd, args, opts, cb) => {
+          calls.push({ cmd, args, opts })
+          cb(null)
+        },
+      }
+    },
+  }
+  vm.runInNewContext(`${main.slice(start, end)}\nglobalThis.copy = copyFileToClipboard`, ctx)
+  const trickyPath = 'C:\\Music\\Don\u2019t\'; Start-Process calc; \'.mp3'
+  const res = await ctx.copy(trickyPath)
+  assert.equal(res.ok, true)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].cmd, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
+  assert.equal(calls[0].args.at(-1), 'Set-Clipboard -LiteralPath $env:UNRELEASED_CLIP_PATH')
+  assert.ok(!calls[0].args.some((a) => a.includes('Don\u2019t') || a.includes('calc')))
+  assert.equal(calls[0].opts.env.UNRELEASED_CLIP_PATH, trickyPath)
+})

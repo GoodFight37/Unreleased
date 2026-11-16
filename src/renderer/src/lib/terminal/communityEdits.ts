@@ -157,7 +157,7 @@ const remixCommand: TermCommand = {
       }
     } else if (sub === 'withdraw') {
       const id = idArg(rest[0], 'remix withdraw <id>')
-      if (!confirmAction(ctx, `Withdraw edit #${id}? Its file is deleted.`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Withdraw edit #${id}? Its file is deleted.`, bool.has('y')))) return
       await withdrawCommunityEdit(id)
       ctx.print(`edit #${id} withdrawn`, 'ok')
     } else if (sub === 'audio') {
@@ -176,7 +176,7 @@ const remixCommand: TermCommand = {
       ctx.print(`edit #${id} ${e.status}: ${e.title}${e.comp_path ? ` · filed at ${e.comp_channel ?? '?'}:${e.comp_path}` : ''}`, 'ok')
     } else if (sub === 'reverse') {
       const id = idArg(rest[0], 'remix reverse <id>')
-      if (!confirmAction(ctx, `Take back edit #${id}? It is taken out of Files (Remixes & Edits/Community-Made).`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Take back edit #${id}? It is taken out of Files (Remixes & Edits/Community-Made).`, bool.has('y')))) return
       const e = await adminReverseCommunityEdit(id)
       ctx.print(`edit #${id} reversed: ${e.title}`, 'ok')
     } else fail(`usage: ${USAGE}`)

@@ -21,6 +21,8 @@ import { shareOrigin } from '../lib/platform'
 import { fetchAlbums } from '../lib/albumsApi'
 import type { Album } from '../lib/albumsApi'
 import { getAllVersionGroups } from '../lib/versionsApi'
+import { showAppToast } from '../lib/appToast'
+import { confirmGlass, showUndoToast } from '../lib/confirmModal'
 import { loadEraFullNames, listEras } from '../lib/eras'
 import type { JWApiEra } from '../lib/juicewrldApi'
 import { overrideCoverUrl } from '../lib/juicewrldApi'
@@ -227,7 +229,7 @@ export function useTierlistData() {
   // The account holds at most MAX_LISTS; past that every upload would 400.
   const roomForList = (): boolean => {
     if (libRef.current.lists.length < MAX_LISTS) return true
-    window.alert(`You can have at most ${MAX_LISTS} tier lists. Delete one to make room.`)
+    showAppToast(`You can have at most ${MAX_LISTS} tier lists. Delete one to make room.`, { tone: 'info' })
     return false
   }
 
@@ -274,10 +276,16 @@ export function useTierlistData() {
   const shareUrl = (l: Tierlist): string | null =>
     l.serverId !== undefined ? `${shareOrigin()}/tierlist?id=${l.serverId}` : null
 
-  const deleteList = (id: string): void => {
+  const deleteList = async (id: string): Promise<void> => {
     const target = library.lists.find((l) => l.id === id)
     if (!target) return
-    if (!window.confirm(`Delete "${target.name}"? Its rankings can't be recovered.`)) return
+    if (!(await confirmGlass({
+      title: 'Delete tier list',
+      message: `Delete "${target.name}"?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    }))) return
+    const snapshot = libRef.current
     setLibrary((prev) => {
       const remaining = prev.lists.filter((l) => l.id !== id)
       const pendingDeletes = target.serverId !== undefined ? [...prev.pendingDeletes, target.serverId] : prev.pendingDeletes
@@ -287,6 +295,7 @@ export function useTierlistData() {
       }
       return { activeId: prev.activeId === id ? remaining[0].id : prev.activeId, lists: remaining, pendingDeletes }
     })
+    showUndoToast(`Deleted "${target.name}"`, () => setLibrary(() => snapshot))
   }
 
   // ─── Viewing someone's shared list ────────────────────────────────────────
@@ -453,10 +462,17 @@ export function useTierlistData() {
     setEditingTier(null)
   }
 
-  const handleReset = (): void => {
-    if (!window.confirm(`Clear every ranking in "${list.name}"? Your tiers and filters stay.`)) return
+  const handleReset = async (): Promise<void> => {
+    if (!(await confirmGlass({
+      title: 'Clear rankings',
+      message: `Clear every ranking in "${list.name}"? Your tiers and filters stay.`,
+      confirmLabel: 'Clear',
+      destructive: true,
+    }))) return
+    const snapshot = libRef.current
     updateList((l) => ({ ...l, rows: Object.fromEntries(l.tiers.map((t) => [t.id, []])) }))
     setSelectedSongId(null)
+    showUndoToast(`Cleared rankings in "${list.name}"`, () => setLibrary(() => snapshot))
   }
 
   const viewingSongsInTier = (tierId: string): HeardleSong[] =>

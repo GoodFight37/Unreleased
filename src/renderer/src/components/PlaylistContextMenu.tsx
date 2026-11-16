@@ -16,6 +16,7 @@ import { hasChatAccess } from '../lib/chatAccess'
 import { lazyOverlay } from '../lib/lazyView'
 import ContextMenu from './ContextMenu'
 import { showAppToast } from '../lib/appToast'
+import { confirmGlass } from '../lib/confirmModal'
 import { isServerFileTrack, playlistItemsToTracks, playlistSongIds } from '../lib/playlistItems'
 import { downloadBlob, playlistJsonPayload, playlistM3uContent } from '../lib/playlistExport'
 
@@ -133,7 +134,11 @@ export default function PlaylistContextMenu({ state, onClose }: {
   const copyShare = async (): Promise<void> => {
     if (!playlist.is_public && playlist.can_be_public === false) { showAppToast(PRIVATE_PLAYLIST_REASON); return }
     if (!playlist.is_public) {
-      if (!window.confirm('This playlist is private. Copying a share link will make it public so anyone with the link can open it. Continue?')) return
+      if (!(await confirmGlass({
+        title: 'Make playlist public?',
+        message: 'This playlist is private. Copying a share link will make it public so anyone with the link can open it. Continue?',
+        confirmLabel: 'Make public & copy',
+      }))) return
     }
     try {
       if (!playlist.is_public) {
@@ -150,7 +155,11 @@ export default function PlaylistContextMenu({ state, onClose }: {
   const shareToChat = async (): Promise<void> => {
     if (!playlist.is_public && playlist.can_be_public === false) { showAppToast(PRIVATE_PLAYLIST_REASON); return }
     if (!playlist.is_public) {
-      if (!window.confirm('This playlist is private. Sharing it to chat will make it public so recipients can open it. Continue?')) return
+      if (!(await confirmGlass({
+        title: 'Make playlist public?',
+        message: 'This playlist is private. Sharing it to chat will make it public so recipients can open it. Continue?',
+        confirmLabel: 'Make public & share',
+      }))) return
       try {
         await userApi.updatePlaylist(playlist.id, { is_public: true })
         setPlaylist(p => ({ ...p, is_public: true }))

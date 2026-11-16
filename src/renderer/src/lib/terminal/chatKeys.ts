@@ -76,7 +76,7 @@ const keysCommand: TermCommand = {
       ctx.print(rows.length ? table(rows.map((d) => [d.device_id === here ? '*' : ' ', d.device_id, d.label, d.algorithm, d.created_at ? relativeTime(d.created_at) : ''])) : 'no devices registered', rows.length ? 'plain' : 'dim')
     } else if (sub === 'revoke') {
       const deviceId = rest[0] ?? fail('usage: keys revoke <deviceId>  (keys devices lists them)')
-      if (!confirmAction(ctx, `Revoke device ${deviceId}? Rooms rotate their keys on the next send.`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Revoke device ${deviceId}? Rooms rotate their keys on the next send.`, bool.has('y')))) return
       await revokeLinkedDevice(id, deviceId)
       ctx.print(`revoked ${deviceId}`, 'ok')
     } else if (sub === 'link') {
@@ -103,7 +103,7 @@ const keysCommand: TermCommand = {
       if (verb === 'status') {
         ctx.print((await backupExists(id)) ? 'a recovery-code backup is set up' : 'no backup (keys backup setup)', 'plain')
       } else if (verb === 'setup') {
-        if (!confirmAction(ctx, 'Create the recovery-code backup? You will be shown a code once - write it down.', bool.has('y'))) return
+        if (!(await confirmAction(ctx, 'Create the recovery-code backup? You will be shown a code once - write it down.', bool.has('y')))) return
         const code = await setupBackup(id)
         ctx.print(`Recovery code (shown once - write it down):\n  ${code}`, 'ok')
       } else if (verb === 'change') {
@@ -118,7 +118,7 @@ const keysCommand: TermCommand = {
         ctx.print(`restored ${n} room key${n === 1 ? '' : 's'}`, 'ok')
       } else fail('usage: keys backup [status | setup | change | restore]')
     } else if (sub === 'export') {
-      if (!confirmAction(ctx, 'Export every room key on this device into a file protected by a passphrase? Anyone with the file and passphrase can read your chats.', bool.has('y'))) return
+      if (!(await confirmAction(ctx, 'Export every room key on this device into a file protected by a passphrase? Anyone with the file and passphrase can read your chats.', bool.has('y')))) return
       const pass = await ctx.ask('passphrase: ', { secret: true })
       if (pass !== (await ctx.ask('again: ', { secret: true }))) fail('the passphrases don’t match')
       const { blob, count } = await exportKeys(id, pass)
@@ -160,7 +160,7 @@ const keysCommand: TermCommand = {
           : 'asked the others in your conversations for their keys; they arrive once someone who has them is online', 'ok')
         return
       }
-      if (!confirmAction(ctx, `Reset the key of #${convId}? Everyone gets a new key for new messages; older ones stay unreadable on devices that never had the old key.`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Reset the key of #${convId}? Everyone gets a new key for new messages; older ones stay unreadable on devices that never had the old key.`, bool.has('y')))) return
       await cs().resetKey(convId)
       ctx.print(cs().keyState[convId] === 'ready' ? `#${convId} is on a new key` : 'someone else reset it at the same time; their key arrives shortly', 'ok')
     } else if (sub === 'sync') {
@@ -168,7 +168,7 @@ const keysCommand: TermCommand = {
       await cs().refreshIdentity()
       ctx.print('checked for keys sent from your other devices', 'ok')
     } else if (sub === 'reset') {
-      if (!confirmAction(ctx, 'Reset your encryption identity? Other people will see your security key change, and you must relink your other devices. This cannot be undone.', bool.has('y'))) return
+      if (!(await confirmAction(ctx, 'Reset your encryption identity? Other people will see your security key change, and you must relink your other devices. This cannot be undone.', bool.has('y')))) return
       const device = await ensureDevice(id)
       await resetOwnIdentity(id, ownKeys(device))
       await cs().refreshIdentity()

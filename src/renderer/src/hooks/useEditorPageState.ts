@@ -1,6 +1,7 @@
 // Shared data/logic for the song editor page (EditorPage). Desktop and
 // mobile wrap this in their own JSX/layout - keep behavior here.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { confirmGlass } from '../lib/confirmModal'
 import { useStorePick, IS_FLOAT_WINDOW } from '../store/useStore'
 import { apiFetch, JWApiSong, JWApiEra } from '../lib/juicewrldApi'
 import * as userApi from '../lib/userApi'
@@ -521,8 +522,8 @@ export function useEditorPageState(initialSongId: number | null = null) {
 
   // Close, Back and Pop out all drop the form, so ask first while it holds
   // edits that haven't been sent.
-  const confirmDiscard = (): boolean =>
-    changedCount === 0 || alreadySubmitted || confirm('Discard your unsent changes to this song?')
+  const confirmDiscard = async (): Promise<boolean> =>
+    changedCount === 0 || alreadySubmitted || confirmGlass({ title: 'Discard changes', message: 'Discard your unsent changes to this song?', confirmLabel: 'Discard', destructive: true })
 
   const cancelEditProposal = (): void => {
     setEditingPropId(null)

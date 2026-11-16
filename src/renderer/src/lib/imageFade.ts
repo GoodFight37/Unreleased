@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from './effectsPreference'
 /** Images fade in as they finish loading instead of popping in - cover art in
  *  every list, grid, card and page, plus avatars, news and chat images.
  *
@@ -14,7 +15,7 @@
  *  `data-no-fade` on an image or any ancestor opts it out (the player's
  *  crossfading cover does its own fade). Off under prefers-reduced-motion. */
 
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+const reducedMotion = effectsMotionMedia()
 
 function settle(e: Event): void {
   const img = e.currentTarget as HTMLImageElement

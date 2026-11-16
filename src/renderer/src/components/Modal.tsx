@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { create } from 'zustand'
@@ -6,6 +7,7 @@ import { ls } from '../lib/persist'
 import { dimThemeColorMeta, syncThemeColorMeta } from '../lib/themeEffects'
 import { useEscapeToClose } from '../hooks/useEscapeToClose'
 import { useOverlayMotion } from '../hooks/useOverlayMotion'
+import { syncGlassLayout } from '../lib/glass/compositor'
 
 // Locked panels sit in their own z-index band, comfortably above anything
 // zCounter could reach in a real session - so "locked" always beats
@@ -118,7 +120,7 @@ function expandedRect(maxWidth: number): Rect {
 /** A panel's size change as a short cross-fade, like a palette switch. */
 function morphPanel(update: () => void): void {
   if (!document.startViewTransition || document.visibilityState === 'hidden'
-    || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    || effectsMotionMedia().matches) {
     update()
     return
   }
@@ -434,7 +436,8 @@ export function ModalOverlay({
   // Keeps this panel available as a snap target for everyone else, and drops
   // it once it's no longer explicitly positioned (never dragged, or closed).
   useEffect(() => {
-    if (rect) panelRects.set(id, rect)
+    // Inline-style moves/resizes are invisible to the glass layer's observer.
+    if (rect) { panelRects.set(id, rect); syncGlassLayout(500) }
     else panelRects.delete(id)
     return () => { panelRects.delete(id) }
   }, [id, rect])
@@ -502,6 +505,51 @@ export function ModalOverlay({
     )
   }
 
+  // Restore previous focus and keep Tab/Shift+Tab inside standalone dialogs.
+  const dialogPanelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (floating || !dockingOff) return
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const panel = dialogPanelRef.current
+    if (panel) {
+      const focusable = panel.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusable && !panel.contains(document.activeElement)) {
+        focusable.focus({ preventScroll: true })
+      } else if (!panel.contains(document.activeElement)) {
+        panel.focus({ preventScroll: true })
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key !== 'Tab' || !dialogPanelRef.current) return
+      const items = Array.from(
+        dialogPanelRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement)
+      if (items.length === 0) {
+        e.preventDefault()
+        dialogPanelRef.current.focus({ preventScroll: true })
+        return
+      }
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (e.shiftKey && (document.activeElement === first || !dialogPanelRef.current.contains(document.activeElement))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      if (prev && prev.isConnected) prev.focus({ preventScroll: true })
+    }
+  }, [floating, dockingOff])
+
   if (dockingOff) {
     // Same shape the pre-sandbox ModalOverlay always rendered: its own
     // full-screen backdrop, portalled straight to body rather than into the
@@ -511,35 +559,42 @@ export function ModalOverlay({
     // begin with. Reached either because this modal opted out (standalone)
     // or the user turned the sandbox off in Settings.
     return createPortal(
-      <div
-        ref={rootRef}
-        className={`fixed inset-0 ${zIndexClassName} flex items-end md:items-center justify-center glass-scrim p-0 md:px-4`}
-        onMouseDown={(e) => { pressedBackdrop.current = e.target === e.currentTarget }}
-        onClick={(e) => { if (e.target === e.currentTarget && pressedBackdrop.current) onClose() }}
-        // Fades out (rather than translating) as the panel is dragged, so the
-        // app behind is revealed cleanly instead of a dimmed rectangle just
-        // sliding down with it and hovering above the panel.
-        style={{
-          opacity: dragY ? Math.max(1 - dragY / 240, 0) : 1,
-          transition: dragging ? 'none' : 'opacity 0.25s ease-out',
-        }}
-      >
+      <>
         <div
-          className={`relative flex flex-col overflow-hidden ${panelClassName}${panelGlass(panelClassName)}`}
+          aria-hidden="true"
+          className="fixed inset-0 z-[45] glass-scrim pointer-events-none"
           style={{
-            transform: dragY ? `translateY(${dragY}px)` : undefined,
-            transition: dragging ? 'none' : 'transform 0.25s ease-out',
-            ...(expanded ? {
-              width: `min(calc(100vw - ${EXPAND_MARGIN * 2}px), ${expandedMaxWidth}px)`,
-              height: `calc(100svh - ${EXPAND_MARGIN * 2}px)`,
-              maxWidth: 'none',
-              maxHeight: 'none',
-            } : {}),
+            opacity: dragY ? Math.max(1 - dragY / 240, 0) : 1,
+            transition: dragging ? 'none' : 'opacity 0.25s ease-out',
           }}
+        />
+        <div
+          ref={rootRef}
+          className={`fixed inset-0 ${zIndexClassName} flex items-end md:items-center justify-center p-0 md:px-4`}
+          onMouseDown={(e) => { pressedBackdrop.current = e.target === e.currentTarget }}
+          onClick={(e) => { if (e.target === e.currentTarget && pressedBackdrop.current) onClose() }}
         >
-          {children({ onHandleMouseDown: () => {}, locked: false, toggleLock: () => {}, canLock: false })}
+          <div
+            ref={dialogPanelRef}
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            className={`relative flex flex-col overflow-hidden outline-none ${panelClassName}${panelGlass(panelClassName)}`}
+            style={{
+              transform: dragY ? `translateY(${dragY}px)` : undefined,
+              transition: dragging ? 'none' : 'transform 0.25s ease-out',
+              ...(expanded ? {
+                width: `min(calc(100vw - ${EXPAND_MARGIN * 2}px), ${expandedMaxWidth}px)`,
+                height: `calc(100svh - ${EXPAND_MARGIN * 2}px)`,
+                maxWidth: 'none',
+                maxHeight: 'none',
+              } : {}),
+            }}
+          >
+            {children({ onHandleMouseDown: () => {}, locked: false, toggleLock: () => {}, canLock: false })}
+          </div>
         </div>
-      </div>,
+      </>,
       document.body,
     )
   }
@@ -554,7 +609,7 @@ export function ModalOverlay({
     // multiple docked modals overlap - each panel's own tier class would
     // otherwise always win regardless of interaction order. `relative` is
     // required too - z-index does nothing on a statically positioned element.
-    <div ref={rootRef} className={`relative ${zIndexClassName}`} style={{ zIndex: z }} data-modal-id={id}>
+    <div ref={rootRef} className={`relative ${zIndexClassName}`} style={{ zIndex: Math.max(50, z) }} data-modal-id={id}>
       {/* panelClassName stays applied even after a drag/resize - its size
           classes (w-full max-w-*, h-[...]) just lose to panelStyle's explicit
           width/height/maxWidth/maxHeight via inline-style specificity, while

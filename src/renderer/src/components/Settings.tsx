@@ -1,17 +1,16 @@
 import { useState, useEffect, useRef, ReactNode, ElementType, CSSProperties } from 'react'
 import {
-  X, Brush, Palette, Volume2, Zap, Clock, Info, Github, MessageCircle, PenLine, BookOpen, Eye, EyeOff, ChevronDown, Globe, RefreshCw, DownloadCloud, FolderOpen, FolderPlus, Monitor, BellOff, Minus, Loader2, Plus, AlignLeft, FileText, Trash2, Wrench, FlaskConical, PanelLeft, PanelRight, PanelTop, PanelBottom, Waves, Keyboard, RotateCcw, AppWindow, PictureInPicture2, Minimize2, ListOrdered, GripVertical, CloudUpload, Type, AlignCenter, Menu, Pencil, Upload, ScrollText, ShieldCheck, Disc, Images, Search, Cloud, Server, Home, AudioLines, SlidersHorizontal, Bell, Bug, House, Heart, User, Check,
-  Activity, Lightbulb, Headphones,
+  X, Brush, Palette, Volume2, Zap, Clock, Github, MessageCircle, PenLine, BookOpen, Eye, EyeOff, ChevronDown, Globe, RefreshCw, DownloadCloud, FolderOpen, FolderPlus, Monitor, BellOff, Minus, Loader2, Plus, AlignLeft, FileText, Trash2, Wrench, FlaskConical, PanelLeft, PanelTop, Waves, Keyboard, RotateCcw, AppWindow, PictureInPicture2, Minimize2, ListOrdered, GripVertical, CloudUpload, Type, AlignCenter, Menu, Upload, ScrollText, ShieldCheck, Disc, Images, Search, Server, Home, AudioLines, SlidersHorizontal, Bell, Bug, House, Heart, User, Check,
+  Activity, Headphones,
 } from 'lucide-react'
 import { DebugAnonymousToggle, DebugLogOpenButton, DebugRecordButton } from './DebugRecorder'
 import { ADDRESSES as DONATION_ADDRESSES, AddressRow as DonationAddressRow } from './DonationNotice'
 import VizControls from './VizControls'
 import { useVizStore } from '../store/vizStore'
 import AccountSettings, { type AccountPage } from './AccountSettings'
-import { useStore, useStorePick, type SidebarPosition, type AppMenuPosition, type PopoutWindowKind } from '../store/useStore'
+import { useStore, useStorePick, type AppMenuPosition, type PopoutWindowKind } from '../store/useStore'
 import { HOTKEY_ACTIONS, HOTKEY_CATEGORIES, effectiveBinding, effectiveGlobalBinding, comboTokens, eventToCombo, isGloballyRegistrable } from '../lib/hotkeys'
-import { SKINS, getSkin, createCustomSkin, parseSkinFile } from '../lib/skins'
-import SkinEditorModal from './SkinEditorModal'
+import { SKINS, getSkin } from '../lib/skins'
 import { allFonts, addFontFile, addInstalledFont, FONT_ACCEPT } from '../lib/fonts'
 import { deleteFont } from '../lib/fontActions'
 import { useCustomFonts } from '../hooks/useCustomFonts'
@@ -41,6 +40,7 @@ import DesktopSettings from './DesktopSettings'
 import { useContentMotion } from '../hooks/useContentMotion'
 import { useSlidingIndicator } from '../hooks/useSlidingIndicator'
 import { MotionDisclosure } from './MotionDisclosure'
+import { useEffectsMode, setEffectsMode, type EffectsMode } from '../lib/effectsPreference'
 
 const ACCENT_PRESETS = [
   '#1db954', '#7c3aed', '#2563eb', '#dc2626',
@@ -67,12 +67,6 @@ const LYRIC_TEXT_SIZES: { label: string; value: number }[] = [
   { label: 'Huge', value: 1.4 },
 ]
 
-const NAV_POSITIONS: { id: SidebarPosition; label: string; icon: ElementType }[] = [
-  { id: 'left', label: 'Left', icon: PanelLeft },
-  { id: 'right', label: 'Right', icon: PanelRight },
-  { id: 'top', label: 'Top', icon: PanelTop },
-  { id: 'bottom', label: 'Bottom', icon: PanelBottom },
-]
 
 const APP_MENU_POSITIONS: { id: AppMenuPosition; label: string; icon: ElementType }[] = [
   { id: 'sidebar', label: 'Side menu', icon: PanelLeft },
@@ -97,6 +91,17 @@ type Tab = 'account' | 'general' | 'appearance' | 'navigation' | 'playback' | 'l
 
 // Older links name pages that were split up or merged: Feedback lives under
 // About, and Preferences became General plus Navigation.
+// Six pages for a fan, not thirteen (2026-11-16): each sidebar entry shows the
+// content of every section mapped to it, in file order.
+const TAB_GROUP: Record<Tab, Tab> = {
+  appearance: 'appearance', navigation: 'appearance',
+  playback: 'playback',
+  lyrics: 'lyrics',
+  library: 'library',
+  account: 'account', connections: 'account',
+  general: 'app', desktop: 'app', shortcuts: 'app', app: 'app', developer: 'app', about: 'app',
+}
+
 function tabFromLink(t: string): Tab {
   if (t === 'feedback') return 'about'
   if (t === 'preferences') return 'general'
@@ -128,7 +133,8 @@ const SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOn
   { tab: 'account', label: 'Auth Token', sub: 'View and copy your account token', page: 'developer' },
   { tab: 'account', label: 'Log out' },
   // Appearance
-  { tab: 'appearance', label: 'Skin', sub: 'Custom skin colors and presets' },
+  { tab: 'appearance', label: 'Theme', sub: 'Dark, Light or a Juice WRLD album' },
+  { tab: 'appearance', label: 'Liquid Glass & animations', sub: 'On, follow system or reduced effects' },
   { tab: 'appearance', label: 'Accent color' },
   { tab: 'appearance', label: 'App gradients', sub: 'Accent-tinted gradients behind the app and sidebar' },
   { tab: 'appearance', label: 'Control gradients', sub: 'Accent-tinted gradients on the player bar, toggle groups, search bars, badges, and menus' },
@@ -150,7 +156,6 @@ const SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOn
   { tab: 'general', label: 'Full era names', sub: 'Show eras spelled out instead of abbreviated' },
   { tab: 'general', label: 'Add song info to downloads', sub: "Write the song's name, artist, cover and lyrics into downloaded MP3s" },
   { tab: 'navigation', label: 'Auto-hide navigation', sub: 'Hide the nav menu until the pointer reaches its edge' },
-  { tab: 'navigation', label: 'Navigation position', sub: 'Where the nav menu sits — left, right, top, bottom' },
   { tab: 'navigation', label: 'Navigation style', sub: 'Classic or a floating pill' },
   { tab: 'navigation', label: 'App menu button', sub: 'Where the File / Edit / View… menu opens from', electronOnly: true },
   { tab: 'navigation', label: 'Home screen', sub: 'Choose which sections show on the Home tab' },
@@ -202,8 +207,6 @@ const SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOn
   { tab: 'library', label: 'Offline songs folder', electronOnly: true },
   { tab: 'library', label: 'Offline downloads' , electronOnly: true },
   { tab: 'app', label: 'Start on', sub: 'Which view opens on launch', electronOnly: true },
-  { tab: 'app', label: 'Auto-download updates', electronOnly: true },
-  { tab: 'app', label: 'Beta updates', electronOnly: true },
   { tab: 'app', label: 'Minimize to', sub: 'Taskbar or tray', electronOnly: true },
   { tab: 'app', label: 'Minimize to tray on close', electronOnly: true },
   { tab: 'app', label: 'Show current song in the window title', electronOnly: true },
@@ -214,7 +217,7 @@ const SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOn
   { tab: 'app', label: 'Solo mini player', electronOnly: true },
   { tab: 'connections', label: 'Show Discord Status', sub: 'Discord Rich Presence', electronOnly: true },
   { tab: 'connections', label: 'Discord status header', sub: 'Artist, song name or Unreleased', electronOnly: true },
-  { tab: 'app', label: 'Developer options', sub: 'Shows a Developer tab with cache & diagnostics tools', electronOnly: true },
+  { tab: 'app', label: 'Developer options', sub: 'Shows developer tools: Glass Lab, diagnostics, logs, cache and API servers', electronOnly: true },
   { tab: 'app', label: 'Pop-out windows', sub: 'Which panels open in their own window', electronOnly: true },
   { tab: 'app', label: 'Equalizer as pop-out', sub: 'Open the equalizer in its own window instead of an in-app panel', electronOnly: true },
   // Developer
@@ -225,10 +228,10 @@ const SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electronOn
   // Feedback / About
   { tab: 'about', label: 'Feedback', sub: 'Report a bug or share an idea' },
   { tab: 'general', label: 'Auto-report app errors', sub: 'Automatically send a crash report when the app hits an unexpected error' },
-  { tab: 'about', label: 'Record debug log', sub: 'Record console messages and network requests to a file you can send us' },
-  { tab: 'about', label: 'Open debug log', sub: 'View a saved debug log file - requests, errors and console messages' },
+  { tab: 'about', label: 'Record debug log', sub: 'Record console messages and network requests to a file you can send us', devOnly: true },
+  { tab: 'about', label: 'Open debug log', sub: 'View a saved debug log file - requests, errors and console messages', devOnly: true },
   { tab: 'about', label: 'About', sub: 'Version, GitHub, Discord, API links' },
-  { tab: 'about', label: 'API Docs' },
+  { tab: 'about', label: 'API Docs', devOnly: true },
   { tab: 'about', label: 'Thank You', sub: 'Donors and contributors' },
   { tab: 'about', label: 'GitHub' },
   { tab: 'about', label: 'Discord' },
@@ -469,6 +472,7 @@ interface AppSettings {
 // header doubles as the window's drag handle, closing closes the OS window,
 // and view links (Docs, Editor) navigate the MAIN window instead.
 export default function Settings({ floating = false }: { floating?: boolean }): JSX.Element {
+  const effectsMode = useEffectsMode()
   // Which Account sub-page is open; kept here so a search result can land on it.
   const [accountPage, setAccountPage] = useState<AccountPage>('home')
   const [notificationSound, setNotificationSoundState] = useState(getNotificationSoundId())
@@ -489,10 +493,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     setShowSettings, setActiveView,
     account, logoutAccount, setShowUserAuth,
     theme, setTheme,
-    customSkins, saveCustomSkin, deleteCustomSkin,
     accentColor, setAccentColor,
     settingsTab, setSettingsTab,
-    sidebarPosition, setSidebarPosition,
     appMenuPosition, setAppMenuPosition,
     navStyle, setNavStyle,
     autoHideNav, setAutoHideNav,
@@ -537,7 +539,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     fullEraNames, setFullEraNames,
     autoReportErrors, setAutoReportErrors,
     embedSongInfoOnDownload, setEmbedSongInfoOnDownload,
-  } = useStorePick('setShowSettings', 'setActiveView', 'account', 'theme', 'setTheme', 'customSkins', 'saveCustomSkin', 'deleteCustomSkin', 'accentColor', 'setAccentColor', 'settingsTab', 'setSettingsTab', 'sidebarPosition', 'setSidebarPosition', 'appMenuPosition', 'setAppMenuPosition', 'navStyle', 'setNavStyle', 'autoHideNav', 'setAutoHideNav', 'autoHideNavZone', 'setAutoHideNavZone', 'navOrder', 'setNavOrder', 'navVisibility', 'setNavItemVisible', 'homeSectionVisibility', 'setHomeSectionVisible', 'navControlOrder', 'setNavControlOrder', 'navControlVisibility', 'setNavControlVisible', 'audioOutput', 'setAudioOutput', 'crossfadeEnabled', 'crossfadeDuration', 'setCrossfade', 'pauseFadeEnabled', 'setPauseFade', 'pauseOnDisconnect', 'setPauseOnDisconnect', 'rememberQueue', 'setRememberQueue', 'preferOgVersion', 'setPreferOgVersion', 'rotateSuggestedCovers', 'setRotateSuggestedCovers', 'mediaOverlayEnabled', 'setMediaOverlayEnabled', 'popoutWindows', 'setPopoutWindow', 'lyricsOffset', 'setLyricsOffset', 'sleepTimerEnd', 'setSleepTimer', 'hotkeyBindings', 'setHotkeyBinding', 'resetHotkeyBindings', 'resetGlobalHotkeyBindings', 'hotkeySeekSeconds', 'setHotkeySeekSeconds', 'globalHotkeysEnabled', 'setGlobalHotkeysEnabled', 'globalHotkeyBindings', 'setGlobalHotkeyBinding', 'libraryFolders', 'addLibraryFolder', 'removeLibraryFolder', 'scanLibrary', 'libraryScanning', 'libraryLastScanned', 'libraryAutoRefresh', 'setLibraryAutoRefresh', 'developerMode', 'setDeveloperMode', 'lastfmUser', 'setLastfmUser', 'lastfmEnabled', 'setLastfmEnabled', 'appTextScale', 'setAppTextScale', 'lyricsScale', 'setLyricsScale', 'lyricsAlign', 'setLyricsAlign', 'lyricsBlur', 'setLyricsBlur', 'lyricsBlurAmount', 'setLyricsBlurAmount', 'lyricsColorActive', 'setLyricsColorActive', 'lyricsColorInactive', 'setLyricsColorInactive', 'appFont', 'setAppFont', 'lyricsFont', 'setLyricsFont', 'gradientsEnabled', 'setGradientsEnabled', 'surfaceGradientsEnabled', 'setSurfaceGradientsEnabled', 'wrldThemeBackground', 'setWrldThemeBackground', 'refreshPlaylists', 'fullEraNames', 'setFullEraNames', 'logoutAccount', 'setShowUserAuth', 'playlistHeroEnabledDark', 'playlistHeroEnabledLight', 'setPlaylistHeroEnabled', 'autoReportErrors', 'setAutoReportErrors', 'embedSongInfoOnDownload', 'setEmbedSongInfoOnDownload')
+  } = useStorePick('setShowSettings', 'setActiveView', 'account', 'theme', 'setTheme', 'accentColor', 'setAccentColor', 'settingsTab', 'setSettingsTab', 'appMenuPosition', 'setAppMenuPosition', 'navStyle', 'setNavStyle', 'autoHideNav', 'setAutoHideNav', 'autoHideNavZone', 'setAutoHideNavZone', 'navOrder', 'setNavOrder', 'navVisibility', 'setNavItemVisible', 'homeSectionVisibility', 'setHomeSectionVisible', 'navControlOrder', 'setNavControlOrder', 'navControlVisibility', 'setNavControlVisible', 'audioOutput', 'setAudioOutput', 'crossfadeEnabled', 'crossfadeDuration', 'setCrossfade', 'pauseFadeEnabled', 'setPauseFade', 'pauseOnDisconnect', 'setPauseOnDisconnect', 'rememberQueue', 'setRememberQueue', 'preferOgVersion', 'setPreferOgVersion', 'rotateSuggestedCovers', 'setRotateSuggestedCovers', 'mediaOverlayEnabled', 'setMediaOverlayEnabled', 'popoutWindows', 'setPopoutWindow', 'lyricsOffset', 'setLyricsOffset', 'sleepTimerEnd', 'setSleepTimer', 'hotkeyBindings', 'setHotkeyBinding', 'resetHotkeyBindings', 'resetGlobalHotkeyBindings', 'hotkeySeekSeconds', 'setHotkeySeekSeconds', 'globalHotkeysEnabled', 'setGlobalHotkeysEnabled', 'globalHotkeyBindings', 'setGlobalHotkeyBinding', 'libraryFolders', 'addLibraryFolder', 'removeLibraryFolder', 'scanLibrary', 'libraryScanning', 'libraryLastScanned', 'libraryAutoRefresh', 'setLibraryAutoRefresh', 'developerMode', 'setDeveloperMode', 'lastfmUser', 'setLastfmUser', 'lastfmEnabled', 'setLastfmEnabled', 'appTextScale', 'setAppTextScale', 'lyricsScale', 'setLyricsScale', 'lyricsAlign', 'setLyricsAlign', 'lyricsBlur', 'setLyricsBlur', 'lyricsBlurAmount', 'setLyricsBlurAmount', 'lyricsColorActive', 'setLyricsColorActive', 'lyricsColorInactive', 'setLyricsColorInactive', 'appFont', 'setAppFont', 'lyricsFont', 'setLyricsFont', 'gradientsEnabled', 'setGradientsEnabled', 'surfaceGradientsEnabled', 'setSurfaceGradientsEnabled', 'wrldThemeBackground', 'setWrldThemeBackground', 'refreshPlaylists', 'fullEraNames', 'setFullEraNames', 'logoutAccount', 'setShowUserAuth', 'playlistHeroEnabledDark', 'playlistHeroEnabledLight', 'setPlaylistHeroEnabled', 'autoReportErrors', 'setAutoReportErrors', 'embedSongInfoOnDownload', 'setEmbedSongInfoOnDownload')
   const wrldWidgets = useVizStore(s => s.wrldWidgets)
   const setWrldWidgets = useVizStore(s => s.setWrldWidgets)
   const wrldFm = useVizStore(s => s.wrldFm)
@@ -569,9 +571,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
   // Custom skins — which one the editor modal is open on (null = closed), the
   // hidden file input for Import, and a transient "that file wasn't a skin"
   // message shown under the section.
-  const [editingSkinId, setEditingSkinId] = useState<string | null>(null)
-  const skinImportRef = useRef<HTMLInputElement>(null)
-  const [skinImportError, setSkinImportError] = useState<string | null>(null)
   // Custom fonts - the hidden file input, the installed-font name being typed,
   // and the last add error.
   const customFonts = useCustomFonts()
@@ -605,25 +604,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     }
   }
 
-  // Clone the current look into a new editable skin, make it active (so the
-  // editor previews live), and open the editor on it.
-  const createSkin = (): void => {
-    const skin = createCustomSkin(getSkin(theme), 'My skin')
-    saveCustomSkin(skin)
-    setTheme(skin.id)
-    if (skin.accent) setCustomAccent(skin.accent)
-    setEditingSkinId(skin.id)
-  }
-
-  const importSkinFile = async (file: File): Promise<void> => {
-    setSkinImportError(null)
-    const skin = parseSkinFile(await file.text())
-    if (!skin) { setSkinImportError('That file isn’t a valid skin.'); return }
-    saveCustomSkin(skin)
-    setTheme(skin.id)
-    if (skin.accent) { setAccentColor(skin.accent); setCustomAccent(skin.accent) }
-    setEditingSkinId(skin.id)
-  }
   const isElectron = navigator.userAgent.includes('Electron')
   const el = (window as any).electron
   // Master pop-out switch reflects "any kind still on"; flipping it turns them
@@ -767,31 +747,22 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     return () => window.removeEventListener('keydown', onKey, true)
   }, [recording, setHotkeyBinding, setGlobalHotkeyBinding])
 
-  const [tab, setTab] = useState<Tab>(settingsTab ? tabFromLink(settingsTab) : 'general')
+  const [tab, setTab] = useState<Tab>(settingsTab ? TAB_GROUP[tabFromLink(settingsTab)] ?? 'appearance' : 'appearance')
   const { containerRef: categoryRef, indicatorRef: categoryIndicatorRef } = useSlidingIndicator<HTMLDivElement>(tab)
   const { containerRef: mobileCategoryRef, indicatorRef: mobileCategoryIndicatorRef } = useSlidingIndicator<HTMLDivElement>(tab)
   const contentRef = useRef<HTMLDivElement>(null)
   // Sidebar order, iOS Settings style: a colored badge per page, and `gap`
   // starting a new cluster.
   const tabs: { id: Tab; label: string; icon: ElementType; color: string; gap?: boolean }[] = [
-    { id: 'account', label: 'Account', icon: User, color: '#64748b' },
-    { id: 'general', label: 'General', icon: SlidersHorizontal, color: '#6b7280', gap: true },
     { id: 'appearance', label: 'Appearance', icon: Palette, color: '#ec4899' },
-    { id: 'navigation', label: 'Navigation', icon: PanelLeft, color: '#0d9488' },
-    { id: 'playback', label: 'Playback', icon: Volume2, color: '#ef4444', gap: true },
+    { id: 'playback', label: 'Playback & sound', icon: Volume2, color: '#ef4444' },
     { id: 'lyrics', label: 'Lyrics & WRLD', icon: AlignLeft, color: '#8b5cf6' },
-    { id: 'connections', label: 'Connections', icon: Cloud, color: '#2563eb' },
-    { id: 'desktop', label: 'Desktop', icon: Lightbulb, color: '#f59e0b', gap: true },
-    { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, color: '#475569' },
-    ...(isElectron ? [{ id: 'library' as Tab, label: 'Library & storage', icon: FolderOpen, color: '#0891b2' }] : []),
-    ...(isElectron ? [{ id: 'app' as Tab, label: 'App', icon: Monitor, color: '#4f46e5' }] : []),
-    ...(isElectron && developerMode ? [{ id: 'developer' as Tab, label: 'Developer', icon: Wrench, color: '#374151' }] : []),
-    { id: 'about', label: 'About', icon: Info, color: '#0ea5e9', gap: true },
+    ...(isElectron ? [{ id: 'library' as Tab, label: 'Library & downloads', icon: FolderOpen, color: '#0891b2' }] : []),
+    { id: 'account', label: 'Accounts', icon: User, color: '#64748b', gap: true },
+    { id: 'app', label: 'Advanced', icon: SlidersHorizontal, color: '#6b7280' },
   ]
+  const shows = (section: Tab): boolean => TAB_GROUP[section] === tab
 
-  useEffect(() => {
-    if (tab === 'developer' && !developerMode) setTab('app')
-  }, [tab, developerMode, account?.is_donor])
 
   // ── Settings search — a flat filter over SETTINGS_SEARCH_INDEX rather than
   // per-tab content, since matches can live on a tab you're not currently
@@ -803,14 +774,25 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
   const searchResults = settingsQueryTrimmed
     ? SETTINGS_SEARCH_INDEX.filter((r) =>
         (!r.electronOnly || isElectron) &&
-        (!r.devOnly || developerMode) &&
+        (!r.devOnly || developerMode || !isElectron) &&
         (r.label.toLowerCase().includes(settingsQueryTrimmed) || r.sub?.toLowerCase().includes(settingsQueryTrimmed))
       )
     : []
+  // A page holds several sections, so a search hit or deep link also scrolls to its section.
+  const [jumpSection, setJumpSection] = useState<Tab | null>(settingsTab ? tabFromLink(settingsTab) : null)
+  useEffect(() => {
+    if (!jumpSection) return
+    const raf = requestAnimationFrame(() => {
+      contentRef.current?.querySelector(`[data-settings-section="${jumpSection}"]`)?.scrollIntoView({ block: 'start' })
+      setJumpSection(null)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [jumpSection, tab])
   const jumpToResult = (t: Tab, page?: AccountPage): void => {
-    setTab(t)
-    if (t === 'account') setAccountPage(page ?? 'home')
+    setTab(TAB_GROUP[t] ?? t)
+    if (TAB_GROUP[t] === 'account') setAccountPage(t === 'account' ? page ?? 'home' : 'home')
     setSettingsQuery('')
+    setJumpSection(t)
   }
 
   // A deep-linked open (app menu → "Keyboard shortcuts"/"Version") sets
@@ -818,7 +800,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
   // the user last was rather than snapping back here.
   useEffect(() => {
     if (!settingsTab) return
-    setTab(tabFromLink(settingsTab))
+    setTab(TAB_GROUP[tabFromLink(settingsTab)] ?? 'appearance')
+    setJumpSection(tabFromLink(settingsTab))
     setSettingsTab(null)
   }, [settingsTab, setSettingsTab])
 
@@ -944,20 +927,15 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
       onClose={closeSettings}
       floating={floating}
       zIndexClassName="z-50"
-      panelClassName="bg-surface border border-[var(--border)] rounded-3xl shadow-2xl w-full max-w-[1060px] h-[800px] max-h-[90vh]"
+      expanded
+      expandedMaxWidth={1180}
+      panelClassName="glass-thick border border-[var(--border)] rounded-3xl shadow-2xl w-full max-w-[1060px] h-[800px] max-h-[90vh]"
       minWidth={600} minHeight={480}
     >
       {({ onHandleMouseDown, locked, toggleLock, canLock }) => (
       <>
       {/* Custom-skin editor (portals to <body>, so placement here is fine) */}
-      {editingSkinId && (
-        <SkinEditorModal
-          skinId={editingSkinId}
-          onClose={() => setEditingSkinId(null)}
-          onEditSkin={setEditingSkinId}
-        />
-      )}
-      <div className="bg-surface w-full h-full flex flex-col overflow-hidden">
+      <div className="settings-shell bg-surface w-full h-full flex flex-col overflow-hidden">
         {/* Header — in a pop-out it doubles as the frameless window's drag strip;
             in-app it's the JS drag handle instead (see ModalOverlay). */}
         <div
@@ -967,54 +945,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
         >
           <div className="flex items-center gap-2" style={noDrag}>
             <h2 className="text-text-primary font-black text-xl tracking-tight">Settings</h2>
-            {isElectron && (
-              <button
-                disabled={updateState === 'checking' || updateState === 'downloading'}
-                title={updateBtnTitle}
-                onClick={async () => {
-                  if (updateState === 'downloaded') { (el as any)?.installUpdate?.(); return }
-                  setUpdateState('checking')
-                  try {
-                    await el?.checkForUpdates()
-                    setUpdateState((s: UpdateState) => s === 'checking' ? 'latest' : s)
-                    setUpdateFailed(false)
-                    setTimeout(() => setUpdateState((s: UpdateState) => s === 'latest' ? 'idle' : s), 4000)
-                  } catch {
-                    setUpdateState('error')
-                    setUpdateFailed(true)
-                    setTimeout(() => setUpdateState('idle'), 4000)
-                  }
-                }}
-                className={`p-1 rounded transition-colors disabled:opacity-50 ${
-                  updateState === 'latest' || updateState === 'downloaded' ? 'text-emerald-400' :
-                  updateState === 'available' ? 'text-yellow-400' :
-                  updateState === 'error' ? 'text-red-400' :
-                  'text-text-muted hover:text-text-primary'
-                }`}
-              >
-                <RefreshCw size={14} className={updateState === 'checking' || updateState === 'downloading' ? 'animate-spin' : ''} />
-              </button>
-            )}
-            {/* Normally a developer-mode affordance, but it's also the only exit
-                from a wedged updater — so unhide it once a check has failed. */}
-            {isElectron && (developerMode || updateFailed) && updateState !== 'downloading' && updateState !== 'checking' && (
-              <button
-                title={updateFailed ? 'Update check failed — reinstall the latest release' : 'Force reinstall latest release'}
-                onClick={() => el?.forceUpdate?.()}
-                className={`p-1 rounded transition-colors ${updateFailed ? 'text-red-400 hover:text-red-300' : 'text-text-muted hover:text-text-primary'}`}
-              >
-                <DownloadCloud size={14} />
-              </button>
-            )}
-            {updateState === 'downloading' && (
-              <span className="text-[10px] text-accent font-medium">{updatePercent}%</span>
-            )}
-            {updateState === 'available' && updateVersion && (
-              <span className="text-[10px] text-yellow-400">v{updateVersion}</span>
-            )}
-            {updateState === 'downloaded' && (
-              <span className="text-[10px] text-emerald-400">Restart to update</span>
-            )}
           </div>
           <div className="flex items-center gap-3" style={noDrag}>
             {/* Manual pop-out — only when shown in-app on desktop (i.e. the
@@ -1051,7 +981,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             you're after might live somewhere you're not currently looking. */}
         <div className="shrink-0 px-4 sm:px-5 pt-3 pb-3 border-b border-[var(--border)]">
           <div className="relative rounded-full glass-specular">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none z-20" />
             <input
               type="text"
               value={settingsQuery}
@@ -1064,7 +994,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
               <button
                 onClick={() => setSettingsQuery('')}
                 title="Clear search"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors z-20"
               >
                 <X size={14} />
               </button>
@@ -1113,7 +1043,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             <div ref={categoryIndicatorRef} aria-hidden="true" className="nav-indicator rounded-xl glass-specular bg-[var(--glass-pane)] shadow-[inset_0_0_0_0.5px_var(--glass-rim),0_2px_8px_rgb(0_0_0/0.12)]" />
           </div>
 
-          <div key={tab} ref={contentRef} className="flex-1 min-w-0 overflow-y-auto px-5 sm:px-10 py-7">
+          <div key={tab} ref={contentRef} className="settings-content flex-1 min-w-0 overflow-y-auto px-5 sm:px-10 py-7">
             <div className="max-w-[760px] mx-auto">
 
             {/* ── Search results ── shown instead of the active tab's content
@@ -1138,7 +1068,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         {r.sub && <p className="text-text-muted text-[11px] truncate">{r.sub}</p>}
                       </div>
                       <span className="shrink-0 text-[11px] font-medium text-text-muted bg-[var(--surface-overlay)] border border-[var(--border)] rounded-full px-2 py-0.5">
-                        {tabs.find((t) => t.id === r.tab)?.label ?? r.tab}
+                        {tabs.find((t) => t.id === TAB_GROUP[r.tab])?.label ?? r.tab}
                       </span>
                     </button>
                   ))}
@@ -1147,12 +1077,12 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Account ── */}
-            {!settingsQueryTrimmed && tab === 'account' && (
+            {!settingsQueryTrimmed && shows('account') && <span data-settings-section="account" aria-hidden />}{!settingsQueryTrimmed && shows('account') && (
               <AccountSettings page={accountPage} setPage={setAccountPage} openMainView={openMainView} />
             )}
 
             {/* ── General ── */}
-            {!settingsQueryTrimmed && tab === 'general' && (
+            {!settingsQueryTrimmed && shows('general') && <span data-settings-section="general" aria-hidden />}{!settingsQueryTrimmed && shows('general') && (
               <div>
                 <SettingsTitle>General</SettingsTitle>
                 <SettingsGroup title="Browsing">
@@ -1218,7 +1148,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Appearance ── */}
-            {!settingsQueryTrimmed && tab === 'appearance' && (
+            {!settingsQueryTrimmed && shows('appearance') && <span data-settings-section="appearance" aria-hidden />}{!settingsQueryTrimmed && shows('appearance') && (
               <div>
                 <SettingsTitle>Appearance</SettingsTitle>
                 <SettingsGroup title="Theme">
@@ -1228,33 +1158,12 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                         <Brush size={13} className="text-white" strokeWidth={2.25} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="text-text-primary text-sm">Skin</span>
-                        <p className="text-text-muted text-[11px]">Skins with a signature color also set the accent — or build your own below</p>
+                        <span className="text-text-primary text-sm">Theme</span>
+                        <p className="text-text-muted text-[11px]">Dark, Light, or the colors of a Juice WRLD album cover</p>
                       </div>
-                      <button
-                        onClick={() => skinImportRef.current?.click()}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-text-secondary hover:text-text-primary hover:bg-[var(--surface-overlay)] transition-colors shrink-0"
-                        title="Import a skin file"
-                      >
-                        <Upload size={13} /> Import
-                      </button>
-                      <input
-                        ref={skinImportRef}
-                        type="file"
-                        accept="application/json,.json"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) importSkinFile(file)
-                          e.target.value = ''
-                        }}
-                      />
                     </div>
-                    {skinImportError && (
-                      <p className="text-red-400 text-[11px] mb-2 pl-[34px]">{skinImportError}</p>
-                    )}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pl-[34px]">
-                      {[...SKINS, ...customSkins].map((skin) => {
+                      {SKINS.map((skin) => {
                         const active = theme === skin.id
                         return (
                           <div key={skin.id} className="relative group">
@@ -1263,9 +1172,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                                 setTheme(skin.id)
                                 if (skin.accent) { setAccentColor(skin.accent); setCustomAccent(skin.accent) }
                               }}
-                              onDoubleClick={() => { if (skin.custom) setEditingSkinId(skin.id) }}
                               className="w-full text-left"
-                              title={skin.dynamic ? 'Palette follows the current song’s cover art' : skin.name}
+                              title={skin.name}
                             >
                               {/* Mini app mock: sidebar strip, two "text" lines, and a
                                   player bar with the skin's accent — a live swatch of
@@ -1285,13 +1193,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                                   <div className="mt-auto flex items-center gap-1">
                                     <div
                                       className="w-2.5 h-2.5 rounded-full shrink-0"
-                                      style={{
-                                        // Dynamic skin has no fixed accent — a color wheel
-                                        // signals "follows the song's cover art".
-                                        background: skin.dynamic
-                                          ? 'conic-gradient(#f43f5e, #f59e0b, #10b981, #38bdf8, #a78bfa, #f43f5e)'
-                                          : skin.accent ?? accentColor,
-                                      }}
+                                      style={{ background: skin.accent ?? accentColor }}
                                     />
                                     <div className="h-1 flex-1 rounded-full" style={{ background: skin.vars['--surface-highest'] }} />
                                   </div>
@@ -1301,33 +1203,9 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                                 {skin.name}
                               </p>
                             </button>
-                            {/* Custom skins get an edit button (sibling, not nested,
-                                to keep the markup button-in-button free). */}
-                            {skin.custom && (
-                              <button
-                                onClick={() => setEditingSkinId(skin.id)}
-                                className="absolute top-1 right-1 p-1 rounded-md bg-black/45 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-black/65 transition-opacity"
-                                title="Edit skin"
-                              >
-                                <Pencil size={11} />
-                              </button>
-                            )}
                           </div>
                         )
                       })}
-                      {/* Create-a-skin tile */}
-                      <button
-                        onClick={createSkin}
-                        className="group text-left"
-                        title="Create a new skin"
-                      >
-                        <div className="h-14 rounded-lg border border-dashed border-[var(--border)] flex flex-col items-center justify-center gap-0.5 text-text-muted group-hover:text-accent group-hover:border-accent transition-colors">
-                          <Plus size={16} />
-                        </div>
-                        <p className="mt-1 text-[11px] font-medium text-center text-text-muted group-hover:text-text-primary transition-colors">
-                          Create
-                        </p>
-                      </button>
                     </div>
                   </div>
                   <div className="py-3 border-b border-[var(--border)] last:border-b-0">
@@ -1361,6 +1239,9 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   </div>
                 </SettingsGroup>
                 <SettingsGroup title="Effects">
+                  <Row icon={Waves} iconColor="#8b5cf6" label="Liquid Glass & animations" sub="On by default. Follow system for accessibility, or reduce effects to save resources.">
+                    <ThemedSelect value={effectsMode} onChange={v => setEffectsMode(v as EffectsMode)} options={[{value:'on',label:'On'}, {value:'system',label:'Follow system'}, {value:'reduced',label:'Reduced'}]} title="Liquid Glass and animations" className="min-w-[140px]" />
+                  </Row>
                   <Row
                     icon={Waves}
                     iconColor="#8b5cf6"
@@ -1542,40 +1423,10 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Navigation ── */}
-            {!settingsQueryTrimmed && tab === 'navigation' && (
+            {!settingsQueryTrimmed && shows('navigation') && <span data-settings-section="navigation" aria-hidden />}{!settingsQueryTrimmed && shows('navigation') && (
               <div>
                 <SettingsTitle>Navigation</SettingsTitle>
                 <SettingsGroup title="Layout">
-                  <div className="py-3 border-b border-[var(--border)] last:border-b-0">
-                    <div className="flex items-center gap-2.5 mb-2.5">
-                      <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: '#0d9488' }}>
-                        <PanelLeft size={13} className="text-white" strokeWidth={2.25} />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-text-primary text-sm">Navigation position</span>
-                        <p className="text-text-muted text-[11px]">Where the nav menu sits on desktop — phones keep the bottom tabs</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap pl-[34px]">
-                      {NAV_POSITIONS.map(({ id, label, icon: PosIcon }) => {
-                        const active = sidebarPosition === id
-                        return (
-                          <button
-                            key={id}
-                            onClick={() => setSidebarPosition(id)}
-                            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                              active
-                                ? 'bg-accent/15 text-accent border-[var(--accent)]'
-                                : 'text-text-secondary border-transparent bg-[var(--fill)] hover:text-text-primary hover:bg-[var(--fill-strong)]'
-                            }`}
-                          >
-                            <PosIcon size={14} className="shrink-0" />
-                            {label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
                   {isElectron && (
                     <div className="py-3 border-b border-[var(--border)] last:border-b-0">
                       <div className="flex items-center gap-2.5 mb-2.5">
@@ -1868,7 +1719,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Playback ── */}
-            {!settingsQueryTrimmed && tab === 'playback' && (
+            {!settingsQueryTrimmed && shows('playback') && <span data-settings-section="playback" aria-hidden />}{!settingsQueryTrimmed && shows('playback') && (
               <div>
                 <SettingsTitle>Playback</SettingsTitle>
                 <SettingsGroup title="Playback">
@@ -1973,7 +1824,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Lyrics & WRLD ── */}
-            {!settingsQueryTrimmed && tab === 'lyrics' && (
+            {!settingsQueryTrimmed && shows('lyrics') && <span data-settings-section="lyrics" aria-hidden />}{!settingsQueryTrimmed && shows('lyrics') && (
               <div>
                 <SettingsTitle>Lyrics &amp; WRLD</SettingsTitle>
                 <SettingsGroup title="Lyrics">
@@ -2197,7 +2048,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Connections ── */}
-            {!settingsQueryTrimmed && tab === 'connections' && (
+            {!settingsQueryTrimmed && shows('connections') && <span data-settings-section="connections" aria-hidden />}{!settingsQueryTrimmed && shows('connections') && (
               <div>
                 <SettingsTitle>Connections</SettingsTitle>
                 <SettingsGroup title="Last.fm">
@@ -2299,10 +2150,10 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Desktop ── */}
-            {!settingsQueryTrimmed && tab === 'desktop' && <DesktopSettings />}
+            {!settingsQueryTrimmed && shows('desktop') && <span data-settings-section="desktop" aria-hidden />}{!settingsQueryTrimmed && shows('desktop') && <DesktopSettings />}
 
             {/* ── Shortcuts ── */}
-            {!settingsQueryTrimmed && tab === 'shortcuts' && (
+            {!settingsQueryTrimmed && shows('shortcuts') && <span data-settings-section="shortcuts" aria-hidden />}{!settingsQueryTrimmed && shows('shortcuts') && (
               <div>
                 <SettingsTitle action={
                   <button
@@ -2445,7 +2296,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Library & storage ── */}
-            {!settingsQueryTrimmed && tab === 'library' && isElectron && (
+            {!settingsQueryTrimmed && shows('library') && <span data-settings-section="library" aria-hidden />}{!settingsQueryTrimmed && shows('library') && isElectron && (
               <div>
                 <SettingsTitle>Library &amp; storage</SettingsTitle>
                 <SettingsGroup title="Library folders" footer={libraryLastScanned ? `Last scanned ${new Date(libraryLastScanned).toLocaleString()} · ${libraryTrackCount} tracks` : 'Folders on this computer that are scanned into your Library.'}>
@@ -2554,10 +2405,10 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── App ── */}
-            {!settingsQueryTrimmed && tab === 'app' && isElectron && (
+            {!settingsQueryTrimmed && shows('app') && <span data-settings-section="app" aria-hidden />}{!settingsQueryTrimmed && shows('app') && isElectron && (
               <div>
                 <SettingsTitle>App</SettingsTitle>
-                <SettingsGroup title="Startup & updates">
+                <SettingsGroup title="Startup">
                   <Row icon={Monitor} iconColor="#6b7280" label="Start on">
                     <ThemedSelect
                       value={appSettings.startupView}
@@ -2571,41 +2422,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       className="bg-[var(--fill)] text-text-primary text-xs rounded-full px-3 py-1.5 border border-transparent"
                     />
                   </Row>
-                  <Row icon={BellOff} iconColor="#16a34a" label="Auto-download updates">
-                    <Toggle on={appSettings.autoDownload} onClick={() => setSetting('autoDownload', !appSettings.autoDownload)} />
-                  </Row>
-                  {isElectron && (
-                    <Row
-                      icon={FlaskConical}
-                      iconColor="#f59e0b"
-                      label="Beta updates"
-                      sub={betaEnabled
-                        ? 'This install receives beta (pre-release) builds'
-                        : betaMsg ?? 'Have an access code? Enter it to receive beta builds'}
-                    >
-                      {betaEnabled ? (
-                        <Toggle on={betaEnabled} onClick={leaveBeta} />
-                      ) : (
-                        <div className="flex items-center gap-2 shrink-0">
-                          <input
-                            type="text"
-                            value={betaCode}
-                            onChange={(e) => { setBetaCode(e.target.value); setBetaMsg(null) }}
-                            onKeyDown={(e) => { if (e.key === 'Enter') joinBeta() }}
-                            placeholder="Access code"
-                            className="w-32 bg-[var(--fill)] text-text-primary text-xs rounded-full px-3 py-1.5 border border-transparent placeholder:text-text-muted"
-                          />
-                          <button
-                            onClick={joinBeta}
-                            disabled={!betaCode.trim()}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--fill)] hover:bg-[var(--fill-strong)] border border-transparent text-text-secondary transition-colors disabled:opacity-50"
-                          >
-                            Join
-                          </button>
-                        </div>
-                      )}
-                    </Row>
-                  )}
                 </SettingsGroup>
                 <SettingsGroup title="Windows">
                   <Row
@@ -2719,7 +2535,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   </Row>
                 </SettingsGroup>
                 <SettingsGroup title="Advanced">
-                  <Row icon={Wrench} iconColor="#6b7280" label="Developer options" sub="Shows a Developer tab with cache & diagnostics tools">
+                  <Row icon={Wrench} iconColor="#6b7280" label="Developer options" sub="Shows developer tools: Glass Lab, diagnostics, logs, cache and API servers">
                     <Toggle on={developerMode} onClick={() => setDeveloperMode(!developerMode)} />
                   </Row>
                 </SettingsGroup>
@@ -2727,7 +2543,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── Developer ── */}
-            {!settingsQueryTrimmed && tab === 'developer' && isElectron && developerMode && (
+            {!settingsQueryTrimmed && shows('developer') && <span data-settings-section="developer" aria-hidden />}{!settingsQueryTrimmed && shows('developer') && isElectron && developerMode && (
               <div>
                 <SettingsTitle>Developer</SettingsTitle>
                 <SettingsGroup title="Tools">
@@ -2759,15 +2575,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                       {cacheCleared !== null ? `Cleared ${cacheCleared}` : 'Clear cache'}
                     </button>
                   </Row>
-                  <Row icon={DownloadCloud} iconColor="#0ea5e9" label="Online installer" sub="Ships with the app — repairs or reinstalls even if the app won't launch">
-                    <button
-                      onClick={() => el?.openOnlineInstaller?.()}
-                      className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg bg-[var(--fill)] hover:bg-[var(--fill-strong)] border border-transparent shrink-0"
-                    >
-                      <DownloadCloud size={13} />
-                      Open
-                    </button>
-                  </Row>
                 </SettingsGroup>
                 <SettingsGroup title="API servers" footer={<>Each rule sends requests under a path (like <code className="font-mono">/cdn</code> or <code className="font-mono">/chat</code>) to another API base; everything else uses the main API. The longest matching path wins. Changes take effect after a reload.</>}>
                   <div className="py-3">
@@ -2779,7 +2586,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             )}
 
             {/* ── About ── */}
-            {!settingsQueryTrimmed && tab === 'about' && (
+            {!settingsQueryTrimmed && shows('about') && <span data-settings-section="about" aria-hidden />}{!settingsQueryTrimmed && shows('about') && (
               <div>
                 <SettingsTitle>About</SettingsTitle>
                 <div className="glass-pane rounded-2xl p-5 mb-6 flex items-start gap-4">
@@ -2834,12 +2641,12 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   {CONTRIBUTOR_ENABLED && (!account || (!account.is_contributor && !account.is_administrator)) && (
                     <SettingsLink icon={FolderOpen} color="#0284c7" label="Become a contributor" sub="Help keep the file archive complete" onClick={() => openMainView('contributor')} />
                   )}
-                  <SettingsLink icon={BookOpen} color="#0d9488" label="API docs" onClick={() => openMainView('docs')} />
+                  {(developerMode || !isElectron) && <SettingsLink icon={BookOpen} color="#0d9488" label="API docs" onClick={() => openMainView('docs')} />}
                   <SettingsLink icon={MessageCircle} color="#7c3aed" label="Send feedback" sub="Report a bug or share an idea" onClick={() => useStore.getState().openReport({ kind: 'feedback' })} />
                   <SettingsLink icon={Heart} color="#db2777" label="Thank you" sub="Donors and contributors" onClick={() => openMainView('thanks')} />
                 </SettingsGroup>
 
-                <SettingsGroup title="Debug log">
+                {(developerMode || !isElectron) && <SettingsGroup title="Debug log">
                   <Row
                     icon={Activity}
                     iconColor="#dc2626"
@@ -2859,7 +2666,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   >
                     <DebugAnonymousToggle />
                   </Row>
-                </SettingsGroup>
+                </SettingsGroup>}
 
                 <SettingsGroup title="Support the app" footer="Donations help keep the servers running.">
                   <div className="flex flex-col gap-1.5 py-3">

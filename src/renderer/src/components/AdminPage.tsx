@@ -12,6 +12,7 @@ import type { JWApiSong } from '../lib/juicewrldApi'
 import { useStore, useStorePick, IS_FLOAT_WINDOW } from '../store/useStore'
 import { displayName } from '../store/chatStore'
 import { discordHandle, errorMessage } from '../lib/format'
+import { confirmGlass } from '../lib/confirmModal'
 import * as userApi from '../lib/userApi'
 import type { EditorApplication, SongEditProposal, AdminUser, ProposalStatus } from '../lib/userApi'
 import { relativeTime, shortDate, STATUS_STYLE, StatusChip, Avatar, Empty, AppSection, QueueSearch, ProposalDiff } from './adminShared'
@@ -626,7 +627,7 @@ function ProposalsTab({ proposals, status, setStatus, onChanged, onReviewed, cha
   }
 
   const doReverse = async (id: number) => {
-    if (!confirm('Reverse this approval?')) return
+    if (!(await confirmGlass({ title: 'Reverse approval', message: 'Reverse this approval?', confirmLabel: 'Reverse', destructive: true }))) return
     setActionId(id)
     try {
       const updated = await userApi.adminReverseProposal(id, channel)
@@ -651,7 +652,12 @@ function ProposalsTab({ proposals, status, setStatus, onChanged, onReviewed, cha
   const doReviewAllForUser = async (editorId: number, action: 'approve' | 'reject') => {
     const pending = proposals.filter(x => x.editor_id === editorId && x.status === 'pending')
     if (pending.length === 0) return
-    if (!confirm(`${action === 'approve' ? 'Approve' : 'Deny'} all ${pending.length} pending proposal${pending.length !== 1 ? 's' : ''} from ${pending[0].editor_username} (#${editorId})?`)) return
+    if (!(await confirmGlass({
+      title: action === 'approve' ? 'Approve all proposals' : 'Deny all proposals',
+      message: `${action === 'approve' ? 'Approve' : 'Deny'} all ${pending.length} pending proposal${pending.length !== 1 ? 's' : ''} from ${pending[0].editor_username} (#${editorId})?`,
+      confirmLabel: action === 'approve' ? 'Approve all' : 'Deny all',
+      destructive: action === 'reject',
+    }))) return
     setAcceptingAllUser(editorId)
     try {
       const result = await userApi.adminReviewProposalsBatch(pending.map(p => p.id), action, channel)

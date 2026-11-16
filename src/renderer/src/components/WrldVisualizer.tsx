@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare } from 'lucide-react'
+import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid } from 'lucide-react'
 import { Visualizer, VISUALIZERS, needsWebGL, type VizLayout } from '../lib/viz'
 import { getAnalysisTap, resumeEffectsContext } from '../lib/audioEffects'
 import { smallCoverUrl } from '../lib/juicewrldApi'
@@ -234,6 +234,7 @@ export default function WrldVisualizer({
   useEffect(() => () => window.clearTimeout(osdTimer.current), [])
 
   // ── Idle: toolbar and cursor fade when the mouse rests ─────────────────────
+  const toolbarRef = useRef<HTMLDivElement>(null)
   const [idle, setIdle] = useState(false)
   const overToolbar = useRef(false)
   const idleTimer = useRef(0)
@@ -241,16 +242,24 @@ export default function WrldVisualizer({
     setIdle(false)
     window.clearTimeout(idleTimer.current)
     idleTimer.current = window.setTimeout(() => {
-      if (!overToolbar.current) setIdle(true)
+      if (!overToolbar.current && !toolbarRef.current?.contains(document.activeElement)) setIdle(true)
     }, IDLE_MS)
   }, [])
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
-    root.addEventListener('mousemove', wake)
+    root.addEventListener('pointermove', wake)
+    root.addEventListener('pointerdown', wake)
+    root.addEventListener('keydown', wake)
+    root.addEventListener('focusin', wake)
+    root.addEventListener('focusout', wake)
     wake()
     return () => {
-      root.removeEventListener('mousemove', wake)
+      root.removeEventListener('pointermove', wake)
+      root.removeEventListener('pointerdown', wake)
+      root.removeEventListener('keydown', wake)
+      root.removeEventListener('focusin', wake)
+      root.removeEventListener('focusout', wake)
       window.clearTimeout(idleTimer.current)
       root.removeAttribute('data-viz-idle')
     }
@@ -263,7 +272,6 @@ export default function WrldVisualizer({
   // ── Clear of a top nav pill, only when the two would actually overlap ──────
   // The toolbar is right-anchored, so its horizontal span doesn't depend on
   // its top - compare it to the pill's published edges.
-  const toolbarRef = useRef<HTMLDivElement>(null)
   const [underPill, setUnderPill] = useState(false)
   useEffect(() => {
     const el = toolbarRef.current
@@ -381,11 +389,13 @@ export default function WrldVisualizer({
   }, [trackKey, albumKey, announce])
 
   // The 999 FM card of the Widgets layout (WrldFmWidget); open on its own or while 999 FM is on.
+  const wrldWidgets = useVizStore((s) => s.wrldWidgets)
+  const setWrldWidgets = useVizStore((s) => s.setWrldWidgets)
   const fmCardAvailable = useVizStore((s) => s.wrldWidgets && s.wrldFm)
   const fmCardShown = useVizStore((s) => fm.active ? !s.wrldFmCollapsed : s.wrldFmOpen)
   const tool = 'w-9 h-9 flex items-center justify-center rounded-[10px] transition-colors disabled:opacity-30 disabled:pointer-events-none'
-  const toolIdle = 'text-white/60 hover:text-white hover:bg-white/10'
-  const toolOn = 'text-[var(--accent)] bg-[rgb(var(--accent-rgb)/0.16)]'
+  const toolIdle = 'text-text-primary hover:bg-[var(--fill-strong)]'
+  const toolOn = 'text-text-primary bg-[rgb(var(--accent-rgb)/0.16)]'
 
   return (
     <>
@@ -407,14 +417,14 @@ export default function WrldVisualizer({
         // Clear of the Electron title bar outside fullscreen, and of a top-docked floating nav
         // pill only when they'd overlap.
         style={{ top: `max(${underPill ? 'calc(var(--nav-pill-top, 0px) + 1rem)' : '1rem'}, ${IS_ELECTRON && !fullscreen ? '2.5rem' : '1rem'})` }}
-        className={`absolute right-4 z-40 flex items-center gap-0.5 p-[5px] rounded-[14px] bg-black/40 backdrop-blur-xl border border-white/10 transition-[opacity,transform] duration-300 ${
+        className={`wrld-toolbar glass-bar absolute right-4 z-40 flex items-center gap-0.5 p-[5px] rounded-[14px] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl border border-[var(--border)] transition-[opacity,transform] duration-200 ${
           idle && !showSettings ? 'opacity-0 -translate-y-1.5 pointer-events-none' : ''
         }`}
         onMouseEnter={() => { overToolbar.current = true }}
         onMouseLeave={() => { overToolbar.current = false; wake() }}
       >
         <button
-          className={`h-9 px-2.5 flex items-center gap-1.5 rounded-[10px] text-[11px] font-bold tracking-[0.1em] uppercase transition-colors disabled:opacity-30 disabled:pointer-events-none ${fm.active ? (fm.live ? 'text-red-400 bg-red-500/15' : toolOn) : toolIdle}`}
+          className={`h-9 px-2.5 flex items-center gap-1.5 rounded-[10px] text-[11px] font-bold tracking-[0.1em] uppercase transition-colors disabled:opacity-30 disabled:pointer-events-none ${fm.active ? (fm.live ? 'text-text-primary bg-red-500/15' : toolOn) : toolIdle}`}
           onClick={fm.toggle}
           disabled={fm.disabled}
           title={fm.active ? 'Turn off 999 FM' : 'Turn on 999 FM'}
@@ -451,18 +461,16 @@ export default function WrldVisualizer({
           <Dices size={15} />
           <span>Random</span>
         </button>
-        <span className="w-px h-5 mx-1 bg-white/10" />
-        {desktopWidgetsSupported && (
-          <button
-            className={`${tool} ${desktopWidgetsOn ? toolOn : toolIdle}`}
-            onClick={toggleDesktopWidgets}
-            title="Desktop widgets: the player, playlist and clock out on your desktop"
-            aria-label="Desktop widgets"
-            aria-pressed={desktopWidgetsOn}
-          >
-            <Monitor size={17} />
-          </button>
-        )}
+        <span className="w-px h-5 mx-1 bg-[var(--border)]" />
+        <button
+          className={`h-9 px-2.5 flex items-center gap-1.5 rounded-[10px] text-xs font-medium transition-colors ${toolIdle}`}
+          onClick={() => setWrldWidgets(!wrldWidgets)}
+          title={wrldWidgets ? 'Focus on music' : 'Show widgets'}
+          aria-label={wrldWidgets ? 'Focus on music' : 'Show widgets'}
+        >
+          {wrldWidgets ? <Music2 size={17} /> : <LayoutGrid size={17} />}
+          <span>{wrldWidgets ? 'Music' : 'Widgets'}</span>
+        </button>
         <button
           className={`${tool} ${showSettings ? toolOn : toolIdle}`}
           onClick={() => setShowSettings((v) => !v)}
@@ -474,7 +482,7 @@ export default function WrldVisualizer({
         </button>
         {fullscreen && (
           <>
-            <span className="w-px h-5 mx-1 bg-white/10" />
+            <span className="w-px h-5 mx-1 bg-[var(--border)]" />
             <button className={`${tool} ${toolIdle}`} onClick={onExit} title="Exit fullscreen (Esc)" aria-label="Exit fullscreen">
               <Minimize2 size={17} />
             </button>
@@ -482,7 +490,7 @@ export default function WrldVisualizer({
         )}
         {!fullscreen && (
           <>
-            <span className="w-px h-5 mx-1 bg-white/10" />
+            <span className="w-px h-5 mx-1 bg-[var(--border)]" />
             <button className={`${tool} ${toolIdle}`} onClick={onEnter} title="Fullscreen" aria-label="Fullscreen">
               <Maximize2 size={16} />
             </button>
@@ -497,6 +505,19 @@ export default function WrldVisualizer({
           <div
             className={`absolute top-full right-0 mt-2 ${IS_ELECTRON && settingsTab === 'desktop' ? 'w-[460px]' : 'w-[400px]'} max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto p-4 rounded-[14px] bg-[var(--surface)] border border-[var(--border)] shadow-2xl`}
           >
+            {desktopWidgetsSupported && (
+              <button
+                className="mb-3 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-text-primary bg-[var(--surface-overlay)] transition-colors hover:bg-[var(--fill-strong)]"
+                onClick={toggleDesktopWidgets}
+                title="Show the player, playlist and clock on your desktop"
+                aria-label="Desktop widgets"
+                aria-pressed={desktopWidgetsOn}
+              >
+                <Monitor size={17} />
+                <span className="flex-1 text-left">Desktop widgets</span>
+                <span className="text-xs text-text-muted">{desktopWidgetsOn ? 'On' : 'Off'}</span>
+              </button>
+            )}
             {IS_ELECTRON && (
               <div role="tablist" aria-label="Settings" className="flex rounded-lg border border-[var(--border)] overflow-hidden mb-4">
                 {([['viz', 'Visualizer'], ['desktop', 'Desktop']] as const).map(([id, label]) => (

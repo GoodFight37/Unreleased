@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 // World map of CDN nodes: a dotted landmass (lib/worldDots, generated from
 // Natural Earth) with a marker per located node, coloured by the same bucket
 // as the roster chips. Nearby nodes merge into a counted cluster that splits
@@ -58,7 +59,7 @@ function clampView(v: View): View {
 interface Placed { node: CdnOwnedNode; bucket: Bucket; x: number; y: number }
 interface Cluster { key: string; x: number; y: number; items: Placed[]; bucket: Bucket; dimmed: boolean; selected: boolean }
 
-const reducedMotion = (): boolean => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = (): boolean => effectsMotionMedia().matches
 
 export default function CdnWorldMap({ nodes, dimmedIds, selectedId, onSelect, wheelZoom = false }: {
   nodes: CdnOwnedNode[]

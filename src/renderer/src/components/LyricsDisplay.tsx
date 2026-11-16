@@ -3,6 +3,7 @@ import { Download, Sparkles } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { parseLrc, getCurrentLineIndex, isLrcFormat, downloadSyncedLyrics, splitAdLibs, splitColorWords, ADLIB_OPACITY } from '../lib/lyrics'
 import { useStore, IS_FLOAT_WINDOW } from '../store/useStore'
+import { getSkin } from '../lib/skins'
 import { trackIdToSongId } from '../lib/userApi'
 import { isDonorStreamUrl } from '../lib/donorPlayback'
 import { seekAudio, getAudioCurrentTime } from './Player'
@@ -27,9 +28,10 @@ interface LyricsDisplayProps {
 // Memoized: the panels around it re-render on every play/pause and queue change, and it reads
 // what it shows from the store itself.
 export default memo(function LyricsDisplay({ getTime, onSeek, compact, override }: LyricsDisplayProps = {}): JSX.Element {
-  const { currentTrackFull, account, lyricsOffset, lyricsScale, lyricsAlign, lyricsBlur, lyricsBlurAmount, lyricsColorActive, lyricsColorInactive } = useStore(useShallow(s => ({
+  const { currentTrackFull, account, theme, lyricsOffset, lyricsScale, lyricsAlign, lyricsBlur, lyricsBlurAmount, lyricsColorActive, lyricsColorInactive } = useStore(useShallow(s => ({
     currentTrackFull: s.currentTrackFull,
     account: s.account,
+    theme: s.theme,
     lyricsOffset: s.lyricsOffset,
     lyricsScale: s.lyricsScale,
     lyricsAlign: s.lyricsAlign,
@@ -38,6 +40,7 @@ export default memo(function LyricsDisplay({ getTime, onSeek, compact, override 
     lyricsColorActive: s.lyricsColorActive,
     lyricsColorInactive: s.lyricsColorInactive,
   })))
+  const isLight = !getSkin(theme).dark
 
   // null = auto, i.e. the theme's own text colors.
   const activeColor = lyricsColorActive ?? 'var(--text-primary)'
@@ -161,7 +164,7 @@ export default memo(function LyricsDisplay({ getTime, onSeek, compact, override 
           // Every line except the one playing - played and upcoming alike.
           const isBlurred = !isActive && lyricsBlur
           const lineStyle: React.CSSProperties = {
-            opacity: isActive ? 1 : isPast ? 0.35 : 0.2,
+            opacity: isActive ? 1 : isPast ? (isLight ? 0.65 : 0.35) : (isLight ? 0.62 : 0.2),
             color: isActive ? activeColor : inactiveColor,
             filter: isBlurred ? `blur(${lyricsBlurAmount.toFixed(2)}px)` : 'none',
             transition: 'opacity 0.35s ease, color 0.35s ease, filter 0.35s ease',

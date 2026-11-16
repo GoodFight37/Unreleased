@@ -79,7 +79,7 @@ const serverCommand: TermCommand = {
       ctx.print(`joined ${s.name}`, 'ok')
     } else if (sub === 'leave') {
       const id = serverOf(rest[0])
-      if (!confirmAction(ctx, `Leave server #${id}?`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Leave server #${id}?`, bool.has('y')))) return
       await leaveServer(id)
       await refresh()
       ctx.print(`left server #${id}`, 'ok')
@@ -97,7 +97,7 @@ const serverCommand: TermCommand = {
       ctx.print(`updated ${s.name}`, 'ok')
     } else if (sub === 'rm' || sub === 'delete') {
       const id = serverOf(rest[0])
-      if (!confirmAction(ctx, `Delete server #${id} and everything in it? This can't be undone.`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Delete server #${id} and everything in it? This can't be undone.`, bool.has('y')))) return
       await deleteServer(id)
       await refresh()
       ctx.print(`deleted server #${id}`, 'ok')
@@ -171,7 +171,7 @@ const roleCommand: TermCommand = {
     } else if (sub === 'rm' || sub === 'delete') {
       const server = serverOf(rest[0])
       const id = idArg(rest[1], 'chatrole rm <server> <roleId>')
-      if (!confirmAction(ctx, `Delete role #${id}?`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Delete role #${id}?`, bool.has('y')))) return
       await deleteRole(server, id)
       ctx.print(`deleted role #${id}`, 'ok')
     } else fail('usage: chatrole [ls | new | edit | rm | perms]')
@@ -207,7 +207,7 @@ const roomCommand: TermCommand = {
       ctx.print(`updated #${c.name}`, 'ok')
     } else if (sub === 'rm' || sub === 'delete') {
       const id = idArg(rest[0], 'room rm <id>')
-      if (!confirmAction(ctx, `Delete room #${id} and its messages? This can't be undone.`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Delete room #${id} and its messages? This can't be undone.`, bool.has('y')))) return
       await deleteChannel(id)
       await refresh()
       ctx.print(`deleted room #${id}`, 'ok')
@@ -299,7 +299,7 @@ const convoCommand: TermCommand = {
       ctx.print(`${sub === 'add' ? 'added' : 'removed'} ${ids.length} ${ids.length === 1 ? 'person' : 'people'}`, 'ok')
     } else if (sub === 'rm' || sub === 'delete') {
       const id = idArg(rest[0], 'convo rm <id>')
-      if (!confirmAction(ctx, `Delete conversation #${id}?`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Delete conversation #${id}?`, bool.has('y')))) return
       await deleteConversation(id)
       await refresh()
       ctx.print(`deleted #${id}`, 'ok')
@@ -354,7 +354,7 @@ const msgCommand: TermCommand = {
       await cs().edit(await messageById(id, ctx), text)
       ctx.print(`edited #${id}`, 'ok')
     } else if (sub === 'rm' || sub === 'delete') {
-      if (!confirmAction(ctx, `Delete message #${id}?`, bool.has('y'))) return
+      if (!(await confirmAction(ctx, `Delete message #${id}?`, bool.has('y')))) return
       await cs().remove(await messageById(id, ctx), { purge: bool.has('purge') })
       ctx.print(`deleted #${id}`, 'ok')
     } else fail('usage: msg [show | thread | pin | unpin | react | unreact | edit | rm] <id>')

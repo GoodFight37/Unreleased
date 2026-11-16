@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Play, ListMusic, Gamepad2, Flame, Music2, Disc3, Newspaper, Radio, Heart, Album, Music, Wrench, MicVocal, RefreshCw, AudioLines, ImagePlus, FileAudio } from 'lucide-react'
 import { AlbumArtThumbnail } from './AlbumArtThumbnail'
@@ -92,7 +93,7 @@ function CoverStrip({ minRows, controlsRef, children }: {
     // glides instead of jumping 100px at a time.
     let target = strip.scrollLeft
     let frame = 0
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const reduceMotion = effectsMotionMedia().matches
     const glide = (): void => {
       const diff = target - strip.scrollLeft
       if (Math.abs(diff) < 0.5) { strip.scrollLeft = target; frame = 0; return }

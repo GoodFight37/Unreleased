@@ -168,11 +168,11 @@ export const ADMIN_COMMANDS: TermCommand[] = [
       }
       const ids = [...new Set(idList.split(',').map(Number))]
       if (ids.length > 5000 || ids.some(id => !Number.isSafeInteger(id) || id < 1)) fail('provide 1 to 5000 positive proposal ids, separated by commas')
-      if (!confirmAction(ctx, `${action === 'approve' ? 'Approve' : 'Deny'} ${ids.length} ${kind} proposals?`, yes)) return
+      if (!(await confirmAction(ctx, `${action === 'approve' ? 'Approve' : 'Deny'} ${ids.length} ${kind} proposals?`, yes))) return
       const result = kind === 'song'
         ? await adminReviewProposalsBatch(ids, action, options[1])
         : await adminReviewCompProposalsBatch(ids, action, options[1])
-      ctx.print(Object.entries(result.summary).map(([key, count]) => `${key}: ${count}`).join(' · '))
+      ctx.print(Object.entries(result.summary).map(([key, count]) => `${key}: ${count}`).join(' ï¿½ '))
       for (const row of result.results) {
         if (row.result === 'failed' || row.result === 'not_run') ctx.print(`#${row.id} ${row.result}: ${row.detail ?? 'not reviewed'}`, 'error')
       }
@@ -185,7 +185,7 @@ export const ADMIN_COMMANDS: TermCommand[] = [
       const { text, yes } = takeYes(args)
       const { kind, id } = parseReviewArgs(text, 'reverse [song|comp] <id> [-y]')
       if (kind === 'app') fail('applications canâ€™t be reversed')
-      if (!confirmAction(ctx, `Reverse ${kind} proposal #${id}? This undoes the change it made.`, yes)) return
+      if (!(await confirmAction(ctx, `Reverse ${kind} proposal #${id}? This undoes the change it made.`, yes))) return
       if (kind === 'song') await adminReverseProposal(id)
       else await adminReverseCompProposal(id)
       ctx.print(`${kind} proposal #${id} reversed`, 'ok')

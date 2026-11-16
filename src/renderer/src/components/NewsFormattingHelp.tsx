@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeft, Plus, Check, Copy } from 'lucide-react'
 import Markdown from './Markdown'
+import { confirmGlass } from '../lib/confirmModal'
 
 // Formatting guide shown inside the news composer. Every example is real
 // source that the post renderer (Markdown.tsx: react-markdown + GFM, no raw
@@ -393,8 +394,10 @@ export default function NewsFormattingHelp({ onBack, onInsert, onUseTemplate, bo
               })}
             </div>
             <button
-              onClick={() => {
-                if (bodyIsEmpty || window.confirm('Replace the current post body with this template?')) onUseTemplate(FULL_EXAMPLE)
+              onClick={async () => {
+                if (bodyIsEmpty || (await confirmGlass({ title: 'Replace post body', message: 'Replace the current post body with this template?', confirmLabel: 'Replace', destructive: true }))) {
+                  onUseTemplate(FULL_EXAMPLE)
+                }
               }}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium text-accent hover:bg-accent/10 transition-colors"
             >

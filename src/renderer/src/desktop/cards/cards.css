@@ -65,7 +65,5 @@
 .pg-line { color: rgba(255, 255, 255, 0.72); overflow: hidden; text-overflow: ellipsis; }
 .pg-time { color: rgba(255, 255, 255, 0.7); text-align: right; font-variant-numeric: tabular-nums; }
 
-@media (prefers-reduced-motion: reduce) {
-  .dk-card.floating .floater { animation: none; }
-  .pg.running .pg-bar { animation: none; }
-}
+:where(html[data-effects-motion="reduce"]) .dk-card.floating .floater { animation: none; }
+:where(html[data-effects-motion="reduce"]) .pg.running .pg-bar { animation: none; }

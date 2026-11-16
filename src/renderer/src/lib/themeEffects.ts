@@ -1,9 +1,11 @@
+import { effectsMotionMedia } from './effectsPreference'
 import { useEffect, useRef } from 'react'
 import { useStore, useStorePick } from '../store/useStore'
 import { buildImageUrl, smallCoverUrl } from './juicewrldApi'
 import { getFont } from './fonts'
 import { useCustomFonts } from '../hooks/useCustomFonts'
 import { getSkin, SKIN_OPTIONAL_VAR_KEYS, type Skin } from './skins'
+import { GLASS_PRESETS } from './glass/presets'
 
 function hexToRgb(hex: string): [number, number, number] {
   const num = parseInt(hex.replace('#', ''), 16)
@@ -137,7 +139,7 @@ let fadeQueue: Array<() => void> | null = null
 // every step.
 let fadeRunning = false
 
-const reducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = (): boolean => effectsMotionMedia().matches
 
 function paintPalette(write: () => void, fade = true): void {
   if (fadeQueue) { fadeQueue.push(write); return }
@@ -253,7 +255,7 @@ async function extractSongPalette(
       '--titlebar': hslToHex(h, surfSat, 0.045),
       '--text-primary': hslToHex(h, 0.25, 0.96),
       '--text-secondary': hslToHex(h, 0.16, 0.72),
-      '--text-muted': hslToHex(h, 0.08, 0.47),
+      '--text-muted': hslToHex(h, 0.08, 0.68),
       '--border': `hsl(${Math.round(h)} 70% 75% / 0.13)`,
       '--scrollbar': hslToHex(h, 0.18, 0.27),
     },
@@ -292,6 +294,8 @@ export function useThemeEffects(): void {
 
   useEffect(() => {
     const root = document.documentElement
+    const preset = GLASS_PRESETS[skin.dark ? 'dark' : 'light']
+    for (const [key, value] of Object.entries(preset)) root.style.setProperty(`--glass-${key.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}`, String(value))
     const fade = paintedTheme.current !== theme || skin.dynamic
     paintedTheme.current = theme
     // `.dark` still drives Tailwind dark: variants and color-scheme; the

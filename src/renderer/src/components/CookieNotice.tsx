@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { useState } from 'react'
 import { Cookie } from 'lucide-react'
 import { lazyOverlay } from '../lib/lazyView'
@@ -32,7 +33,7 @@ export default function CookieNotice(): JSX.Element | null {
       // best effort - dismiss for this session regardless
     }
     // The donation notice occupies the same spot; reveal it after this fade.
-    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : POP_EXIT_MS
+    const delay = effectsMotionMedia().matches ? 0 : POP_EXIT_MS
     window.setTimeout(() => window.dispatchEvent(new Event(COOKIE_NOTICE_ACK_EVENT)), delay)
     setAck(true)
   }

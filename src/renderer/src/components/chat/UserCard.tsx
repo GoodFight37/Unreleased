@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ExternalLink } from 'lucide-react'
 import type { ChatUserBrief } from '../../lib/chatApi'
@@ -6,6 +6,8 @@ import { displayName } from '../../store/chatStore'
 import { useStore } from '../../store/useStore'
 import { getPublicProfile } from '../../lib/userApi'
 import { ChatAvatar, useDismiss } from './ui'
+
+export { useOpenUserCard, UserCardHost } from './UserCardContext'
 
 // Shared avatar/name/@handle/role/bio block, used by both this popover (for
 // other users) and Navigator's MyProfileCard (for yourself) so the two read
@@ -35,33 +37,7 @@ export function UserCardBody({ user, bio, children }: {
   )
 }
 
-interface UserCardState { user: ChatUserBrief; x: number; y: number }
-
-const UserCardContext = createContext<(user: ChatUserBrief, e: { clientX: number; clientY: number }) => void>(() => {})
-
-// Cursor-positioned counterpart to MyProfileCard - click anyone's avatar or
-// name anywhere in chat (message list, member list, mentions) and the same
-// kind of card floats near the click, with a way into their full profile
-// instead of Edit Profile.
-export function useOpenUserCard(): (user: ChatUserBrief, e: { clientX: number; clientY: number }) => void {
-  return useContext(UserCardContext)
-}
-
-export function UserCardHost({ children }: { children: ReactNode }): JSX.Element {
-  const [state, setState] = useState<UserCardState | null>(null)
-  const open = useCallback((user: ChatUserBrief, e: { clientX: number; clientY: number }) => {
-    setState({ user, x: e.clientX, y: e.clientY })
-  }, [])
-  const close = useCallback(() => setState(null), [])
-  return (
-    <UserCardContext.Provider value={open}>
-      {children}
-      {state && <OtherUserCard key={state.user.id} user={state.user} x={state.x} y={state.y} onClose={close} />}
-    </UserCardContext.Provider>
-  )
-}
-
-function OtherUserCard({ user, x, y, onClose }: { user: ChatUserBrief; x: number; y: number; onClose: () => void }): JSX.Element {
+export function OtherUserCard({ user, x, y, onClose }: { user: ChatUserBrief; x: number; y: number; onClose: () => void }): JSX.Element {
   const openPublicProfile = useStore((s) => s.openPublicProfile)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: x, top: y })

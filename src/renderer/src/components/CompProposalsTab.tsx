@@ -9,6 +9,7 @@ import { buildStreamUrl } from '../lib/juicewrldApi'
 import { useStore } from '../store/useStore'
 import { getMediaType } from '../lib/fileTypes'
 import { formatBytes, formatDuration } from '../lib/format'
+import { confirmGlass } from '../lib/confirmModal'
 import { useAuthedBlobUrl, useCompProposalsQueue } from '../hooks/useCompProposalsQueue'
 import { FOLDER_LEVEL_TYPES, DESTINATION_TYPES, compApproveBlockedReason, compTagChangeRows } from '../lib/compProposalShared'
 import ProposalPropagationModal from './ProposalPropagationModal'
@@ -145,10 +146,15 @@ export default function CompProposalsTab({ embedded = false, onChanged }: { embe
     : []
   const approvableFromContributor = pendingFromContributor.filter(x => !compApproveBlockedReason(x, account))
 
-  const doReviewAllForContributor = (action: 'approve' | 'reject'): void => {
+  const doReviewAllForContributor = async (action: 'approve' | 'reject'): Promise<void> => {
     const ids = (action === 'approve' ? approvableFromContributor : pendingFromContributor).map(x => x.id)
     if (ids.length === 0) return
-    if (!confirm(`${action === 'approve' ? 'Approve' : 'Deny'} all ${ids.length} pending comp proposal${ids.length !== 1 ? 's' : ''} from ${p!.contributor_username}?`)) return
+    if (!(await confirmGlass({
+      title: action === 'approve' ? 'Approve all proposals' : 'Deny all proposals',
+      message: `${action === 'approve' ? 'Approve' : 'Deny'} all ${ids.length} pending comp proposal${ids.length !== 1 ? 's' : ''} from ${p!.contributor_username}?`,
+      confirmLabel: action === 'approve' ? 'Approve all' : 'Deny all',
+      destructive: action === 'reject',
+    }))) return
     void doReviewAll(ids, action)
   }
 

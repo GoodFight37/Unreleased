@@ -223,6 +223,13 @@ contextBridge.exposeInMainWorld('electron', {
   copyImageToClipboard: (dataUrl)     => ipcRenderer.invoke('copy-image-to-clipboard', dataUrl),
   saveImageFile:       (payload)      => ipcRenderer.invoke('save-image-file', payload),
 
+  // Share Studio MP4 export (PNG/MP4 9:16 & 16:9 with audio excerpt via FFmpeg)
+  shareStudioCapabilities: ()         => ipcRenderer.invoke('share-studio-capabilities'),
+  shareVideoStart:     (payload)      => ipcRenderer.invoke('share-video-start', payload),
+  shareVideoFrame:     (payload)      => ipcRenderer.invoke('share-video-frame', payload),
+  shareVideoFinish:    (payload)      => ipcRenderer.invoke('share-video-finish', payload),
+  shareVideoAbort:     (payload)      => ipcRenderer.invoke('share-video-abort', payload),
+
   // On-demand tool binaries (ffmpeg / yt-dlp): downloaded into userData/bin on
   // first use instead of shipping ~100 MB with every install.
   // toolsStatus resolves { ffmpeg: bool, ytdlp: bool }; toolsDownload fetches

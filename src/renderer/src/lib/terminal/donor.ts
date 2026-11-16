@@ -62,7 +62,7 @@ export const DONOR_COMMANDS: TermCommand[] = [
         ctx.print(sub === 'share' ? `shared: ${up.share_url}` : `${up.filename} is private again`, 'ok')
       } else if (sub === 'rm' || sub === 'delete') {
         const f = await fileFrom(target)
-        if (!confirmAction(ctx, `Delete ${f.filename}? This can't be undone.`, bool.has('y'))) return
+        if (!(await confirmAction(ctx, `Delete ${f.filename}? This can't be undone.`, bool.has('y')))) return
         const res = await deleteDonorFile(f.file_id)
         ctx.print(`deleted ${f.filename} · ${formatBytes(res.quota.remaining)} left`, 'ok')
       } else fail('usage: donor [ls | up | get | rename | share | unshare | rm]')

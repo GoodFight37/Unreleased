@@ -5,18 +5,22 @@
   "desktopName": "com.juicewrldapi.player.desktop",
   "main": "electron/main.js",
   "scripts": {
+    "start": "concurrently -k \"npm run dev\" \"wait-on http://localhost:3018 && electron . --remote-debugging-port=9222\"",
     "dev": "vite --port 3018 --strictPort --host",
     "build": "tsc --noEmit && vite build",
     "typecheck:electron": "tsc -p tsconfig.electron.json",
     "test:electron": "node --test electron/*.test.js",
+    "test:scripts": "node --test scripts/*.test.cjs",
     "test:platform": "node --test electron/platform.test.js",
     "test:offline-library": "node --test electron/offlineLibrary.test.js",
     "preview": "vite preview",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3018 && electron .\"",
+    "electron:dev:debug": "concurrently \"npm run dev\" \"wait-on http://localhost:3018 && electron . --remote-debugging-port=9222\"",
     "electron:dev:wayland": "concurrently \"npm run dev\" \"wait-on http://localhost:3018 && electron . --ozone-platform=wayland\"",
     "electron:dev:x11": "concurrently \"npm run dev\" \"wait-on http://localhost:3018 && electron . --ozone-platform=x11\"",
     "electron:build": "npm run build && electron-builder",
     "electron:smoke": "electron . --smoke-test",
+    "ui:verify": "node scripts/ui-verify.mjs",
     "terminal:check-coverage": "node scripts/check-terminal-coverage.mjs"
   },
   "keywords": [],
@@ -38,6 +42,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "@webgpu/types": "^0.1.74",
     "autoprefixer": "^10.4.20",
     "client-zip": "^2.5.1",
     "concurrently": "^10.0.3",
@@ -46,6 +51,7 @@
     "ffmpeg-static": "^5.3.0",
     "libsodium-wrappers": "^0.8.4",
     "lucide-react": "^0.469.0",
+    "playwright": "^1.65.1",
     "postcss": "^8.5.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
@@ -70,8 +76,8 @@
     }
   },
   "build": {
-    "appId": "com.juicewrldapi.player",
-    "productName": "Unreleased",
+    "appId": "com.goodfight37.unreleased.glasslab",
+    "productName": "Unreleased Glass Lab",
     "icon": "electron/icon.ico",
     "compression": "maximum",
     "electronLanguages": [
@@ -89,16 +95,19 @@
       "!release/**/*",
       "!beta-builds/**/*",
       "!scripts/**/*",
+      "!.ui-verify/**/*",
       "!.github/**/*",
       "!.git/**/*",
       "!.claude/**/*",
+      "!md/**/*",
       "!node_modules/.bin/**/*",
       "!**/*.bat",
+      "!**/*.cmd",
       "!**/*.log",
       "!**/*.d.ts",
       "!**/*.map",
       "!.env*",
-      "!*.md",
+      "!**/*.md",
       "!tsconfig*.json",
       "!*.tsbuildinfo",
       "!postcss.config.js",
@@ -136,20 +145,10 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "nsis-web",
-          "arch": [
-            "x64"
-          ]
         }
       ],
       "artifactName": "${productName}-Setup-${version}.${ext}",
       "extraResources": [
-        {
-          "from": "build/bundled/Unreleased-Setup.exe",
-          "to": "Unreleased-Setup.exe"
-        },
         {
           "from": "electron/icon.ico",
           "to": "icon.ico"
@@ -157,26 +156,28 @@
       ]
     },
     "nsis": {
-      "include": "build/installer.nsh",
-      "oneClick": false
-    },
-    "nsisWeb": {
-      "artifactName": "${productName}-Setup.${ext}"
+      "oneClick": false,
+      "createStartMenuShortcut": true
     },
     "linux": {
       "icon": "resources/icon-512.png",
       "category": "Audio",
+      "desktopName": "com.goodfight37.unreleased.glasslab.desktop",
       "syncDesktopName": true,
       "target": [
         "AppImage"
       ],
       "artifactName": "${productName}-${version}.${ext}"
     },
-    "publish": {
-      "provider": "github",
-      "owner": "Juice-WRLD-API",
-      "repo": "Unreleased"
-    }
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
+    "publish": null
   },
   "allowScripts": {
     "electron-winstaller@5.4.0": true,

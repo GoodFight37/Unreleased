@@ -11,6 +11,7 @@ import {
 import { useStorePick } from '../store/useStore'
 import { newsShareUrl, IS_ELECTRON, ELECTRON_TITLEBAR_CLEARANCE_Y } from '../lib/platform'
 import { showAppToast } from '../lib/appToast'
+import { confirmGlass } from '../lib/confirmModal'
 import {
   fetchNews, peekNews, fetchChannels, fetchNewsItem, deleteNewsItem, isImageAttachment, isAudioAttachment,
   buildNewsAttachmentStreamUrl, ensureHttpsMediaUrl,
@@ -524,7 +525,12 @@ export default function NewsView(): JSX.Element {
   const openNew = (): void => { setEditing(null); setComposeOpen(true) }
 
   const handleDelete = async (item: NewsItem): Promise<void> => {
-    if (!window.confirm(`Delete “${item.title}”? This can't be undone.`)) return
+    if (!(await confirmGlass({
+      title: 'Delete news post',
+      message: `Delete “${item.title}”? This can't be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    }))) return
     try {
       await deleteNewsItem(item.id)
       setItems((prev) => prev.filter((i) => i.id !== item.id))

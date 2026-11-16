@@ -1,3 +1,4 @@
+import { effectsMotionMedia } from '../lib/effectsPreference'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { smallCoverUrl } from '../lib/juicewrldApi'
@@ -8,7 +9,7 @@ import { FallbackImg } from './ProgressiveCover'
 // so StrictMode's dev-only effect re-run (same key) doesn't fire it either.
 
 const ENTER_EASE = 'cubic-bezier(0.33, 0, 0.15, 1)'
-const reducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = (): boolean => effectsMotionMedia().matches
 
 /** Play <-> pause (or any icon pair): the new icon scales up into place with a
  *  slight overshoot instead of a hard cut. */

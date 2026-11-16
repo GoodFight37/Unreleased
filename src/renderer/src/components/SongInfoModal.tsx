@@ -11,7 +11,7 @@ import { useStore, useStorePick } from '../store/useStore'
 import { useDragToDismiss } from '../hooks/useDragToDismiss'
 import { useCanEdit } from '../hooks/useChannelRoles'
 import { attachToMainWindow } from '../lib/windowSync'
-import { JWApiSong, CATEGORY_LABELS, buildImageUrl, parseDuration, getSongById, resolvePrefCoverUrl } from '../lib/juicewrldApi'
+import { JWApiSong, CATEGORY_LABELS, CATEGORY_COLORS, buildImageUrl, parseDuration, getSongById, resolvePrefCoverUrl } from '../lib/juicewrldApi'
 import { versionsEnabled } from '../lib/versionsApi'
 import { useVersionEntries } from '../hooks/useSongVersions'
 import { formatDuration, displayDate } from '../lib/format'
@@ -20,12 +20,7 @@ import SongPrefsSection from './SongPrefsSection'
 import { ProgressiveCover } from './ProgressiveCover'
 import { showAppToast } from '../lib/appToast'
 
-const CATEGORY_COLORS: Record<string, string> = {
-  released:          'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
-  unreleased:        'bg-blue-500/15 text-blue-400 border-blue-500/25',
-  unsurfaced:        'bg-orange-500/15 text-orange-400 border-orange-500/25',
-  recording_session: 'bg-purple-500/15 text-purple-400 border-purple-500/25',
-}
+// Shared with the Tracker: -700 shades on light themes, -400 on dark (lib/juicewrldApi).
 
 // One info block styled like the reference design: a squircle icon chip on
 // the left, an uppercase tracked label, and the value(s) underneath. The row

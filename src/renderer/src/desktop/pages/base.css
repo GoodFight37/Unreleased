@@ -6,3 +6,24 @@ button { background: none; border: none; color: inherit; font: inherit; cursor: 
 img { -webkit-user-drag: none; }
 .full { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .hidden { display: none !important; }
+:where(html[data-effects-motion="reduce"]) *,
+:where(html[data-effects-motion="reduce"]) *::before,
+:where(html[data-effects-motion="reduce"]) *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+:where(html[data-effects-transparency="reduce"]) .bar-glass,
+:where(html[data-effects-transparency="reduce"]) #search-grid .glass,
+:where(html[data-effects-transparency="reduce"]) #shelf,
+:where(html[data-effects-transparency="reduce"]) .dk-card .body,
+:where(html[data-effects-transparency="reduce"]) .circle,
+:where(html[data-effects-transparency="reduce"]) .notice {
+  background: rgb(22 25 34 / 0.96) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+:where(html[data-effects-transparency="reduce"]) .frost-layer,
+:where(html[data-effects-transparency="reduce"]) .dk-card .frost {
+  display: none !important;
+}

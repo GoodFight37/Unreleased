@@ -9,6 +9,7 @@ import { applySeo } from './lib/seo'
 import { lazyOverlay, lazyView } from './lib/lazyView'
 import { preloadAllViews } from './lib/lazyViews'
 import { ViewType } from './types'
+import { ADMIN_PATH_TABS } from './hooks/useAdminQueue'
 import ViewFade from './components/ViewFade'
 import { captureLeaving, dashboardSwap, isWholePageSwap, reducedMotion } from './lib/dashboardSwap'
 import { useWrldExpandUnder } from './lib/wrldExpand'
@@ -30,10 +31,15 @@ const SCROLL_UNDER: ViewType[] = ['home', 'editor-profile', 'contributor-profile
 
 function getViewFromPath(pathname: string): ViewType {
   if (pathname === '/' || pathname === '/tracker') return 'api-tracker'
+  if (pathname === '/home') return 'home'
   if (pathname.startsWith('/files')) return 'api-files'
   if (pathname === '/editor') return 'editor'
+  if (pathname === '/editor-profile') return 'editor-profile'
+  if (pathname === '/local-editor') return 'local-editor'
   if (pathname === '/contributor') return 'contributor'
-  if (pathname === '/admin') return 'admin'
+  if (pathname === '/contributor-profile') return 'contributor-profile'
+  if (pathname === '/admin' || pathname in ADMIN_PATH_TABS) return 'admin'
+  if (pathname === '/albums-admin') return 'albums-admin'
   if (pathname === '/liked') return 'liked'
   if (pathname === '/playlists') return 'playlists'
   if (pathname === '/albums') return 'albums'
@@ -46,6 +52,8 @@ function getViewFromPath(pathname: string): ViewType {
   if (pathname === '/stats' || pathname === '/wrapped') return 'stats'
   if (pathname === '/thank-you') return 'thanks'
   if (pathname === '/statistics') return 'statistics'
+  if (pathname === '/download') return 'download'
+  if (pathname === '/settings') return 'settings'
   if (pathname.startsWith('/u/')) return 'public-profile'
   if (pathname.startsWith('/chat')) return 'chat'
   if (pathname === '/terminal') return 'terminal'
@@ -58,12 +66,12 @@ function getViewFromPath(pathname: string): ViewType {
 
 import Sidebar from './components/Sidebar'
 import AmbientBackdrop from './components/AmbientBackdrop'
-import AutoHideNav from './components/AutoHideNav'
+import AutoHideNav, { NAV_PILL_EVENT } from './components/AutoHideNav'
 import BottomNav from './components/BottomNav'
-import ApiTrackerView from './components/ApiTrackerView'
-import ApiFilesView from './components/ApiFilesView'
-import LikedSongsView from './components/LikedSongsView'
-import PlaylistsView from './components/PlaylistsView'
+const ApiTrackerView = lazyView(() => import('./components/ApiTrackerView'))
+const ApiFilesView = lazyView(() => import('./components/ApiFilesView'))
+const LikedSongsView = lazyView(() => import('./components/LikedSongsView'))
+const PlaylistsView = lazyView(() => import('./components/PlaylistsView'))
 import RadioFmPlayer from './components/RadioFmPlayer'
 import RadioVotePopup from './components/RadioVotePopup'
 import DiscordRpcSync from './components/DiscordRpcSync'
@@ -72,16 +80,17 @@ import NowPlayingSharer from './components/NowPlayingSharer'
 import NewsNotifier from './components/NewsNotifier'
 import BroadcastNotifier from './components/BroadcastNotifier'
 import AppToastHost from './components/AppToastHost'
+import ConfirmModalHost from './components/ConfirmModalHost'
 import DebugRecordingPill from './components/DebugRecorder'
 import { useDebugLogViewer } from './lib/debugLog'
 import ChatNotificationBanner from './components/ChatNotificationBanner'
-import UserAuthModal from './components/UserAuthModal'
-import ReportModal from './components/ReportModal'
-import CoverArtSubmitModal from './components/CoverArtSubmitModal'
-import CommunityEditSubmitModal from './components/CommunityEditSubmitModal'
-import ConvertFormatModal from './components/ConvertFormatModal'
-import BulkEditModal from './components/BulkEditModal'
-import UrlImportModal from './components/UrlImportModal'
+const UserAuthModal = lazyOverlay(() => import('./components/UserAuthModal'))
+const ReportModal = lazyOverlay(() => import('./components/ReportModal'))
+const CoverArtSubmitModal = lazyOverlay(() => import('./components/CoverArtSubmitModal'))
+const CommunityEditSubmitModal = lazyOverlay(() => import('./components/CommunityEditSubmitModal'))
+const ConvertFormatModal = lazyOverlay(() => import('./components/ConvertFormatModal'))
+const BulkEditModal = lazyOverlay(() => import('./components/BulkEditModal'))
+const UrlImportModal = lazyOverlay(() => import('./components/UrlImportModal'))
 import InstallPrompt from './components/InstallPrompt'
 import CookieNotice from './components/CookieNotice'
 import DonationNotice from './components/DonationNotice'
@@ -89,11 +98,13 @@ import { GlobalSongInfoHost } from './components/SongInfoModal'
 import Player from './components/Player'
 import SidePanels from './components/SidePanels'
 import DownloadManager from './components/DownloadManager'
-import LibraryTab from './components/LibraryTab'
+const LibraryTab = lazyView(() => import('./components/LibraryTab'))
 import AppMenu from './components/AppMenu'
 import ErrorBoundary from './components/ErrorBoundary'
+const GlassLab = lazyOverlay(() => import('./components/GlassLab'))
+import { GlassCompositorLayer } from './lib/glass/compositor'
 import SandboxNotch from './components/SandboxNotch'
-import { UserCardHost } from './components/chat/UserCard'
+import { UserCardHost } from './components/chat/UserCardContext'
 import { useIsMobile } from './hooks/useIsMobile'
 import { useChatBootstrap } from './hooks/useChatBootstrap'
 
@@ -118,6 +129,8 @@ const TierlistView = lazyView(() => import('./components/TierlistView'))
 const StatsView = lazyView(() => import('./components/StatsView'))
 // Donors and administrators only - fetched the first time it opens.
 const LyricsGenModal = lazyOverlay(() => import('./components/LyricsGenModal'))
+const ShareStudioModal = lazyOverlay(() => import('./components/ShareLyricsModal'))
+const CommandPalette = lazyOverlay(() => import('./components/CommandPalette'))
 // Desktop only - fetched the first time Sync is opened.
 const SyncModal = lazyOverlay(() => import('./components/SyncModal'))
 const NotificationCenter = lazyOverlay(() => import('./components/NotificationCenter'))
@@ -211,6 +224,26 @@ function renderView(v: ViewType): JSX.Element {
 }
 
 export default function App(): JSX.Element {
+  const [showGlassLab, setShowGlassLab] = useState(false)
+  useEffect(() => { const open = () => setShowGlassLab(true); window.addEventListener('open-glass-lab', open); return () => window.removeEventListener('open-glass-lab', open) }, [])
+  const [showShareStudio, setShowShareStudio] = useState(false)
+  useEffect(() => { const open = () => setShowShareStudio(true); window.addEventListener('open-share-studio', open); return () => window.removeEventListener('open-share-studio', open) }, [])
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
+  useEffect(() => {
+    const open = () => setShowCommandPalette(true)
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.code === 'KeyK') {
+        e.preventDefault()
+        setShowCommandPalette((v) => !v)
+      }
+    }
+    window.addEventListener('open-command-palette', open)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('open-command-palette', open)
+      window.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [])
   const showRecognition = useStore((s) => s.showRecognition)
   const { showNowPlaying, showQueue, showSettings, setShowSettings, showDiagnostics, setShowDiagnostics, activeView, sidebarPosition, navStyle, appMenuPosition, loadAccount, completeDiscordLogin, showUserAuth, setShowUserAuth, loadLibrary, wrldFullscreen, loadOfflineLibrary, syncOfflinePlaylists, libraryAutoRefresh, libraryFolders, scanLibrary, prefetchApiData, refreshPlaylists, previousView, autoHideNav, showNotifications, setShowNotifications } = useStorePick(
     'showNowPlaying', 'showQueue', 'showSettings', 'setShowSettings', 'showDiagnostics', 'setShowDiagnostics', 'activeView', 'sidebarPosition', 'navStyle', 'appMenuPosition', 'loadAccount', 'completeDiscordLogin', 'showUserAuth', 'setShowUserAuth', 'loadLibrary', 'wrldFullscreen', 'loadOfflineLibrary', 'syncOfflinePlaylists', 'libraryAutoRefresh', 'libraryFolders', 'scanLibrary', 'prefetchApiData', 'refreshPlaylists', 'previousView', 'autoHideNav', 'showNotifications', 'setShowNotifications')
@@ -252,16 +285,42 @@ export default function App(): JSX.Element {
     swapDirRef.current = dir
     const box = viewBoxRef.current
     const page = box?.querySelector(`:scope [data-view="${from}"]`)?.firstElementChild
-    leavingRef.current = dir && box && page && !reducedMotion() ? captureLeaving(box, page, dir, isWholePageSwap(from, activeView)) : null
+    // Whole-page moves (e.g. Home -> Tracker) just cross-fade: no copy of the old page over the new one.
+    leavingRef.current = dir && box && page && !reducedMotion() && !isWholePageSwap(from, activeView) ? captureLeaving(box, page, dir) : null
   }
   useLayoutEffect(() => {
     const play = leavingRef.current
     leavingRef.current = null
     play?.()
   }, [activeView])
+
+  useLayoutEffect(() => {
+    const box = viewBoxRef.current
+    if (!box) return
+    const syncClearance = (): void => {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue('--nav-pill-top').trim()
+      const pillBottom = raw ? parseFloat(raw) : 0
+      const boxTop = box.getBoundingClientRect().top
+      const clearance = pillBottom > 0 ? Math.max(0, Math.ceil(pillBottom + 12 - boxTop)) : 0
+      box.style.setProperty('--nav-pill-clearance', clearance > 0 ? `${clearance}px` : '0px')
+    }
+    syncClearance()
+    window.addEventListener(NAV_PILL_EVENT, syncClearance)
+    window.addEventListener('resize', syncClearance)
+    return () => {
+      window.removeEventListener(NAV_PILL_EVENT, syncClearance)
+      window.removeEventListener('resize', syncClearance)
+    }
+  }, [sidebarPosition, navStyle, autoHideNav, appMenuPosition, wrldFullscreen])
   const isMobile = useIsMobile()
   const debugLogOpen = useDebugLogViewer((s) => s.log !== null)
   const lyricsGenOpen = useStore((s) => s.lyricsGenModal !== null)
+  const reportOpen = useStore((s) => s.reportModal !== null)
+  const coverArtOpen = useStore((s) => s.coverArtModal !== null)
+  const communityEditOpen = useStore((s) => s.communityEditModal)
+  const convertOpen = useStore((s) => s.convertModal !== null)
+  const bulkEditOpen = useStore((s) => s.bulkEdit !== null)
+  const urlImportOpen = useStore((s) => s.urlImportModal)
   const syncOpen = useCatalogSync((s) => s.open)
   useThemeEffects()
   useChatBootstrap()
@@ -419,6 +478,30 @@ export default function App(): JSX.Element {
 
   return (
     <UserCardHost>
+    {showGlassLab && <ErrorBoundary><Suspense fallback={null}><GlassLab close={() => setShowGlassLab(false)} /></Suspense></ErrorBoundary>}
+    {showShareStudio && (() => {
+      const s = useStore.getState()
+      const fm = s.radioFmActive
+      const title = fm ? (s.radioFmNowPlaying?.title || '999 FM') : (s.currentTrack?.title || 'Lyrics')
+      const artist = fm ? (s.radioFmNowPlaying?.artist || '') : (s.currentTrack?.artist || '')
+      const imageUrl = fm ? s.radioFmMatchedSong?.imageUrl : (s.currentTrackFull?.albumArt ?? s.currentTrack?.imageUrl)
+      const rawLyrics = fm
+        ? (s.radioFmMatchedSong?.syncedLyrics ?? s.radioFmMatchedSong?.lyrics ?? null)
+        : (s.currentTrackFull?.syncedLyrics ?? s.currentTrackFull?.lyrics ?? null)
+      return (
+        <ErrorBoundary variant="overlay">
+          <Suspense fallback={null}>
+            <ShareStudioModal
+              title={title}
+              artist={artist}
+              imageUrl={imageUrl}
+              rawLyrics={rawLyrics}
+              onClose={() => setShowShareStudio(false)}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )
+    })()}
     <div className="app-shell flex flex-col h-dvh overflow-hidden">
       {/* What the glass chrome frosts: the playing cover, blurred, behind the
           whole window. */}
@@ -470,7 +553,9 @@ export default function App(): JSX.Element {
             <div
               ref={viewBoxRef}
               className={`flex-1 min-w-0 flex relative overflow-hidden ${scrollUnder ? 'scroll-under' : ''}`}
-              style={scrollUnder ? undefined : { paddingBottom: 'var(--player-dock, 0px)' }}
+              style={scrollUnder
+                ? { paddingTop: 'var(--nav-pill-clearance, 0px)' }
+                : { paddingTop: 'var(--nav-pill-clearance, 0px)', paddingBottom: 'var(--player-dock, 0px)' }}
             >
             <ErrorBoundary>
             <Suspense fallback={null}>
@@ -522,6 +607,7 @@ export default function App(): JSX.Element {
           background workers fail silently, and the modals/overlays show a
           centered, dismissible card. */}
       <ErrorBoundary fallback={null}><RadioFmPlayer /></ErrorBoundary>
+      <ErrorBoundary fallback={null}><GlassCompositorLayer /></ErrorBoundary>
       <ErrorBoundary fallback={null}><RadioVotePopup /></ErrorBoundary>
       <ErrorBoundary fallback={null}><DiscordRpcSync /></ErrorBoundary>
       <ErrorBoundary fallback={null}><LastfmScrobbler /></ErrorBoundary>
@@ -529,6 +615,12 @@ export default function App(): JSX.Element {
       <ErrorBoundary fallback={null}><NewsNotifier /></ErrorBoundary>
       <ErrorBoundary fallback={null}><BroadcastNotifier /></ErrorBoundary>
       <ErrorBoundary fallback={null}><AppToastHost /></ErrorBoundary>
+      <ErrorBoundary fallback={null}><ConfirmModalHost /></ErrorBoundary>
+      {showCommandPalette && (
+        <ErrorBoundary variant="overlay" onDismiss={() => setShowCommandPalette(false)}>
+          <Suspense fallback={null}><CommandPalette onClose={() => setShowCommandPalette(false)} /></Suspense>
+        </ErrorBoundary>
+      )}
       <ErrorBoundary fallback={null}><DebugRecordingPill /></ErrorBoundary>
       <ErrorBoundary fallback={null}><ChatNotificationBanner /></ErrorBoundary>
       <ErrorBoundary fallback={null}><BottomNav /></ErrorBoundary>
@@ -549,16 +641,16 @@ export default function App(): JSX.Element {
       )}
       {showUserAuth && (
         <ErrorBoundary variant="overlay" onDismiss={() => setShowUserAuth(false)}>
-          <UserAuthModal onClose={() => setShowUserAuth(false)} />
+          <Suspense fallback={null}><UserAuthModal onClose={() => setShowUserAuth(false)} /></Suspense>
         </ErrorBoundary>
       )}
       <ErrorBoundary fallback={null}><Suspense fallback={null}><LoginApprovalPrompt /></Suspense></ErrorBoundary>
-      <ErrorBoundary variant="overlay"><ReportModal /></ErrorBoundary>
-      <ErrorBoundary variant="overlay"><CoverArtSubmitModal /></ErrorBoundary>
-      <ErrorBoundary variant="overlay"><CommunityEditSubmitModal /></ErrorBoundary>
-      <ErrorBoundary variant="overlay"><ConvertFormatModal /></ErrorBoundary>
-      <ErrorBoundary variant="overlay"><BulkEditModal /></ErrorBoundary>
-      <ErrorBoundary variant="overlay"><UrlImportModal /></ErrorBoundary>
+      {reportOpen && <ErrorBoundary variant="overlay"><Suspense fallback={null}><ReportModal /></Suspense></ErrorBoundary>}
+      {coverArtOpen && <ErrorBoundary variant="overlay"><Suspense fallback={null}><CoverArtSubmitModal /></Suspense></ErrorBoundary>}
+      {communityEditOpen && <ErrorBoundary variant="overlay"><Suspense fallback={null}><CommunityEditSubmitModal /></Suspense></ErrorBoundary>}
+      {convertOpen && <ErrorBoundary variant="overlay"><Suspense fallback={null}><ConvertFormatModal /></Suspense></ErrorBoundary>}
+      {bulkEditOpen && <ErrorBoundary variant="overlay"><Suspense fallback={null}><BulkEditModal /></Suspense></ErrorBoundary>}
+      {urlImportOpen && <ErrorBoundary variant="overlay"><Suspense fallback={null}><UrlImportModal /></Suspense></ErrorBoundary>}
       {lyricsGenOpen && (
         <ErrorBoundary variant="overlay" onDismiss={() => useStore.getState().closeLyricsGen()}>
           <LyricsGenModal />

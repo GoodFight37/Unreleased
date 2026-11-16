@@ -54,10 +54,8 @@
    shorthand `animation:` declarations above - an animation-duration override
    from the other file would be reset by them. Entrances collapse to their end
    state (they use fill-mode `both`); the decorative loops just stop. */
-@media (prefers-reduced-motion: reduce) {
-  .chat-in,
-  .chat-pop,
+:where(html[data-effects-motion="reduce"]) .chat-in,:where(html[data-effects-motion="reduce"])
+  .chat-pop,:where(html[data-effects-motion="reduce"])
   .chat-sheet { animation-duration: 0.01ms; animation-delay: 0ms; }
-  .chat-dot,
+:where(html[data-effects-motion="reduce"]) .chat-dot,:where(html[data-effects-motion="reduce"])
   .chat-flash { animation: none; }
-}

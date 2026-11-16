@@ -19,7 +19,7 @@ import { CompactGroupRow, useExpandedGroups } from './CompactGroupRow'
 import {
   apiFetch, apiPeek, OMIT_BULK, peekTrackerCatalog, fetchTrackerCatalog, songToTrack, parseDuration, buildStreamUrl, CATEGORY_LABELS, CATEGORY_COLORS,
   JWApiSong, JWApiStats, JWApiEra,
-  parseBrowseEntries, JWApiBrowseResponse, resolveSessionEditSource,
+  parseBrowseEntries, JWApiBrowseResponse, resolveSessionEditSource, buildImageUrl, smallCoverUrl,
 } from '../lib/juicewrldApi'
 import { openZipTarget, saveItems } from '../lib/clientZip'
 import { preloadView } from '../lib/lazyViews'
@@ -46,6 +46,7 @@ import { parseSearchQuery, matchesFieldFilters, filterApiFields, textMatches } f
 import { displaySongName } from '../lib/songPrefs'
 import { SearchHelpButton } from './SearchHelpPopover'
 import { loadEraFullNames, eraLabel, listEras } from '../lib/eras'
+import { ERA_LOOK, eraStart } from '../lib/eraLook'
 import { useMultiSelect } from '../hooks/useMultiSelect'
 import { useLongPress } from '../hooks/useLongPress'
 import {
@@ -155,6 +156,77 @@ function StatsBar({ stats }: { stats: JWApiStats | null }): JSX.Element {
   )
 }
 
+// ─── Era row ──────────────────────────────────────────────────────────────────
+// Browse by era at a glance (cover, name, song count), above the song list. It
+// drives the same era filter as the filter popover, so the two always agree.
+// --era is the era's own accent (lib/eraLook), the app accent when it has none.
+const eraChip = (on: boolean): string =>
+  `flex items-center gap-2 shrink-0 h-9 rounded-full text-xs font-medium border transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${
+    on
+      ? 'border-[var(--era,var(--accent))] bg-[color-mix(in_srgb,var(--era,var(--accent))_16%,transparent)] text-text-primary'
+      : 'border-[var(--border)] bg-[var(--fill)] text-text-secondary hover:text-text-primary hover:bg-[var(--fill-strong)]'
+  }`
+
+function EraRow({ eras, counts, coverByEra, selected, fullEraNames, onToggle, onClear }: {
+  eras: JWApiEra[]
+  counts: Record<string, number> | undefined
+  coverByEra: Map<string, string>
+  selected: Set<string>
+  fullEraNames: boolean
+  onToggle: (eraName: string) => void
+  onClear: () => void
+}): JSX.Element | null {
+  if (eras.length === 0) return null
+  return (
+    <div
+      className="flex items-center gap-2 mb-3 overflow-x-auto no-scrollbar"
+      role="group"
+      aria-label="Eras"
+      // The scrollbar is hidden, so a plain mouse wheel scrolls the row sideways.
+      onWheel={(e) => { if (e.deltaY && !e.deltaX) e.currentTarget.scrollLeft += e.deltaY }}
+    >
+      <button type="button" aria-pressed={selected.size === 0} onClick={onClear} className={`${eraChip(selected.size === 0)} px-3.5`}>
+        All eras
+      </button>
+      {[...eras].sort((a, b) => eraStart(a.time_frame) - eraStart(b.time_frame)).map((era) => {
+        const on = selected.has(era.name)
+        const look = ERA_LOOK[era.name]
+        const cover = smallCoverUrl(buildImageUrl(look?.art)) ?? coverByEra.get(era.name)
+        const count = counts?.[era.name]
+        return (
+          <button
+            key={era.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onToggle(era.name)}
+            title={era.time_frame ? `${era.name} · ${era.time_frame}` : era.name}
+            className={`${eraChip(on)} ${cover ? 'pl-1.5' : 'pl-3.5'} pr-3.5`}
+            style={look ? ({ '--era': look.accent } as React.CSSProperties) : undefined}
+          >
+            {cover && (
+              <img
+                src={cover}
+                alt=""
+                loading="lazy"
+                draggable={false}
+                className="w-6 h-6 rounded-full object-cover shrink-0 shadow-[0_0_0_1.5px_var(--era,transparent)]"
+                // An API without the era image (custom server): fall back to the era's first song cover.
+                onError={(e) => {
+                  const fallback = coverByEra.get(era.name)
+                  if (fallback && e.currentTarget.src !== fallback) e.currentTarget.src = fallback
+                  else e.currentTarget.hidden = true
+                }}
+              />
+            )}
+            <span className="whitespace-nowrap">{eraLabel(era.name, fullEraNames)}</span>
+            {count != null && <span className="text-text-muted tabular-nums">{count.toLocaleString()}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Category sidebar ─────────────────────────────────────────────────────────
 // Category/era are checkbox multi-selects (OR'd within each group) rather
 // than the old radio-style single pick - "All" / "All eras" just clears the
@@ -240,7 +312,7 @@ function FilterPopover({
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full mt-2 w-64 max-h-96 overflow-y-auto bg-surface border border-[var(--border)] rounded-xl shadow-2xl z-50 p-3"
+      className="absolute right-0 top-full mt-2 w-64 max-h-96 overflow-y-auto glass-popover bg-surface border border-[var(--border)] rounded-xl shadow-2xl z-50 p-3"
     >
       <div className="flex items-center justify-between mb-1">
         <p className="text-text-primary text-xs font-semibold">Filters</p>
@@ -2338,6 +2410,19 @@ export default function ApiTrackerView(): JSX.Element {
     return ids.size ? (peekTrackerCatalog('') ?? []).filter((s) => ids.has(s.id)) : []
   }, [catalog, parsedSearch.freeText, searchPrefs])
 
+  // One cover per era for the era row: the first song in the catalogue with art.
+  const eraCovers = useMemo(() => {
+    const out = new Map<string, string>()
+    for (const s of catalog) {
+      const name = s.era?.name
+      if (!name || out.has(name)) continue
+      const url = smallCoverUrl(buildImageUrl(s.image_url))
+      if (url) out.set(name, url)
+    }
+    return out
+  }, [catalog])
+  const fullEraNamesPref = useStore((s) => s.fullEraNames)
+
   const songs = useMemo(
     () => (renamedHits.length ? [...catalog, ...renamedHits] : catalog)
       .filter((s) => matchesFilters(s) && matchesFieldFilters(s, parsedSearch.filters)),
@@ -2731,13 +2816,24 @@ export default function ApiTrackerView(): JSX.Element {
         />
 
         {trackerTab === 'songs' && <StatsBar stats={stats} />}
+        {trackerTab === 'songs' && (
+          <EraRow
+            eras={eras}
+            counts={stats?.era_stats}
+            coverByEra={eraCovers}
+            selected={eraFilter}
+            fullEraNames={fullEraNamesPref}
+            onToggle={(e) => { toggleEraFilter(e); resetSongs() }}
+            onClear={() => { setEraFilter(new Set()); resetSongs() }}
+          />
+        )}
 
         {trackerTab === 'songs' && <div className="flex flex-col gap-2">
           {/* Search - uses searchall to include producers; field:"value" tokens
               (see trackerSearch.ts) are parsed out and applied client-side. */}
           <div className="flex items-center gap-1.5 w-full">
             <div className={`${GLASS_SEARCH_WRAP} flex-1 min-w-0`}>
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none z-20" />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -2747,19 +2843,20 @@ export default function ApiTrackerView(): JSX.Element {
                 className={`${GLASS_SEARCH} pl-9 pr-9`}
               />
               {search && (
-                <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
+                <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary z-20">
                   <X size={13} />
                 </button>
               )}
             </div>
-            <button onClick={() => useStore.getState().setShowRecognition(true)} title="Identify song" aria-label="Identify song" className={glassToolButton(false)}>
+            <div className="catalog-toolbar flex items-center shrink-0 max-w-full">
+            <button onClick={() => useStore.getState().setShowRecognition(true)} title="Identify song" aria-label="Identify song" className={`${glassToolButton(false)} catalog-tool`}>
               <AudioLines size={16} />
             </button>
             <div className="relative shrink-0 hidden md:block">
               <button
                 onClick={() => setShowFilterMenu((v) => !v)}
                 onMouseDown={(e) => e.stopPropagation()}
-                className={glassToolButton(showFilterMenu || multiFilterActive || categoryFilter.size > 0 || eraFilter.size > 0 || libraryFilter !== 'all')}
+                className={`${glassToolButton(showFilterMenu || multiFilterActive || categoryFilter.size > 0 || eraFilter.size > 0 || libraryFilter !== 'all')} catalog-tool`}
                 title="Filters"
               >
                 <ListFilter size={15} />
@@ -2789,7 +2886,7 @@ export default function ApiTrackerView(): JSX.Element {
             </div>
             <SearchHelpButton
               size={15}
-              className={glassToolButton}
+              className={(open) => `${glassToolButton(open)} catalog-tool`}
             />
 
             <button
@@ -2798,7 +2895,7 @@ export default function ApiTrackerView(): JSX.Element {
                 else { setOrderField('date_added'); setOrderDir('desc'); resetSongs() }
               }}
               title="Sort by recently added - only covers the last ~200 file changes, so older songs may not have a known date"
-              className={`${glassPillButton(orderField === 'date_added')} !hidden md:!flex`}
+              className={`${glassPillButton(orderField === 'date_added')} catalog-tool !hidden md:!flex`}
             >
               <Clock size={14} />
               Recently added
@@ -2806,7 +2903,7 @@ export default function ApiTrackerView(): JSX.Element {
 
             <GlassSegmented
               ariaLabel="Layout"
-              className="shrink-0"
+              className="glass-seg-quiet shrink-0"
               value={compactView ? 'compact' : viewMode}
               onChange={(v) => {
                 if (v === 'compact') { setCompactView(true); clearExpandedGroups() }
@@ -2820,15 +2917,24 @@ export default function ApiTrackerView(): JSX.Element {
               ]}
             />
 
-            {viewMode === 'detail' && !compactView && (
-              <button
-                onClick={(e) => setFieldMenu({ target: 'detail', ...fieldMenuAnchor(e, -1) })}
-                className={glassToolButton(fieldMenu?.target === 'detail')}
-                title="Customize fields - or click any field label to swap/hide it"
-              >
-                <SlidersHorizontal size={15} />
-              </button>
-            )}
+            {/* Always laid out (hidden outside the detailed view) so switching
+                layout never shifts the toolbar sideways. */}
+            {(() => {
+              const fieldsShown = viewMode === 'detail' && !compactView
+              return (
+                <button
+                  onClick={(e) => setFieldMenu({ target: 'detail', ...fieldMenuAnchor(e, -1) })}
+                  className={`${glassToolButton(fieldMenu?.target === 'detail')} catalog-tool ${fieldsShown ? '' : 'invisible'}`}
+                  title="Customize fields - or click any field label to swap/hide it"
+                  aria-hidden={!fieldsShown}
+                  tabIndex={fieldsShown ? undefined : -1}
+                  disabled={!fieldsShown}
+                >
+                  <SlidersHorizontal size={15} />
+                </button>
+              )
+            })()}
+            </div>
           </div>
 
           {/* Second row - mobile-only category select (desktop uses the filter popover above) */}
@@ -2887,7 +2993,7 @@ export default function ApiTrackerView(): JSX.Element {
 
         {trackerTab === 'lyrics' && (
           <div className={`${GLASS_SEARCH_WRAP} w-full`}>
-            <Mic2 size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+            <Mic2 size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none z-20" />
             <input
               type="text"
               placeholder="Search lyrics…"
@@ -2896,7 +3002,7 @@ export default function ApiTrackerView(): JSX.Element {
               className={`${GLASS_SEARCH} pl-9 pr-9`}
             />
             {lyricsQuery && (
-              <button onClick={() => setLyricsQuery('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
+              <button onClick={() => setLyricsQuery('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary z-20">
                 <X size={13} />
               </button>
             )}

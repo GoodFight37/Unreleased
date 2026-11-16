@@ -84,7 +84,7 @@ async function act(action: Action, n: CdnNode, ctx: TermCtx, yes: boolean): Prom
       // The site's "Restore node": back on and approved, trust and violations reset.
       await updateCdnNode(n.node_id, { is_approved: true, is_active: true, trust_score: DEFAULT_TRUST_SCORE, hash_violations: 0 }); break
     case 'delete':
-      if (!confirmAction(ctx, `Permanently delete ${name}? Its file list, history and API key go with it.`, yes)) return
+      if (!(await confirmAction(ctx, `Permanently delete ${name}? Its file list, history and API key go with it.`, yes))) return
       await deleteCdnNode(n.node_id)
       ctx.print(`deleted ${name}`, 'ok')
       return

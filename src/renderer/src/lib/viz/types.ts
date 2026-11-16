@@ -27,8 +27,8 @@ export interface QualityProfile {
  */
 export const QUALITY: Record<Quality, QualityProfile> = {
   low: { dpr: 0.75, glScale: 0.35, octaves: 3, fps: 30, glow: false, particles: 70, bars: 32 },
-  medium: { dpr: 1, glScale: 0.5, octaves: 4, fps: 60, glow: true, particles: 120, bars: 48 },
-  high: { dpr: 1.5, glScale: 0.75, octaves: 5, fps: 60, glow: true, particles: 170, bars: 64 },
+  medium: { dpr: 1, glScale: 0.5, octaves: 4, fps: 0, glow: true, particles: 120, bars: 48 },
+  high: { dpr: 1.5, glScale: 0.75, octaves: 5, fps: 0, glow: true, particles: 170, bars: 64 },
   ultra: { dpr: 2, glScale: 1, octaves: 6, fps: 0, glow: true, particles: 240, bars: 64 },
 };
 

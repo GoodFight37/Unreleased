@@ -53,4 +53,4 @@ function canUseFileSystem(request) {
   } catch { return false }
 }
 
-module.exports = { canRequestMicrophone, canCaptureSystemAudio, canUseFileSystem }
+module.exports = { isAppMainFrame, canRequestMicrophone, canCaptureSystemAudio, canUseFileSystem }

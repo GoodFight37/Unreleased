@@ -1,19 +1,14 @@
 import { Palette } from 'lucide-react'
 import type { SharedThemePayload } from '../../lib/chatShare'
-import { newSkinId } from '../../lib/skins'
 import { useStore } from '../../store/useStore'
 import { clickable } from '../../lib/a11y'
 
-// Applying a shared theme always creates a fresh custom skin (same as
-// importing a .jwskin.json file) rather than trying to match it back to an
-// existing one - there's no reliable identity to match on since a shared
-// built-in theme could have been re-skinned locally under the same name.
+// Custom skins were retired (2026-11-16): a shared theme now applies as Dark
+// or Light, following its darkness, with its accent color.
 export default function ThemeShareCard({ theme }: { theme: SharedThemePayload }): JSX.Element {
   const applyTheme = (): void => {
     const store = useStore.getState()
-    const skin = { id: newSkinId(), name: theme.name, dark: theme.dark, custom: true, accent: theme.accent, vars: theme.vars }
-    store.saveCustomSkin(skin)
-    store.setTheme(skin.id)
+    store.setTheme(theme.dark ? 'glass-dark' : 'glass-light')
     if (theme.accent) store.setAccentColor(theme.accent)
   }
   return (
@@ -35,7 +30,7 @@ export default function ThemeShareCard({ theme }: { theme: SharedThemePayload })
           <Palette size={13} className="text-text-muted shrink-0" />
           {theme.name}
         </p>
-        <p className="text-xs text-text-muted">Click to apply this theme</p>
+        <p className="text-xs text-text-muted">Click to use its look (Dark or Light) and accent</p>
       </div>
     </div>
   )

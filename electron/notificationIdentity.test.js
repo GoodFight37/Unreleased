@@ -1,0 +1,20 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const { isAppMainFrame } = require('./microphonePermission')
+const pkg = require('../package.json')
+
+test('installed Windows identity matches NSIS and permits only the main app frame', () => {
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
+  const id = /const appId = '([^']+)'/.exec(main)
+  assert.ok(id)
+  assert.equal(id[1], pkg.build.appId)
+  assert.match(main, /app\.setAppUserModelId\(app\.isPackaged \? appId : \(isUiVerify \? `\$\{appId\}\.UiVerify` : `\$\{appId\}\.Dev`\)\)/)
+  assert.equal(pkg.build.nsis.createStartMenuShortcut, true)
+  assert.match(main, /permission === 'notifications'/)
+  const request = { url:'file:///C:/app/dist/index.html', mainUrl:'file:///C:/app/dist/index.html', appUrl:'file:///C:/app/dist/index.html', isDev:false, isMainWindow:true, isMainFrame:true }
+  assert.equal(isAppMainFrame(request), true)
+  for (const patch of [{isMainFrame:false}, {isMainWindow:false}, {url:'https://evil.test/'}, {mainUrl:'file:///C:/other/index.html'}]) assert.equal(isAppMainFrame({...request,...patch}), false)
+  assert.equal(isAppMainFrame({...request,isDev:true,url:'http://localhost:3018/',mainUrl:'http://localhost:3018/'}), true)
+})

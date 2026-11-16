@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStorePick } from '../store/useStore'
-import { smallCoverUrl, fullCoverUrl } from '../lib/juicewrldApi'
+import { smallCoverUrl, fullCoverUrl, buildImageUrl } from '../lib/juicewrldApi'
+import { getSkin } from '../lib/skins'
 import { FallbackImg } from './ProgressiveCover'
 
 const FADE_MS = 900
@@ -18,9 +19,10 @@ type Layer = { id: number; src: string; shown: boolean }
 // are dropped when that fade ends. Blurred this far, the small cover is all
 // it needs.
 export default function AmbientBackdrop(): JSX.Element {
-  const { currentTrack, currentTrackFull, radioFmActive, radioFmMatchedSong } =
-    useStorePick('currentTrack', 'currentTrackFull', 'radioFmActive', 'radioFmMatchedSong')
-  const art = (radioFmActive
+  const { theme, currentTrack, currentTrackFull, radioFmActive, radioFmMatchedSong } =
+    useStorePick('theme', 'currentTrack', 'currentTrackFull', 'radioFmActive', 'radioFmMatchedSong')
+  // An album theme is a fixed backdrop of its own cover; Dark and Light follow the song.
+  const art = buildImageUrl(getSkin(theme).art) || (radioFmActive
     ? radioFmMatchedSong?.imageUrl
     : (currentTrackFull?.albumArt ?? currentTrack?.imageUrl)) || null
 

@@ -38,7 +38,7 @@ export const HTTP_COMMANDS: TermCommand[] = [
       if (body) { try { JSON.parse(body) } catch { fail('the body has to be JSON, e.g. {"name":"x"}') } }
 
       const yes = flags.has('-y') || flags.has('--yes')
-      if (method === 'DELETE' && !confirmAction(ctx, `Send DELETE ${pathWord}?`, yes)) return
+      if (method === 'DELETE' && !(await confirmAction(ctx, `Send DELETE ${pathWord}?`, yes))) return
 
       const headers: Record<string, string> = { ...(flags.has('--noauth') ? {} : authHeaders(getToken())) }
       if (body) headers['Content-Type'] = 'application/json'

@@ -9,6 +9,7 @@ import * as albumsApi from '../lib/albumsApi'
 import type { Album, Artist, AlbumSongEntry } from '../lib/albumsApi'
 import { useStorePick } from '../store/useStore'
 import { errorMessage } from '../lib/format'
+import { confirmGlass } from '../lib/confirmModal'
 import ThemedSelect from './ThemedSelect'
 import ThemedDatePicker from './ThemedDatePicker'
 import FilePickerModal from './FilePickerModal'
@@ -322,7 +323,7 @@ function AlbumDetail({ album, artists, pathIndex, onBack, onSaved, onDeleted }: 
   }
 
   const remove = async (): Promise<void> => {
-    if (!confirm(`Delete "${album.title}"? This can't be undone.`)) return
+    if (!(await confirmGlass({ title: 'Delete album', message: `Delete "${album.title}"? This can't be undone.`, confirmLabel: 'Delete', destructive: true }))) return
     setDeleting(true)
     setError(null)
     try {
@@ -599,7 +600,7 @@ export default function AlbumsAdminView(): JSX.Element {
                 coverUrl={adminCoverUrl(album.cover_url, album.songs, pathIndex)}
                 onClick={() => setSelectedId(album.id)}
                 onDelete={async () => {
-                  if (!confirm(`Delete "${album.title}"? This can't be undone.`)) return
+                  if (!(await confirmGlass({ title: 'Delete album', message: `Delete "${album.title}"? This can't be undone.`, confirmLabel: 'Delete', destructive: true }))) return
                   try {
                     await albumsApi.adminDeleteAlbum(album.id)
                     setAlbums(prev => prev.filter(a => a.id !== album.id))
