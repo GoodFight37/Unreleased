@@ -78,7 +78,6 @@ const APP_MENU_POSITIONS: { id: AppMenuPosition; label: string; icon: ElementTyp
 // display order. `sub` only where a kind behaves differently from the default
 // "opens in the main window when off".
 const POPOUT_KINDS: { key: PopoutWindowKind; label: string; sub?: string }[] = [
-  { key: 'settings', label: 'Settings' },
   { key: 'songInfo', label: 'Song info' },
   { key: 'editor', label: 'Song editor' },
   { key: 'localEditor', label: 'Local metadata editor' },
@@ -947,17 +946,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             <h2 className="text-text-primary font-black text-xl tracking-tight">Settings</h2>
           </div>
           <div className="flex items-center gap-3" style={noDrag}>
-            {/* Manual pop-out — only when shown in-app on desktop (i.e. the
-                Settings pop-out was turned off); detaches into its own window. */}
-            {!floating && isElectron && el?.openFloatWindow && (
-              <button
-                onClick={() => { el.openFloatWindow('settings'); setShowSettings(false) }}
-                title="Open in a separate window"
-                className="text-text-muted hover:text-text-primary transition-colors"
-              >
-                <PictureInPicture2 size={18} />
-              </button>
-            )}
             {/* Manual attach — from the pop-out window, dock back into the
                 main window's in-app settings overlay, then close this window. */}
             {floating && (

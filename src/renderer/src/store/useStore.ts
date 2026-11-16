@@ -155,7 +155,7 @@ export type PopoutWindowKind = 'settings' | 'songInfo' | 'editor' | 'localEditor
 // and fall back to inline when disabled), the equalizer's normal home is the
 // in-app popover; turning it on makes the panel open as its own window.
 const POPOUT_WINDOW_DEFAULTS: Record<PopoutWindowKind, boolean> = {
-  settings: true, songInfo: true, editor: true, localEditor: true, convert: true, equalizer: false,
+  settings: false, songInfo: true, editor: true, localEditor: true, convert: true, equalizer: false,
   // Review work (proposals, comp files, reports) is the one place people keep
   // a page open *while* using the rest of the app � checking a song against
   // the proposal editing it, playing what they're about to approve. Its own
@@ -163,6 +163,10 @@ const POPOUT_WINDOW_DEFAULTS: Record<PopoutWindowKind, boolean> = {
   // sends it back to the in-app tab.
   profile: true,
 }
+
+const storedPopoutWindows = ls.get<Partial<Record<PopoutWindowKind, boolean>>>('popoutWindows') ?? {}
+const initialPopoutWindows = { ...POPOUT_WINDOW_DEFAULTS, ...storedPopoutWindows, settings: false }
+if (storedPopoutWindows.settings) ls.set('popoutWindows', initialPopoutWindows)
 
 // --- Non-queue state ----------------------------------------------------------
 
@@ -1655,16 +1659,6 @@ export const useStore = create<AppStore>((set, get, store) => ({
   setRadioFmListeners: (radioFmListeners) => set({ radioFmListeners }),
   setRadioFmMatchedSong: (radioFmMatchedSong) => set({ radioFmMatchedSong }),
   setShowSettings: (showSettings) => {
-    // Desktop: Settings lives in its own pop-out window (see FloatApp) � every
-    // "open settings" path routes there, unless the user turned that pop-out
-    // off. The in-app overlay is the fallback (and the only path on the web
-    // build, where there are no extra OS windows).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const el = (window as any).electron
-    if (showSettings && el?.openFloatWindow && get().popoutWindows.settings) {
-      el.openFloatWindow('settings')
-      return
-    }
     // Settings docks into the sandbox notch (see Modal.tsx) and stays
     // mounted once opened — collapsing the notch just hides it. Re-opening
     // while it's already mounted (showSettings already true) wouldn't
@@ -1674,25 +1668,11 @@ export const useStore = create<AppStore>((set, get, store) => ({
     set({ showSettings })
   },
   setSettingsTab: (settingsTab) => set({ settingsTab }),
-  // Set the target tab BEFORE opening so a freshly-spawned pop-out Settings
-  // window picks it up in its boot snapshot; if one's already open, the change
-  // reaches it over windowSync and Settings switches tabs in response.
   openSettings: (tab) => {
     if (tab) set({ settingsTab: tab })
     get().setShowSettings(true)
   },
-  toggleSettings: () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const el = (window as any).electron
-    if (el?.toggleFloatWindow && get().popoutWindows.settings) {
-      // The pop-out's open/closed state lives in the main process (it's a
-      // separate window), not in this renderer's `showSettings` � which
-      // never flips true in pop-out mode � so main decides open vs. close.
-      el.toggleFloatWindow('settings')
-      return
-    }
-    set((s) => ({ showSettings: !s.showSettings }))
-  },
+  toggleSettings: () => get().setShowSettings(!get().showSettings),
   openProfile: () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const el = (window as any).electron
@@ -1929,7 +1909,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
   lastfmEnabled: ls.get<boolean>('lastfmEnabled') ?? true,
   // Merge stored overrides onto the defaults so a kind added in a later version
   // is enabled by default even for installs whose saved object predates it.
-  popoutWindows: { ...POPOUT_WINDOW_DEFAULTS, ...(ls.get<Partial<Record<PopoutWindowKind, boolean>>>('popoutWindows') ?? {}) },
+  popoutWindows: initialPopoutWindows,
   hotkeyBindings: ls.get<Record<string, string>>('hotkeyBindings') ?? {},
   hotkeySeekSeconds: ls.get<number>('hotkeySeekSeconds') ?? 10,
   globalHotkeysEnabled: ls.get<boolean>('globalHotkeysEnabled') ?? false,
@@ -2022,7 +2002,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
   setLastfmUser: (lastfmUser) => set({ lastfmUser }),
   setLastfmEnabled: (enabled) => { set({ lastfmEnabled: enabled }); ls.set('lastfmEnabled', enabled); get()._scheduleProfilePush(['userSettings']) },
   setPopoutWindow: (kind, enabled) => {
-    const popoutWindows = { ...get().popoutWindows, [kind]: enabled }
+    const popoutWindows = { ...get().popoutWindows, [kind]: enabled, settings: false }
     set({ popoutWindows })
     ls.set('popoutWindows', popoutWindows)
   },
