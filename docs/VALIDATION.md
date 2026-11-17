@@ -53,6 +53,12 @@ muted audio. Discover fixtures are explicitly fictional test data; the product
 uses catalogue metadata. Screenshots and full local sensor reports are written
 to `.ui-verify/`. Existing Vite chunk-size and module warnings remain.
 
+The first remote Windows run for `922ec49a` exposed a line-ending dependency in
+`skins-contrast.test.cjs`: its source-text parser found no themes after a CRLF
+checkout. Build and Electron tests passed; Linux passed. The test now normalizes
+line endings before parsing. All eight theme checks were verified against both
+LF and CRLF input; no palette or application behavior changed for this fix.
+
 On the tested Windows/NVIDIA machine, the final general UI pass measured a
 165.2 fps compositor, 164.9 fps WRLD animation and 0.09 ms Glass Lab GPU p95.
 These are local measurements, not guarantees for other hardware.

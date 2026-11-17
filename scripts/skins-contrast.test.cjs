@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
 
-const src = readFileSync(join(__dirname, '../src/renderer/src/lib/skins.ts'), 'utf8')
+const src = readFileSync(join(__dirname, '../src/renderer/src/lib/skins.ts'), 'utf8').replace(/\r\n/g, '\n')
 const list = src.slice(src.indexOf('export const SKINS: Skin[] = ['), src.indexOf('\n]\n', src.indexOf('export const SKINS')))
 const skins = list.split(/\n  \{\n/).slice(1).map((block) => {
   const pick = (re) => block.match(re)?.[1]
