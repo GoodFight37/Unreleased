@@ -33,9 +33,9 @@ export interface StageLook {
   /** Moves the song to `seconds`, for a style whose lines take a click (Karaoke); none, and they don't. */
   seek?: (seconds: number) => void
 }
-/** The app's lyric settings (Settings > Lyrics): the text size, and the line sung's and the others' colors (null:
- *  the style's own). */
-export interface LyricTune { size: number; active: string | null; inactive: string | null }
+/** The app's lyric settings (Settings > Lyrics): the text size, the line sung's and the others' colors (null:
+ *  the style's own), and whether the stage sits on a light background (`lightBg`) so all styles invert ink cleanly. */
+export interface LyricTune { size: number; active: string | null; inactive: string | null; lightBg?: boolean }
 
 /** What draws the lyrics: one of the styles here, or the fisheye. */
 export interface LyricRenderer {
@@ -142,8 +142,10 @@ export class LyricScene implements LyricRenderer {
     return animation
   }
 
-  /** Fades `el` out and takes it off the stage once gone. */
+  /** Fades `el` out and takes it off the stage once gone; drops immediately when paused so exiting lines never freeze behind new ones. */
   fadeAway(el: HTMLElement, duration: number, delay = 0): void {
+    if (this.frozen) { el.remove(); return }
+    el.dataset.exiting = '1'
     const from = getComputedStyle(el).opacity
     el.getAnimations().forEach((a) => {
       const effect = a.effect as KeyframeEffect | null
@@ -153,13 +155,31 @@ export class LyricScene implements LyricRenderer {
       .then(() => el.remove(), () => el.remove())
   }
 
-  /** The song's main color made bright enough to glow, and its second; white for grey artwork. */
+  get isLightBg(): boolean { return Boolean(this.tune?.lightBg) }
+  /** Foreground inks adapted to the backdrop polarity so lyrics never vanish white-on-white. */
+  get primaryInk(): string { return this.isLightBg ? 'rgba(14, 12, 22, 0.94)' : '#fff' }
+  get warmInk(): string { return this.isLightBg ? 'rgb(20, 16, 28)' : 'rgb(250, 242, 230)' }
+  get typewriterInk(): string { return this.isLightBg ? 'rgb(18, 16, 24)' : 'rgb(245, 245, 245)' }
+  get mutedInk(): string { return this.isLightBg ? 'rgba(16, 14, 24, 0.50)' : 'rgba(255, 255, 255, 0.6)' }
+  get dimTubeInk(): string { return this.isLightBg ? 'rgba(18, 14, 26, 0.14)' : 'rgba(255, 255, 255, 0.09)' }
+  get softShadow(): string { return this.isLightBg ? 'rgba(255, 255, 255, 0.55)' : 'rgba(0, 0, 0, 0.45)' }
+  /** The song's main color tuned to read cleanly on the current backdrop polarity (glowing on dark, deep on light). */
   get glow(): RGB {
     const c = this.colors?.primary
+    if (this.isLightBg) {
+      return c
+        ? hsbToRgb({ hue: c.hue, saturation: Math.min(Math.max(c.saturation, 0.62), 0.95), brightness: 0.56 })
+        : [0.12, 0.10, 0.18]
+    }
     return c ? hsbToRgb({ hue: c.hue, saturation: Math.min(c.saturation, 0.85), brightness: 1 }) : [1, 1, 1]
   }
   get secondGlow(): RGB {
     const c = this.colors?.secondary
+    if (this.isLightBg) {
+      return c
+        ? hsbToRgb({ hue: c.hue, saturation: Math.min(Math.max(c.saturation, 0.55), 0.92), brightness: 0.50 })
+        : [0.24, 0.22, 0.30]
+    }
     return c ? hsbToRgb({ hue: c.hue, saturation: Math.min(Math.max(c.saturation, 0.35), 0.85), brightness: 1 }) : [0.8, 0.8, 0.8]
   }
 
@@ -206,6 +226,7 @@ export class LyricScene implements LyricRenderer {
     const tune = tuned ?? null
     const colorsChanged = JSON.stringify(colors) !== JSON.stringify(this.colors)
     const tuneChanged = JSON.stringify(tune) !== JSON.stringify(this.tune)
+    this.host.classList.toggle('is-light', this.isLightBg)
     if (face !== this.face || colorsChanged || tuneChanged || scale !== this.s) {
       this.face = face
       this.colors = colors
@@ -264,6 +285,7 @@ export class LyricScene implements LyricRenderer {
   freeze(stop: boolean): void {
     if (stop === this.frozen) return
     this.frozen = stop
+    if (stop) for (const el of this.stage.querySelectorAll('[data-exiting="1"]')) el.remove()
     for (const a of this.stage.getAnimations({ subtree: true })) if (stop) a.pause(); else a.play()
   }
 
@@ -284,7 +306,7 @@ export class LyricScene implements LyricRenderer {
     this.lines.forEach((l, i) => { if (LyricScene.start(l) <= now) last = i })
     const next = last >= 0 ? (this.lines[last + 1] ? LyricScene.start(this.lines[last + 1]) : null)
       : (this.lines[0] ? LyricScene.start(this.lines[0]) : null)
-    this.interlude.show({ now, next, size: 46 * this.s, color: 'rgb(250, 242, 230)', glow: cssColor(this.glow),
+    this.interlude.show({ now, next, size: 46 * this.s, color: this.warmInk, glow: cssColor(this.glow),
       animated, began: last >= 0 ? LyricScene.end(this.lines[last]) + 2.5 : null, frozen: this.frozen })
     const spot = this.interludeSpot(this.interlude.size, last < 0, animated)
     this.interlude.at(spot.x, spot.y)
@@ -324,6 +346,7 @@ export class LyricScene implements LyricRenderer {
   rebuild(): void {
     const now = this.now
     if (!this.isSeen || now == null || this.width <= 0) return
+    for (const el of this.stage.querySelectorAll('[data-exiting="1"]')) el.remove()
     const target = this.lineAt(now)
     this.shown = target
     this.sung = -1
@@ -340,7 +363,7 @@ export class LyricScene implements LyricRenderer {
   catchUp(): void {
     const now = this.now
     if (!this.isSeen || now == null) return
-    if (this.shown == null) { this.rebuild(); return }
+    if (this.shown == null || this.frozen) { this.rebuild(); return }
     const target = this.lineAt(now), shown = this.shown
     if (target === shown && target === -1 && !this.paused && this.isBreak(target, now)) this.cut(target, now)
     else if (target === shown) {

@@ -7,6 +7,8 @@ struct Params {
   play: vec4f, // normalized center, radius in scene height, unused
   optics: vec4f, // refraction, rim, fringe, tint opacity
   look: vec4f, // frost mix, time, caustic, bevel
+  tint2: vec4f, // complementary rgb, w unused
+  tint3: vec4f, // tertiary rgb, w unused
 };
 struct Surface {
   rect: vec4f, // cx_px, cy_px, halfW_px, halfH_px
@@ -45,18 +47,18 @@ fn background(uv: vec2f) -> vec3f {
   let l1 = exp(-length((uv - vec2f(0.80, 0.16)) * vec2f(1.0, 1.35)) * 2.2);
   let l2 = exp(-length((uv - vec2f(0.18, 0.84)) * vec2f(1.05, 1.25)) * 2.1);
   let l3 = exp(-length((uv - vec2f(0.46, 0.44)) * vec2f(1.2, 1.1)) * 2.6);
-  let secTint = vec3f(p.tint.g * 0.55 + 0.32, p.tint.b * 0.45 + 0.14, p.tint.r * 0.65 + 0.28);
-  let triTint = mix(p.tint.rgb, vec3f(0.42, 0.68, 0.96), 0.55);
+  let secTint = p.tint2.rgb;
+  let triTint = p.tint3.rgb;
   let grad = 0.5 + 0.5 * (uv.x * 0.35 + uv.y * 0.65 - 0.5);
   let dark = vec3f(0.030, 0.034, 0.052)
-    + p.tint.rgb * l1 * 0.42
-    + secTint * l2 * 0.30
-    + triTint * l3 * 0.18
+    + p.tint.rgb * l1 * 0.54
+    + secTint * l2 * 0.40
+    + triTint * l3 * 0.25
     + vec3f(0.018, 0.022, 0.036) * grad;
   let light = vec3f(0.83, 0.86, 0.91)
-    + p.tint.rgb * l1 * 0.14
-    + secTint * l2 * 0.10
-    + triTint * l3 * 0.07
+    + p.tint.rgb * l1 * 0.18
+    + secTint * l2 * 0.13
+    + triTint * l3 * 0.09
     - vec3f(0.03) * grad;
   let artDark = min(c * 1.15, vec3f(1.)) * 0.76 + dark * 0.24;
   let artLight = mix(c * 0.76 + light * 0.24, c * 0.68 + light * 0.32, 0.35);
@@ -273,7 +275,8 @@ fn surface_sdf(px: vec2f, s: Surface) -> f32 {
   let caustField = smoothstep(0.15, 0.92, caustWave * 0.5 + 0.5) * p.look.z * (0.28 + audioRms * 0.52) * liveFlow;
   // Outer bevel lip + Play droplet preserve real uncrushed optical refraction outside the text zone.
   let lipWeight = clamp(lip * 0.62 * rimPolish + dropGlow * 0.42 + interact * 0.28 * edge + caustField * edge * 0.16, 0., 0.86);
-  let bevelColor = mix(chroma * mix(1.12, 1.0, p.tint.w) + p.tint.rgb * (0.14 * (1. - p.tint.w) + caustField * edge * 0.28), accessible, 0.35);
+  let edgeTint = mix(p.tint.rgb, p.tint2.rgb, clamp(uv.x * 0.55 + uv.y * 0.45, 0., 1.));
+  let bevelColor = mix(chroma * mix(1.12, 1.0, p.tint.w) + edgeTint * (0.15 * (1. - p.tint.w) + caustField * edge * 0.28), accessible, 0.35);
   let glassSurface = mix(accessible, bevelColor, lipWeight);
   let lightRimShadow = p.tint.w * exp(-abs(bestD) * 1.5) * 0.14;
   let spec = (rim * p.optics.y * (0.58 + 0.5 * interact) + shine * p.optics.y * 1.65 + topCatch * p.optics.y * 0.72 + bounce * p.optics.y * 0.28) * (1. + p.look.w * 0.55) * (1. + audioPunch * 0.34) * rimPolish;

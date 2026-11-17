@@ -13,8 +13,8 @@ import type { SyncedLyricLine } from '../types'
 // clock, sung by the style picked. Line-timed lyrics get their words paced over each line; untimed ones over the song.
 
 /** The styles were laid out for a box about this big; a bigger one sets everything larger. */
-const DESIGN_WIDTH = 440
-const DESIGN_HEIGHT = 380
+const DESIGN_WIDTH = 420
+const DESIGN_HEIGHT = 360
 
 interface Props {
   look: string
@@ -26,15 +26,21 @@ interface Props {
   isSynced: boolean
   syncedLines: SyncedLyricLine[]
   artUrl: string | null | undefined
+  lightBg?: boolean
 }
 
-export default function LyricStageView({ look, trackId, title, artist, duration, rawLyrics, isSynced, syncedLines, artUrl }: Props): JSX.Element {
+export default function LyricStageView({ look, trackId, title, artist, duration, rawLyrics, isSynced, syncedLines, artUrl, lightBg }: Props): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<LyricStage | null>(null)
   const lyricsOffset = useStore((s) => s.lyricsOffset)
   const fonts = useStore((s) => s.desktop.lyrics.fonts)
   // The app's lyric size and colors, for the styles that follow them.
-  const tune = useStore(useShallow((s): LyricTune => ({ size: s.lyricsScale, active: s.lyricsColorActive, inactive: s.lyricsColorInactive })))
+  const baseTune = useStore(useShallow((s): LyricTune => ({
+    size: s.lyricsScale,
+    active: s.developerMode ? s.lyricsColorActive : null,
+    inactive: s.developerMode ? s.lyricsColorInactive : null,
+  })))
+  const tune = useMemo<LyricTune>(() => ({ ...baseTune, lightBg: Boolean(lightBg) }), [baseTune, lightBg])
   // A line clicked plays the song from it - not on 999 FM, which can't be moved.
   const radioFmActive = useStore((s) => s.radioFmActive)
   const seek = useMemo(() => (radioFmActive ? undefined : (seconds: number) => seekAudio(Math.max(seconds, 0))), [radioFmActive])
@@ -62,7 +68,7 @@ export default function LyricStageView({ look, trackId, title, artist, duration,
       laidOut = host.clientWidth > 0 && host.clientHeight > 0
       if (laidOut) {
         const s = Math.min(host.clientWidth / DESIGN_WIDTH, host.clientHeight / DESIGN_HEIGHT)
-        setScale(Math.round(Math.min(Math.max(s, 0.7), 2.4) * 20) / 20)
+        setScale(Math.round(Math.min(Math.max(s, 0.7), 2.7) * 20) / 20)
       }
       onVisibility()
     }

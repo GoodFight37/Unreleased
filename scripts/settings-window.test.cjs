@@ -10,7 +10,8 @@ const settings = readFileSync(join(__dirname, '../src/renderer/src/components/Se
 const defaults = store.slice(store.indexOf('const POPOUT_WINDOW_DEFAULTS:'), store.indexOf('// --- Non-queue state'))
 const actionsStart = store.indexOf('  setShowSettings: (showSettings) =>')
 const actions = store.slice(actionsStart, store.indexOf('  openProfile:', actionsStart))
-const popoutAction = store.slice(store.indexOf('  setPopoutWindow: (kind, enabled) =>'), store.indexOf('  setAccentColor: (color) =>'))
+const popoutStart = store.indexOf('  setPopoutWindow: (kind, enabled) =>')
+const popoutAction = store.slice(popoutStart, store.indexOf('  setAccentColor:', popoutStart))
 
 function boot(saved) {
   let persisted = saved

@@ -150,11 +150,11 @@ function HeroBackdrop({ src, isDarkSkin }: { src?: string | null; isDarkSkin: bo
             inset: -150,
             width: 'calc(100% + 300px)',
             height: 'calc(100% + 300px)',
-            filter: `blur(50px) saturate(1.7) brightness(${isDarkSkin ? 0.5 : 0.85})`,
+            filter: `blur(50px) saturate(${isDarkSkin ? 2.0 : 1.7}) brightness(${isDarkSkin ? 0.65 : 0.85})`,
           }}
         />
       )}
-      <div className={`absolute inset-0 ${isDarkSkin ? 'bg-black/10' : 'bg-white/30'}`} />
+      <div className={`absolute inset-0 ${isDarkSkin ? 'bg-gradient-to-b from-black/10 to-black/25' : 'bg-white/30'}`} />
     </div>
   )
 }

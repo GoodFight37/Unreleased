@@ -35,6 +35,8 @@ const NOT_APPLICABLE = {
   'lastfm.*': 'Last.fm is a third-party service, not the site API',
   'gifApi.*': 'Tenor/Giphy are third-party services, not the site API',
   'coverImage.*': 'client-side image helpers over public cover URLs and third-party proxies',
+  'adaptivePalette.*': 'client-side cover color extraction over coverImage.fetchImageBlob',
+  'themeEffects.useAdaptiveAccent': 'React hook applying cover colors via adaptivePalette (toggled by adaptive-colors setting)',
   'cdnTunnel.*': 'peer/tunnel download transport used by file downloads (get)',
   'cdnWebrtc.*': 'peer download transport used by file downloads (get)',
   'donorUploads.*': 'upload queue wrapper around donorFilesApi.uploadDonorFile (donor up)',

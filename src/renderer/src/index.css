@@ -782,16 +782,24 @@ input[type='range']:active::-moz-range-thumb {
    static 10% overscan, so the blur's soft edges stay off-screen; still under
    reduced motion. */
 .wrld-drift {
-  transform: scale(1.2);
-  animation: wrld-drift 46s ease-in-out infinite alternate;
+  transform: scale(1.18);
+  animation: wrld-drift 10s ease-in-out infinite alternate;
 }
 @keyframes wrld-drift {
-  0%   { transform: scale(1.2) translate3d(0, 0, 0); }
-  50%  { transform: scale(1.26) translate3d(-1.5%, 1%, 0); }
-  100% { transform: scale(1.23) translate3d(1.2%, -1.2%, 0); }
+  0%   { transform: scale(1.18) translate3d(-12px, 8px, 0); }
+  50%  { transform: scale(1.21) translate3d(6px, -6px, 0); }
+  100% { transform: scale(1.19) translate3d(12px, -10px, 0); }
 }
-:where(html[data-effects-motion="reduce"]) .wrld-drift { animation: none; }
-@media (prefers-reduced-motion: reduce) { .wrld-drift { animation: none; } }
+.wrld-cover-float {
+  animation: wrld-cover-float 9s ease-in-out infinite alternate;
+}
+@keyframes wrld-cover-float {
+  0%   { transform: translate3d(0, 3px, 0) scale(1); }
+  100% { transform: translate3d(0, -5px, 0) scale(1.014); }
+}
+:where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) .wrld-drift,
+:where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) .wrld-cover-float { animation: none; }
+@media (prefers-reduced-motion: reduce) { .wrld-drift, .wrld-cover-float { animation: none; } }
 
 /* ─── Sliding nav highlight ────────────────────────────────────────────────────
    hooks/useSlidingIndicator: one highlight behind the nav items, moved onto the
@@ -1441,25 +1449,37 @@ body, #root, .app-shell {
   --ambient-tint: 62%;
   --ambient-art: brightness(1.15) saturate(1.9);
 }
-/* Dark skins: dim the art a little first, so a bright cover can't lift the
-   page enough to cost muted text its contrast. */
+/* Dark skins: keep vibrant cover hues readable through surface tint + WCAG contrast
+   without crushing art into dull brown. */
 .dark .app-ambient {
   --ambient-tint: 60%;
-  --ambient-art: brightness(0.75) saturate(2);
+  --ambient-art: brightness(0.92) saturate(1.55);
+}
+@keyframes ambient-drift {
+  0% { transform: translate3d(-3%, -2%, 0) scale(1.04); }
+  50% { transform: translate3d(3%, 2.5%, 0) scale(1.08); }
+  100% { transform: translate3d(-2%, 3%, 0) scale(1.05); }
+}
+@keyframes ambient-art-drift {
+  0% { transform: scale(1.28) translate3d(-2%, -1.5%, 0); }
+  100% { transform: scale(1.33) translate3d(2%, 1.5%, 0); }
 }
 .app-ambient-glow {
   position: absolute;
-  inset: 0;
+  inset: -8%;
+  opacity: 0.84;
+  will-change: transform, opacity;
+  animation: ambient-drift 56s ease-in-out infinite alternate;
   background:
     radial-gradient(62% 58% at 86% 8%, rgb(var(--accent-rgb) / 0.48), transparent 68%),
-    radial-gradient(56% 56% at 10% 90%, color-mix(in srgb, rgb(var(--accent-rgb) / 0.38) 65%, #f43f5e 35%), transparent 70%),
-    radial-gradient(48% 52% at 46% 42%, rgb(56 189 248 / 0.14), transparent 72%);
+    radial-gradient(56% 56% at 10% 90%, rgb(var(--accent-2-rgb, var(--accent-rgb)) / 0.40), transparent 70%),
+    radial-gradient(48% 52% at 46% 42%, rgb(var(--accent-3-rgb, 56 189 248) / 0.20), transparent 72%);
 }
 .dark .app-ambient-glow {
   background:
     radial-gradient(64% 60% at 86% 8%, rgb(var(--accent-rgb) / 0.56), transparent 68%),
-    radial-gradient(58% 58% at 10% 92%, color-mix(in srgb, rgb(var(--accent-rgb) / 0.42) 60%, #ec4899 40%), transparent 70%),
-    radial-gradient(46% 50% at 44% 40%, rgb(56 189 248 / 0.18), transparent 72%);
+    radial-gradient(58% 58% at 10% 92%, rgb(var(--accent-2-rgb, var(--accent-rgb)) / 0.46), transparent 70%),
+    radial-gradient(46% 50% at 44% 40%, rgb(var(--accent-3-rgb, 56 189 248) / 0.24), transparent 72%);
 }
 .app-ambient-art {
   position: absolute;
@@ -1473,13 +1493,69 @@ body, #root, .app-shell {
   opacity: 0;
   transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.app-ambient-art.is-shown { opacity: 1; }
+.app-ambient-art.is-shown {
+  opacity: 1;
+  animation: ambient-art-drift 60s ease-in-out infinite alternate;
+}
 .app-ambient-tint {
   position: absolute;
   inset: 0;
   /* The surface with a touch of the accent, so even a gray cover reads as
      the skin's color. */
   background: color-mix(in srgb, color-mix(in srgb, var(--glass-accent) 7%, var(--surface)) var(--ambient-tint), transparent);
+}
+.app-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  background-repeat: repeat;
+  background-size: 160px 160px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
+.mesh-vignette {
+  background: linear-gradient(
+    to top,
+    rgb(5 3 8 / 0.62) 0%,
+    rgb(5 3 8 / 0.46) 28%,
+    rgb(5 3 8 / 0.28) 48%,
+    rgb(5 3 8 / 0.10) 68%,
+    transparent 86%
+  );
+}
+.mesh-vignette--light {
+  background: linear-gradient(
+    to top,
+    rgb(248 247 244 / 0.52) 0%,
+    rgb(248 247 244 / 0.30) 32%,
+    rgb(248 247 244 / 0.10) 58%,
+    transparent 82%
+  );
+}
+@media (prefers-contrast: more) {
+  .mesh-vignette {
+    background: linear-gradient(
+      to top,
+      rgb(5 3 8 / 0.76) 0%,
+      rgb(5 3 8 / 0.58) 32%,
+      rgb(5 3 8 / 0.36) 54%,
+      transparent 88%
+    );
+  }
+  .mesh-vignette--light {
+    background: linear-gradient(
+      to top,
+      rgb(248 247 244 / 0.84) 0%,
+      rgb(248 247 244 / 0.64) 34%,
+      rgb(248 247 244 / 0.34) 60%,
+      transparent 84%
+    );
+  }
+}
+:where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) .app-ambient-glow,
+:where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) .app-ambient-art.is-shown {
+  animation: none;
 }
 :where(html[data-effects-motion="reduce"]) .app-ambient-art { transition-duration: 0.01s; }
 
@@ -1759,16 +1835,6 @@ img[data-img-fade="in"] { animation: img-fade-in 0.24s var(--ease-out); }
   from { transform: scaleY(0.3); }
   to   { transform: scaleY(1); }
 }
-html.beat-live .album-eq-playing .album-eq-bar,
-html.beat-live .eq-bar {
-  animation: none;
-  transform: scaleY(var(--beat-1, 0.55));
-  transition: transform 65ms linear;
-}
-html.beat-live .album-eq-playing .album-eq-bar:nth-child(2),
-html.beat-live .eq-bar:nth-child(2) { transform: scaleY(var(--beat-2, 0.72)); }
-html.beat-live .album-eq-playing .album-eq-bar:nth-child(3),
-html.beat-live .eq-bar:nth-child(3) { transform: scaleY(var(--beat-3, 0.48)); }
 :where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) .album-eq-playing .album-eq-bar,
 :where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) .eq-bar { animation: none; transform: scaleY(0.7); }
 :where(html[data-effects-quality="game"]) .wrld-drift { animation: none; }

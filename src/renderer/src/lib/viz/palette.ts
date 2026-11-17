@@ -1,4 +1,5 @@
 import type { RGB } from "./types";
+import { fetchCoverBitmap } from "../adaptivePalette";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -91,29 +92,24 @@ export const PALETTE_SAMPLE = 48;
  * large dull background, which is what reads as "the colour of the cover".
  * Resolves null if the image can't be sampled (e.g. a remote URL without CORS).
  */
-export function extractPalette(url: string, count = 4): Promise<RGB[] | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const size = PALETTE_SAMPLE;
-      const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return resolve(null);
-      ctx.drawImage(img, 0, 0, size, size);
-      let data: Uint8ClampedArray;
-      try {
-        data = ctx.getImageData(0, 0, size, size).data;
-      } catch {
-        return resolve(null); // tainted canvas
-      }
-      resolve(paletteFromPixels(data, count));
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
+export async function extractPalette(url: string, count = 4): Promise<RGB[] | null> {
+  const bitmap = await fetchCoverBitmap(url);
+  if (!bitmap) return null;
+  try {
+    const size = PALETTE_SAMPLE;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(bitmap, 0, 0, size, size);
+    const data = ctx.getImageData(0, 0, size, size).data;
+    return paletteFromPixels(data, count);
+  } catch {
+    return null;
+  } finally {
+    bitmap.close();
+  }
 }
 
 /**

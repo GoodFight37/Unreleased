@@ -44,6 +44,7 @@ import WrldVisualizer from './WrldVisualizer'
 import WrldWidgets from './WrldWidgets'
 import LyricStageView from './LyricStageView'
 import { playingSeconds } from '../desktop/playClock'
+import { listenToMeter } from '../desktop/meter'
 import WordLyricLine from './WordLyricLine'
 import LyricsControls from './LyricsControls'
 import { useGlassCompositorReady, useGlassSurface } from '../lib/glass/compositor'
@@ -468,12 +469,12 @@ export default function WrldView(): JSX.Element {
     // The column is max(50%, 320px) wide with the panel open, the full width
     // without, and centres its content - so the content moves by half the
     // difference.
-    const half = Math.max(width / 2, 320)
+    const splitLeft = Math.max(width * 0.4, 320)
     const full = Math.max(width, 320)
     const t = getComputedStyle(col).transform
     const inFlight = t && t !== 'none' ? new DOMMatrixReadOnly(t).m41 : 0
     col.getAnimations().forEach(a => a.cancel())
-    const from = (showLyricsColumn ? full - half : half - full) / 2 + inFlight
+    const from = (showLyricsColumn ? full - splitLeft : splitLeft - full) / 2 + inFlight
     col.animate(
       [{ transform: `translateX(${from}px)` }, { transform: 'translateX(0)' }],
       { duration: SPLIT_GLIDE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' },
@@ -485,9 +486,12 @@ export default function WrldView(): JSX.Element {
   // of the fixed black/white pair the art treatment picks between. The two
   // faintest steps stay alpha-based - there's no theme var that dim, and
   // fading the primary color keeps them right on any skin.
-  const txtPri   = useThemeBackground ? 'var(--text-primary)'   : textIsDark ? 'rgba(0,0,0,0.88)' : 'rgba(255,255,255,1)'
-  const txtSec   = useThemeBackground ? 'var(--text-secondary)' : textIsDark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.82)'
-  const txtTer   = useThemeBackground ? 'var(--text-muted)'     : textIsDark ? 'rgba(0,0,0,0.66)' : 'rgba(255,255,255,0.72)'
+  const txtPri   = useThemeBackground ? 'var(--text-primary)'   : textIsDark ? 'rgba(10,8,14,0.92)' : 'rgba(255,255,255,1)'
+  const txtSec   = useThemeBackground ? 'var(--text-secondary)' : textIsDark ? 'rgba(10,8,14,0.78)' : 'rgba(255,255,255,0.88)'
+  const txtTer   = useThemeBackground ? 'var(--text-muted)'     : textIsDark ? 'rgba(10,8,14,0.68)' : 'rgba(255,255,255,0.78)'
+  const actionOnColor = useThemeBackground ? 'var(--accent)' : txtPri
+  const actionOnBg = useThemeBackground ? undefined : (textIsDark ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.18)')
+  const actionIdleColor = textIsDark ? 'rgba(10,8,14,0.58)' : 'rgba(255,255,255,0.62)'
   const txtFaint = textIsDark ? 'rgba(0,0,0,0.22)'  : 'rgba(255,255,255,0.2)'
   // Unplayed part of the progress/volume troughs. It used to be a hardcoded
   // white wash, which is invisible on a light surface - now it follows the
@@ -529,6 +533,29 @@ export default function WrldView(): JSX.Element {
     () => resolveWrldEra(artSrc && !artError ? artSrc : null, displayAlbum ?? null),
     [artSrc, artError, displayAlbum],
   )
+  const titleBeatRef = useRef<HTMLParagraphElement>(null)
+  useEffect(() => {
+    const titleEl = titleBeatRef.current
+    if (!titleEl) return
+    if (!stageAnimated || !playbackActive) {
+      titleEl.style.removeProperty('transform')
+      return
+    }
+    let smooth = 0
+    let lastAt = 0
+    let lastScale = 1
+    return listenToMeter((m) => {
+      const punch = Math.min(1, Math.max(0, m.punch > 1 ? (m.punch - 1) * 1.35 : m.punch * 0.2))
+      smooth += (punch - smooth) * (punch > smooth ? 0.5 : 0.14)
+      const now = performance.now()
+      if (now - lastAt < 32) return
+      const next = Number((1 + smooth * 0.022).toFixed(3))
+      if (Math.abs(next - lastScale) < 0.002) return
+      lastAt = now
+      lastScale = next
+      titleEl.style.transform = `scale(${next})`
+    })
+  }, [stageAnimated, playbackActive])
   const coverStageRef = useRef<HTMLDivElement>(null)
   const coverGlintRef = useRef<HTMLDivElement>(null)
   const handleCoverMove = (e: React.PointerEvent<HTMLDivElement>): void => {
@@ -557,6 +584,7 @@ export default function WrldView(): JSX.Element {
   // re-render. As plain calls they're just part of this component's own tree.
   // (Corollary: they must not contain hooks of their own.)
   const ArtBox = ({ mobile }: { mobile: boolean }) => (
+    <div className={!mobile && stageAnimated && playbackActive ? 'wrld-cover-float' : undefined}>
     <div
       ref={mobile ? undefined : coverStageRef}
       onPointerMove={mobile ? undefined : handleCoverMove}
@@ -577,10 +605,15 @@ export default function WrldView(): JSX.Element {
                 : textIsDark
                   ? 'shadow-[0_28px_72px_rgba(0,0,0,0.28)] ring-black/10'
                   : playbackActive
-                    ? 'shadow-[0_32px_84px_rgba(0,0,0,0.58)] ring-white/20'
+                    ? 'ring-white/20'
                     : 'shadow-[0_18px_48px_rgba(0,0,0,0.38)] ring-white/10'
             }`}
-        style={mobile ? {} : { aspectRatio: '1' }}
+        style={mobile ? {} : {
+          aspectRatio: '1',
+          boxShadow: !useThemeBackground && !textIsDark && playbackActive
+            ? '0 24px 56px rgba(0,0,0,0.56), 0 0 38px rgb(var(--accent-rgb) / 0.24)'
+            : undefined,
+        }}
         data-viz={mobile ? undefined : 'cover'}
         // Right-click → "Change cover", same as mobile's long-press. Only on
         // the big desktop art, not the small header thumbnail (mobile=true) -
@@ -615,6 +648,7 @@ export default function WrldView(): JSX.Element {
           />
         )}
       </div>
+    </div>
     </div>
   )
 
@@ -777,13 +811,13 @@ export default function WrldView(): JSX.Element {
               needs something solid behind it here, because unlike mobile this
               page renders over a still-mounted bgView (App.tsx), so the page
               you came from bled through those corners. */}
-          <div className="absolute inset-0 overflow-hidden bg-black" style={{ contain: 'strict' }}>
+          <div className={`absolute inset-0 overflow-hidden ${!useThemeBackground && textIsDark ? 'bg-[#f4f3f7]' : 'bg-black'}`} style={{ contain: 'strict' }}>
             {useThemeBackground ? (
               <div
                 className="absolute inset-0 bg-surface"
                 style={gradientsEnabled ? {
                   backgroundImage: `radial-gradient(120% 90% at 100% 0%, rgb(var(--accent-rgb) / 0.16), transparent 55%),
-                                     radial-gradient(100% 85% at 0% 100%, rgb(var(--accent-rgb) / 0.10), transparent 55%)`,
+                                     radial-gradient(100% 85% at 0% 100%, rgb(var(--accent-2-rgb, var(--accent-rgb)) / 0.12), transparent 55%)`,
                 } : undefined}
               />
             ) : wrldAtmosphere === 'mesh' ? (
@@ -799,14 +833,17 @@ export default function WrldView(): JSX.Element {
               // degraded copy, which also gets the backdrop up on the first frame.
               <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]}
                 className={`${stageAnimated ? 'wrld-drift ' : ''}absolute inset-0 w-full h-full object-cover`}
-                style={{ filter: `blur(60px) brightness(${isDarkSkin ? 0.22 : 0.34}) saturate(${isDarkSkin ? 2.4 : 1.8})`, willChange: stageAnimated ? 'transform' : undefined }}
+                style={{ filter: `blur(60px) brightness(${isDarkSkin ? 0.42 : 0.52}) saturate(1.75)`, willChange: stageAnimated ? 'transform' : undefined }}
                 onError={() => setArtError(true)}
               />
             ) : (
               <div className={`absolute inset-0 ${radioFmActive ? 'bg-gradient-to-br from-red-950/60 to-black dark:from-red-950/60 dark:to-black' : 'bg-gradient-to-br from-gray-200 to-gray-100 dark:from-gray-900 dark:to-black'}`} />
             )}
             {!useThemeBackground && (
-              <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/15 to-black/45 dark:from-black/40 dark:via-transparent dark:to-black/70" />
+              <>
+                <div className={`absolute inset-0 pointer-events-none ${textIsDark ? 'mesh-vignette--light' : 'mesh-vignette'}`} />
+                <div className="app-grain" />
+              </>
             )}
           </div>
 
@@ -860,7 +897,7 @@ export default function WrldView(): JSX.Element {
                     title="Lyrics"
                     aria-pressed={lyricsShown}
                     className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                    style={{ color: lyricsShown ? 'var(--accent)' : (textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)') }}
+                    style={{ color: lyricsShown ? actionOnColor : actionIdleColor, backgroundColor: lyricsShown ? actionOnBg : undefined }}
                   >
                     <TextQuote size={18} />
                   </button>
@@ -870,7 +907,7 @@ export default function WrldView(): JSX.Element {
                     onClick={() => setShowQueue(!showQueue)}
                     title="Playing Next"
                     className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                    style={{ color: showQueue ? 'var(--accent)' : (textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)') }}
+                    style={{ color: showQueue ? actionOnColor : actionIdleColor, backgroundColor: showQueue ? actionOnBg : undefined }}
                   >
                     <ListMusic size={18} />
                   </button>
@@ -880,7 +917,7 @@ export default function WrldView(): JSX.Element {
                     onClick={() => developerMode ? setShowLyricsSettings(true) : useStore.getState().openSettings('lyrics')}
                     title="Customize lyrics"
                     className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                    style={{ color: textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)' }}
+                    style={{ color: actionIdleColor }}
                   >
                     <Settings2 size={16} />
                   </button>
@@ -913,7 +950,7 @@ export default function WrldView(): JSX.Element {
                   ? FmRadioPanel()
                   : radioFmActive && fmTab === 'chat'
                   ? <RadioChatPanel />
-                  : <LyricsPanel rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} radioFmActive={radioFmActive} currentTrack={currentTrack} isEditor={isEditor} txtPri={txtPri} txtSec={txtSec} txtTer={txtTer} txtFaint={txtFaint} artUrl={artSrc} />}
+                  : <LyricsPanel rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} radioFmActive={radioFmActive} currentTrack={currentTrack} isEditor={isEditor} txtPri={txtPri} txtSec={txtSec} txtTer={txtTer} txtFaint={txtFaint} artUrl={artSrc} lightBg={textIsDark} />}
               </div>
             )}
 
@@ -1063,7 +1100,7 @@ export default function WrldView(): JSX.Element {
                 its layout effect). z-[1] so mid-glide the cover passes over
                 the panel fading out beside it rather than under its lyrics. */}
             <div ref={splitColRef} className="relative z-[1] flex flex-col items-center justify-center shrink-0 px-8 xl:px-12 gap-5 overflow-y-auto overflow-x-hidden"
-              style={{ width: showLyricsColumn ? '50%' : '100%', minWidth: 320 }}>
+              style={{ width: showLyricsColumn ? '40%' : '100%', minWidth: 320 }}>
 
               <div className="w-full max-w-[var(--wrld-player-width)] flex items-center gap-3 select-none" style={{ color: txtTer }}>
                 <span className="text-lg font-black tracking-[-0.08em]">999</span>
@@ -1084,7 +1121,20 @@ export default function WrldView(): JSX.Element {
               <div className="w-full max-w-[var(--wrld-player-width)] px-1" data-viz="meta">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    {displayTitle  && <p className="font-semibold text-xl xl:text-2xl leading-tight truncate" style={{ color: txtPri }} title={displayTitle}>{displayTitle}</p>}
+                    {displayTitle  && (
+                      <p
+                        ref={titleBeatRef}
+                        className="font-semibold text-xl xl:text-2xl leading-tight truncate will-change-transform"
+                        style={{
+                          color: txtPri,
+                          transformOrigin: 'left center',
+                          textShadow: !useThemeBackground && !textIsDark ? '0 1px 2px rgba(0,0,0,0.35)' : undefined,
+                        }}
+                        title={displayTitle}
+                      >
+                        {displayTitle}
+                      </p>
+                    )}
                     {displayArtist && <p className="text-sm mt-0.5 truncate" style={{ color: txtSec }}>{displayArtist}</p>}
                     {radioFmActive && !radioFmNowPlaying && <p className="text-sm mt-0.5" style={{ color: txtTer }}>Tuning in…</p>}
                   </div>
@@ -1094,7 +1144,7 @@ export default function WrldView(): JSX.Element {
                       title="Lyrics"
                       aria-pressed={lyricsShown}
                       className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                      style={{ color: lyricsShown ? 'var(--accent)' : (textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)') }}
+                      style={{ color: lyricsShown ? actionOnColor : actionIdleColor, backgroundColor: lyricsShown ? actionOnBg : undefined }}
                     >
                       <TextQuote size={16} />
                     </button>
@@ -1105,7 +1155,7 @@ export default function WrldView(): JSX.Element {
                       title="Playing Next"
                       aria-pressed={showQueue}
                       className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                      style={{ color: showQueue ? 'var(--accent)' : (textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)') }}
+                      style={{ color: showQueue ? actionOnColor : actionIdleColor, backgroundColor: showQueue ? actionOnBg : undefined }}
                     >
                       <ListMusic size={16} />
                     </button>
@@ -1118,7 +1168,7 @@ export default function WrldView(): JSX.Element {
                       aria-label="Other versions"
                       aria-pressed={songVersionMenuOpen}
                       className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                      style={{ color: songVersionMenuOpen ? 'var(--accent)' : (textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)') }}
+                      style={{ color: songVersionMenuOpen ? actionOnColor : actionIdleColor, backgroundColor: songVersionMenuOpen ? actionOnBg : undefined }}
                     >
                       <Layers size={16} />
                     </button>
@@ -1424,7 +1474,7 @@ export default function WrldView(): JSX.Element {
               )}
               {lyricsPresence.mounted && (
                 <WrldPanelLayer exiting={lyricsPresence.exiting} animateIn={viewCrossfade} className="absolute inset-0 flex flex-col">
-                  <LyricsPanel padded rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} radioFmActive={radioFmActive} currentTrack={currentTrack} isEditor={isEditor} txtPri={txtPri} txtSec={txtSec} txtTer={txtTer} txtFaint={txtFaint} artUrl={artSrc} />
+                  <LyricsPanel padded rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} radioFmActive={radioFmActive} currentTrack={currentTrack} isEditor={isEditor} txtPri={txtPri} txtSec={txtSec} txtTer={txtTer} txtFaint={txtFaint} artUrl={artSrc} lightBg={textIsDark} />
                 </WrldPanelLayer>
               )}
             </div>
@@ -2280,12 +2330,14 @@ interface LyricsPanelProps {
   txtPri: string; txtSec: string; txtTer: string; txtFaint: string
   /** The cover shown, for the iJWA lyric styles' colors. */
   artUrl?: string | null
+  /** True when the backdrop behind the lyrics is light, so all lyric styles invert to dark ink. */
+  lightBg?: boolean
 }
 
 const LyricsPanel = memo(function LyricsPanel({
   rawLyrics, isSynced, syncedLines, padded,
   radioFmActive, currentTrack, isEditor,
-  txtPri, txtSec, txtTer, artUrl,
+  txtPri, txtSec, txtTer, artUrl, lightBg,
 }: LyricsPanelProps) {
   // Settings > Desktop > Lyric style: 'classic' is this list, anything else an iJWA style.
   const savedLyricLook = useStore(s => s.desktop.lyrics.look)
@@ -2296,7 +2348,7 @@ const LyricsPanel = memo(function LyricsPanel({
   const { lyricsScale, lyricsAlign, lyricsBlur, lyricsBlurAmount, lyricsColorActive, lyricsColorInactive } =
     useStorePick('lyricsScale', 'lyricsAlign', 'lyricsBlur', 'lyricsBlurAmount', 'lyricsColorActive', 'lyricsColorInactive')
   const theme = useStore(s => s.theme)
-  const isLightLyrics = txtSec.startsWith('rgba(0,0,0') || !getSkin(theme).dark
+  const isLightLyrics = Boolean(lightBg ?? (txtSec.startsWith('rgba(10,') || txtSec.startsWith('rgba(0,0,0') || !getSkin(theme).dark))
   const developerMode = useStore((s) => s.developerMode)
   const wrldLyricLook = useVizStore((s) => s.wrldLyricLook)
   const radioFmPaused = useStore((s) => s.radioFmPaused)
@@ -2503,6 +2555,7 @@ const LyricsPanel = memo(function LyricsPanel({
         isSynced={isSynced}
         syncedLines={syncedLines}
         artUrl={artUrl}
+        lightBg={isLightLyrics}
       />
     )
   }
@@ -2528,7 +2581,7 @@ const LyricsPanel = memo(function LyricsPanel({
       >
         <div
           ref={linesRef}
-          className={`relative flex flex-col ${padded ? 'gap-5 px-10' : 'gap-4 px-5 md:px-8'}`}
+          className={`relative flex flex-col ${padded ? 'gap-5 px-6' : 'gap-4 px-5 md:px-8'}`}
           style={{
             transform: `translate3d(0, ${-displayTranslateY}px, 0)`,
             transition: autoFollow && placed ? 'transform 0.6s cubic-bezier(0.22,1,0.36,1)' : 'none',
@@ -2552,8 +2605,10 @@ const LyricsPanel = memo(function LyricsPanel({
             // frames after the scroll settled, reading as a sudden late pop.
             // A transform never affects layout/offsetHeight, so the centering
             // stays correct for the whole transition with no second jump.
-            const baseFontSize = `${(padded ? 1.4 : 1.15) * lyricsScale}rem`
-            const scale = isActive ? (padded ? 1.25 : 1.217) : 1
+            const baseFontSize = padded
+              ? `calc(${(1.4 * lyricsScale).toFixed(2)}rem + 0.85vw)`
+              : `${(1.2 * lyricsScale).toFixed(2)}rem`
+            const scale = isActive ? (padded ? 1.12 : 1.16) : 1
             return (
               <div
                 key={i}
@@ -2575,7 +2630,7 @@ const LyricsPanel = memo(function LyricsPanel({
                   // line's own width to 1/maxScale leaves enough headroom
                   // that even the largest growth (the active state) still
                   // fits.
-                  maxWidth:   padded ? '80%' : '82%',
+                  maxWidth:   padded ? '88%' : '84%',
                   fontFamily: 'var(--font-lyrics)',
                   fontSize:   baseFontSize,
                   // Bold weight is the active line's CSS class only - not
@@ -2588,7 +2643,7 @@ const LyricsPanel = memo(function LyricsPanel({
                   fontWeight: isActive ? 800 : 500,
                   lineHeight: 1.25,
                   color:      isActive ? activeColor : inactiveColor,
-                  opacity:    isActive ? 1 : dist === 1 ? (isLightLyrics ? 0.75 : 0.55) : dist === 2 ? (isLightLyrics ? 0.65 : 0.35) : (isLightLyrics ? 0.62 : 0.2),
+                  opacity:    isActive ? 1 : dist === 1 ? (isLightLyrics ? 0.80 : 0.68) : dist === 2 ? (isLightLyrics ? 0.68 : 0.48) : (isLightLyrics ? 0.56 : 0.30),
                   // Every line except the one playing - played and upcoming
                   // alike - so the active line is the only sharp thing on
                   // screen.

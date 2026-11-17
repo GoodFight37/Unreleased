@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useStorePick } from '../store/useStore'
 import { smallCoverUrl, fullCoverUrl, buildImageUrl } from '../lib/juicewrldApi'
 import { getSkin } from '../lib/skins'
+import { useEffectsState } from '../lib/effectsPreference'
+import { listenToMeter } from '../desktop/meter'
 import { FallbackImg } from './ProgressiveCover'
 
 const FADE_MS = 900
@@ -19,8 +21,12 @@ type Layer = { id: number; src: string; shown: boolean }
 // are dropped when that fade ends. Blurred this far, the small cover is all
 // it needs.
 export default function AmbientBackdrop(): JSX.Element {
-  const { theme, currentTrack, currentTrackFull, radioFmActive, radioFmMatchedSong } =
-    useStorePick('theme', 'currentTrack', 'currentTrackFull', 'radioFmActive', 'radioFmMatchedSong')
+  const { theme, currentTrack, currentTrackFull, radioFmActive, radioFmPaused, radioFmMatchedSong, isPlaying } =
+    useStorePick('theme', 'currentTrack', 'currentTrackFull', 'radioFmActive', 'radioFmPaused', 'radioFmMatchedSong', 'isPlaying')
+  const { reducedMotion, gameMode } = useEffectsState()
+  const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
+  const rootRef = useRef<HTMLDivElement>(null)
+  const glowRef = useRef<HTMLDivElement>(null)
   // An album theme is a fixed backdrop of its own cover; Dark and Light follow the song.
   const art = buildImageUrl(getSkin(theme).art) || (radioFmActive
     ? radioFmMatchedSong?.imageUrl
@@ -30,6 +36,29 @@ export default function AmbientBackdrop(): JSX.Element {
   const nextId = useRef(0)
   const artRef = useRef(art)
   artRef.current = art
+
+  useEffect(() => {
+    const glow = glowRef.current
+    if (!glow) return
+    if (reducedMotion || gameMode || !playbackActive) {
+      glow.style.removeProperty('opacity')
+      return
+    }
+    let smooth = 0
+    let lastAt = 0
+    let lastOpacity = -1
+    return listenToMeter((m) => {
+      const punch = Math.min(1, Math.max(0, m.punch > 1 ? (m.punch - 1) * 1.15 : m.punch * 0.2))
+      smooth += (punch - smooth) * (punch > smooth ? 0.45 : 0.14)
+      const now = performance.now()
+      if (now - lastAt < 48) return
+      const next = Number((0.78 + smooth * 0.22).toFixed(2))
+      if (Math.abs(next - lastOpacity) < 0.02) return
+      lastAt = now
+      lastOpacity = next
+      glow.style.opacity = String(next)
+    })
+  }, [reducedMotion, gameMode, playbackActive])
 
   useEffect(() => {
     if (!art) {
@@ -68,8 +97,8 @@ export default function AmbientBackdrop(): JSX.Element {
   const drop = (id: number): void => setLayers((ls) => ls.filter((l) => l.id !== id))
 
   return (
-    <div className="app-ambient" aria-hidden>
-      <div className="app-ambient-glow" />
+    <div ref={rootRef} className="app-ambient" aria-hidden>
+      <div ref={glowRef} className="app-ambient-glow" />
       {layers.map((l) => (
         <FallbackImg
           key={l.id}
@@ -81,6 +110,7 @@ export default function AmbientBackdrop(): JSX.Element {
         />
       ))}
       <div className="app-ambient-tint" />
+      <div className="app-grain" />
     </div>
   )
 }

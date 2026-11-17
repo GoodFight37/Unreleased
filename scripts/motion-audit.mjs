@@ -118,7 +118,32 @@ const main = async () => {
       await win.keyboard.press('Escape')
     })
     await record('theme Dark -> Light', () => store(() => window.__store.getState().setTheme('glass-light')), 1200)
-    await record('open WRLD', () => store(() => window.__store.getState().setActiveView('wrld')), 1500)
+    await record('adaptive cover playing + WRLD', async () => {
+      await store(() => {
+        const c = document.createElement('canvas')
+        c.width = 64; c.height = 64
+        const ctx = c.getContext('2d')
+        ctx.fillStyle = '#f2b13c'; ctx.fillRect(0, 0, 64, 38)
+        ctx.fillStyle = '#2563eb'; ctx.fillRect(0, 38, 64, 26)
+        const goldBlue = c.toDataURL('image/png')
+        const trk = { ...window.__store.getState().currentTrack, imageUrl: goldBlue }
+        window.__store.getState().setTheme('glass-dark')
+        window.__store.getState().setAdaptiveColors(true)
+        window.__store.setState({ currentTrack: trk, currentTrackFull: { ...window.__store.getState().currentTrackFull, albumArt: goldBlue }, isPlaying: true })
+        window.__store.getState().setActiveView('wrld')
+      })
+    }, 1500)
+    await record('game mode pauses continuous loops', async () => {
+      await store(() => {
+        localStorage.setItem('unreleased.effects-quality', 'game')
+        window.dispatchEvent(new StorageEvent('storage', { key: 'unreleased.effects-quality', newValue: 'game', storageArea: localStorage }))
+      })
+      await win.waitForTimeout(350)
+      await store(() => {
+        localStorage.setItem('unreleased.effects-quality', 'full')
+        window.dispatchEvent(new StorageEvent('storage', { key: 'unreleased.effects-quality', newValue: 'full', storageArea: localStorage }))
+      })
+    }, 700)
   } finally {
     await app.close().catch(() => {})
     fs.rmSync(userData, { recursive: true, force: true })

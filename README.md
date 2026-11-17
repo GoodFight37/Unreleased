@@ -16,19 +16,21 @@ Built from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased), powered b
   stay crisp and readable with beat-synced playing indicators. A **Game &
   economy mode** toggle in Settings pauses continuous loops while keeping the
   static glass look intact.
-- **Dark, Light and album themes.** The saved palette is restored before
-  the main interface loads.
+- **Adaptive cover colors & themes.** Extract hue-preserved dominant and
+  complementary colors from the playing cover to tint Liquid Glass surfaces,
+  ambient lighting and UI accents across Light, Dark and album themes; the
+  saved palette is restored before the main interface loads.
 - **Simple settings.** Everyday music controls stay visible. Technical tools
   and detailed customization live behind Developer mode, without removing
   saved preferences. Settings open large inside the main window.
 - **Clearer listening.** Version groups offer direct playback, missing audio
   is distinguished from playable versions, and WRLD has a visible return action.
   Pause 999 FM and resume on the live stream without leaving the station.
-- **Curated 999 Stage in WRLD.** Full-screen listening replaces retro
-  visualizers with an integrated Liquid Mesh backdrop blended directly from
-  the cover colors and artwork, responsive cover depth on play/pause and hover,
-  direct lyric styles (*Classic*, *Karaoke*, *Cinema*, *999 Edit*), a Clean
-  stage toggle (`C`) for screen recordings, and an instant calm toggle.
+- **Curated 999 Stage in WRLD.** Full-screen listening pairs an integrated GPU
+  Liquid Mesh backdrop with a balanced 40/60 layout, responsive cover depth on
+  play/pause and hover, larger typography with automatic dark/light contrast
+  across every lyric style (*Classic*, *Karaoke*, *Cinema*, *999 Edit* and more),
+  a Clean stage toggle (`C`) for screen recordings, and an instant calm toggle.
 - **A compiled launch.** The Windows launcher opens the built application
   directly instead of starting a development server every time. It starts on
   Discover in normal mode and uses its own data profile, importing existing
@@ -38,8 +40,10 @@ Built from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased), powered b
 
 ![Discover](docs/screenshots/home.png)
 
-Screenshots use a local verification track in the player; catalogue artwork
-comes from the API.
+![WRLD 999 Stage](docs/screenshots/wrld.png)
+
+Screenshots captured directly from the running desktop app using live
+catalogue tracks and artwork from the Juice WRLD API.
 
 ## Windows
 

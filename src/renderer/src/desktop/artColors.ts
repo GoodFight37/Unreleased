@@ -2,22 +2,15 @@
 // the picture, then the strongest clearly different one. The API site's era images can't be read in the browser (no
 // CORS), so their colors come from the palettes baked for the visualizers.
 import { useEffect, useState } from 'react'
+import { eraAssetPath, fetchCoverBitmap } from '../lib/adaptivePalette'
 import { ERA_PALETTES } from '../lib/eraPalettes'
-import { JWAPI_HOST, smallCoverUrl } from '../lib/juicewrldApi'
+import { smallCoverUrl } from '../lib/juicewrldApi'
 import { paletteFromPixels, rgbToHsb, type AlbumColors, type HSB } from './light/engine'
+
+export { eraAssetPath }
 
 const SIDE = 32
 const cache = new Map<string, Promise<AlbumColors | null>>()
-
-export function eraAssetPath(url: string): string | null {
-  try {
-    const { hostname, pathname } = new URL(url)
-    const apiHost = hostname === JWAPI_HOST || hostname.endsWith(`.${JWAPI_HOST}`)
-    return apiHost && pathname.startsWith('/assets/') ? pathname : null
-  } catch {
-    return null
-  }
-}
 
 /** A baked era palette as the light's two colors; null for a grey one. */
 function fromBaked(path: string): AlbumColors | null {
@@ -32,35 +25,33 @@ function fromBaked(path: string): AlbumColors | null {
   return { primary: colors[0], secondary: colors[1] ?? colors[0] }
 }
 
-function sample(url: string): Promise<AlbumColors | null> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = SIDE
-      canvas.height = SIDE
-      const g = canvas.getContext('2d', { willReadFrequently: true })
-      if (!g) return resolve(null)
-      g.drawImage(img, 0, 0, SIDE, SIDE)
-      try {
-        resolve(paletteFromPixels(g.getImageData(0, 0, SIDE, SIDE).data, SIDE))
-      } catch {
-        resolve(null) // tainted canvas
-      }
-    }
-    img.onerror = () => resolve(null)
-    img.src = url
-  })
+async function sample(url: string): Promise<AlbumColors | null> {
+  const bitmap = await fetchCoverBitmap(smallCoverUrl(url) ?? url)
+  if (!bitmap) {
+    const era = eraAssetPath(url)
+    return era ? fromBaked(era) : null
+  }
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = SIDE
+    canvas.height = SIDE
+    const g = canvas.getContext('2d', { willReadFrequently: true })
+    if (!g) return null
+    g.drawImage(bitmap, 0, 0, SIDE, SIDE)
+    return paletteFromPixels(g.getImageData(0, 0, SIDE, SIDE).data, SIDE)
+  } catch {
+    return null
+  } finally {
+    bitmap.close()
+  }
 }
 
 export function albumColorsFor(url: string | null | undefined): Promise<AlbumColors | null> {
   if (!url) return Promise.resolve(null)
   let found = cache.get(url)
   if (!found) {
-    const era = eraAssetPath(url)
-    // Sampled at 32px, so the degraded cover is all it needs.
-    found = era ? Promise.resolve(fromBaked(era)) : sample(smallCoverUrl(url) ?? url)
+    // Sampled at 32px via CORS-safe fetchImageBlob; falls back to baked era palette offline.
+    found = sample(url)
     cache.set(url, found)
     if (cache.size > 200) cache.delete(cache.keys().next().value as string)
   }

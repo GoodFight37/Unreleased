@@ -3,7 +3,7 @@ import { useStore, useStorePick } from './store/useStore'
 import { useCatalogSync } from './store/catalogSyncStore'
 import { initCatalogSync } from './lib/catalogSync'
 import { setToken, getToken } from './lib/userApi'
-import { useThemeEffects } from './lib/themeEffects'
+import { useThemeEffects, useAdaptiveAccent } from './lib/themeEffects'
 import { runWhenIdle, ELECTRON_TITLEBAR_CLEARANCE_X } from './lib/platform'
 import { applySeo } from './lib/seo'
 import { lazyOverlay, lazyView } from './lib/lazyView'
@@ -330,6 +330,7 @@ export default function App(): JSX.Element {
   const urlImportOpen = useStore((s) => s.urlImportModal)
   const syncOpen = useCatalogSync((s) => s.open)
   useThemeEffects()
+  useAdaptiveAccent()
   useChatBootstrap()
 
   // Seed auth token from env in local dev only — import.meta.env.DEV is false in production

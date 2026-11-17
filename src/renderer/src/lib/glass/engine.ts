@@ -3,9 +3,12 @@ import shader from './glass.wgsl?raw'
 import blurShader from './blur.wgsl?raw'
 import { getGlassPreset, type GlassPreset } from './presets'
 
-export type GlassState = { light: boolean; source: 'ambient' | 'cover'; pointer: [number, number]; lens: [number, number, number]; merge: number; tint: [number, number, number]; rect: [number, number, number, number]; play: [number, number, number, number]; preset?: GlassPreset }
+export type GlassState = { light: boolean; source: 'ambient' | 'cover'; pointer: [number, number]; lens: [number, number, number]; merge: number; tint: [number, number, number]; tint2?: [number, number, number]; tint3?: [number, number, number]; rect: [number, number, number, number]; play: [number, number, number, number]; preset?: GlassPreset }
 export type CompositorSurface = { cx: number; cy: number; hw: number; hh: number; radius: number; kind: number; layer: number; playFusion: number }
 export type CompositorState = Omit<GlassState, 'rect'> & { surfaces: CompositorSurface[]; audio?: [number, number, number, number] }
+
+const fallbackTint2 = (t: [number, number, number]): [number, number, number] => [t[1] * 0.55 + 0.32, t[2] * 0.45 + 0.14, t[0] * 0.65 + 0.28]
+const fallbackTint3 = (t: [number, number, number]): [number, number, number] => [t[0] * 0.45 + 0.42 * 0.55, t[1] * 0.45 + 0.68 * 0.55, t[2] * 0.45 + 0.96 * 0.55]
 export type Measurement = { frames: number; cpuP50: number; cpuP95: number; gpuP50: number | null; gpuP95: number | null; durationMs: number }
 const percentile = (v: number[], q: number) => { const sorted = [...v].sort((a,b) => a-b); return sorted[Math.min(sorted.length-1, Math.floor(sorted.length*q))] ?? 0 }
 
@@ -28,7 +31,7 @@ async function initWebGPUCore(entryPoint: 'fs' | 'fsCompositor', targetFormat: G
     build(blurModule, 'horizontal', 'rgba8unorm'),
     build(blurModule, 'vertical', 'rgba8unorm'),
   ])
-  const buffer = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
+  const buffer = device.createBuffer({ size: 160, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
   const blurBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
   const surfacesBuffer = entryPoint === 'fsCompositor'
     ? device.createBuffer({ size: 32 * 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
@@ -54,8 +57,10 @@ export async function createGlass(canvas: HTMLCanvasElement) {
   const query = g.timed ? g.device.createQuerySet({ type: 'timestamp', count: 2 }) : null
   const resolve = g.timed ? g.device.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC }) : null
   const read = g.timed ? g.device.createBuffer({ size: 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }) : null
-  let busy = false, destroyed = false, dims = '', targets: GPUTexture[] = [], bgW = 1, bgH = 1
+  let busy = false, destroyed = false, dims = '', targets: GPUTexture[] = [], targetViews: GPUTextureView[] = [], bgW = 1, bgH = 1
   let bgHGroup: GPUBindGroup, bgVGroup: GPUBindGroup, composite: GPUBindGroup
+  const uniformData = new Float32Array(40)
+  const blurData = new Float32Array(4)
 
   function resize(w: number, h: number) {
     const next = `${w}:${h}`; if (next === dims) return; dims = next
@@ -63,9 +68,10 @@ export async function createGlass(canvas: HTMLCanvasElement) {
     bgW = Math.max(1, Math.ceil(w * 0.85))
     bgH = Math.max(1, Math.ceil(h * 0.85))
     targets = Array.from({ length: 3 }, () => g.device.createTexture({ size: [bgW, bgH], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }))
-    const blurGroup = (pipe: GPURenderPipeline, tex: GPUTexture) => g.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: tex.createView() }, { binding: 1, resource: g.sampler }, { binding: 2, resource: { buffer: g.blurBuffer } }] })
-    bgHGroup = blurGroup(g.horizontal, targets[0]); bgVGroup = blurGroup(g.vertical, targets[1])
-    composite = g.device.createBindGroup({ layout: g.pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: g.buffer } }, { binding: 1, resource: g.texture.createView() }, { binding: 2, resource: g.sampler }, { binding: 3, resource: targets[2].createView() }] })
+    targetViews = targets.map(t => t.createView())
+    const blurGroup = (pipe: GPURenderPipeline, view: GPUTextureView) => g.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: view }, { binding: 1, resource: g.sampler }, { binding: 2, resource: { buffer: g.blurBuffer } }] })
+    bgHGroup = blurGroup(g.horizontal, targetViews[0]); bgVGroup = blurGroup(g.vertical, targetViews[1])
+    composite = g.device.createBindGroup({ layout: g.pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: g.buffer } }, { binding: 1, resource: g.texture.createView() }, { binding: 2, resource: g.sampler }, { binding: 3, resource: targetViews[2] }] })
   }
   function upload(source: HTMLCanvasElement) { g.device.queue.copyExternalImageToTexture({ source }, { texture: g.texture }, [512, 512]) }
 
@@ -77,14 +83,27 @@ export async function createGlass(canvas: HTMLCanvasElement) {
       const w = Math.max(1, Math.round(canvas.clientWidth * ratio)), h = Math.max(1, Math.round(canvas.clientHeight * ratio))
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
       resize(w, h); const preset = state.preset ?? getGlassPreset(state.light)
-      g.device.queue.writeBuffer(g.buffer, 0, new Float32Array([w, h, ...state.pointer, ...state.lens, state.merge, ...state.tint, state.light ? 1 : 0, state.source === 'cover' ? 1 : 0, 1 / bgW, 1 / bgH, 0, ...state.rect, ...state.play, preset.refractionStrength, preset.rimIntensity, preset.chromaticFringe, preset.tintOpacity, preset.frost, (performance.now() / 1000) % 600, preset.caustic, preset.bevel]))
-      g.device.queue.writeBuffer(g.blurBuffer, 0, new Float32Array([preset.blurRadius, 0, 0, 0]))
+      const t2 = state.tint2 ?? fallbackTint2(state.tint)
+      const t3 = state.tint3 ?? fallbackTint3(state.tint)
+      uniformData[0] = w; uniformData[1] = h; uniformData[2] = state.pointer[0]; uniformData[3] = state.pointer[1]
+      uniformData[4] = state.lens[0]; uniformData[5] = state.lens[1]; uniformData[6] = state.lens[2]; uniformData[7] = state.merge
+      uniformData[8] = state.tint[0]; uniformData[9] = state.tint[1]; uniformData[10] = state.tint[2]; uniformData[11] = state.light ? 1 : 0
+      uniformData[12] = state.source === 'cover' ? 1 : 0; uniformData[13] = 1 / bgW; uniformData[14] = 1 / bgH; uniformData[15] = 0
+      uniformData[16] = state.rect[0]; uniformData[17] = state.rect[1]; uniformData[18] = state.rect[2]; uniformData[19] = state.rect[3]
+      uniformData[20] = state.play[0]; uniformData[21] = state.play[1]; uniformData[22] = state.play[2]; uniformData[23] = state.play[3]
+      uniformData[24] = preset.refractionStrength; uniformData[25] = preset.rimIntensity; uniformData[26] = preset.chromaticFringe; uniformData[27] = preset.tintOpacity
+      uniformData[28] = preset.frost; uniformData[29] = (performance.now() / 1000) % 600; uniformData[30] = preset.caustic; uniformData[31] = preset.bevel
+      uniformData[32] = t2[0]; uniformData[33] = t2[1]; uniformData[34] = t2[2]; uniformData[35] = 0
+      uniformData[36] = t3[0]; uniformData[37] = t3[1]; uniformData[38] = t3[2]; uniformData[39] = 0
+      g.device.queue.writeBuffer(g.buffer, 0, uniformData)
+      blurData[0] = preset.blurRadius
+      g.device.queue.writeBuffer(g.blurBuffer, 0, blurData)
       const encoder = g.device.createCommandEncoder()
       function pass(pipe: GPURenderPipeline, group: GPUBindGroup, view: GPUTextureView, timestampWrites?: GPURenderPassTimestampWrites) {
         const p = encoder.beginRenderPass({ colorAttachments: [{ view, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 } }], ...(timestampWrites ? { timestampWrites } : {}) }); p.setPipeline(pipe); p.setBindGroup(0, group); p.draw(3); p.end()
       }
-      pass(g.background, g.backgroundGroup, targets[0].createView(), measure && query ? { querySet: query, beginningOfPassWriteIndex: 0 } : undefined)
-      pass(g.horizontal, bgHGroup, targets[1].createView()); pass(g.vertical, bgVGroup, targets[2].createView())
+      pass(g.background, g.backgroundGroup, targetViews[0], measure && query ? { querySet: query, beginningOfPassWriteIndex: 0 } : undefined)
+      pass(g.horizontal, bgHGroup, targetViews[1]); pass(g.vertical, bgVGroup, targetViews[2])
       pass(g.pipeline, composite, g.context.getCurrentTexture().createView(), measure && query ? { querySet: query, endOfPassWriteIndex: 1 } : undefined)
       if (measure && query && resolve && read) { encoder.resolveQuerySet(query, 0, 2, resolve, 0); encoder.copyBufferToBuffer(resolve, 0, read, 0, 16) }
       g.device.queue.submit([encoder.finish()]); const cpu = performance.now() - start
@@ -112,10 +131,14 @@ export async function createGlassCompositor(canvas: HTMLCanvasElement, overlayCa
   const format = navigator.gpu.getPreferredCanvasFormat()
   const overlayContext = overlayCanvas ? overlayCanvas.getContext('webgpu') : null
   if (overlayContext) overlayContext.configure({ device: g.device, format, alphaMode: 'premultiplied' })
-  const overlayBuffer = overlayContext ? g.device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }) : null
-  let busy = false, destroyed = false, dims = '', targets: GPUTexture[] = [], bgW = 1, bgH = 1
+  const overlayBuffer = overlayContext ? g.device.createBuffer({ size: 160, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }) : null
+  let busy = false, destroyed = false, dims = '', targets: GPUTexture[] = [], targetViews: GPUTextureView[] = [], bgW = 1, bgH = 1
   let bgHGroup: GPUBindGroup, bgVGroup: GPUBindGroup, composite: GPUBindGroup, overlayComposite: GPUBindGroup | null = null
   const surfaceData = new Float32Array(32 * 8)
+  const uniformData = new Float32Array(40)
+  const blurData = new Float32Array(4)
+  let overlayCleared = true
+  let inFlight = 0
 
   function resize(w: number, h: number) {
     const next = `${w}:${h}`; if (next === dims) return; dims = next
@@ -123,15 +146,16 @@ export async function createGlassCompositor(canvas: HTMLCanvasElement, overlayCa
     bgW = Math.max(1, Math.ceil(w * 0.85))
     bgH = Math.max(1, Math.ceil(h * 0.85))
     targets = Array.from({ length: 3 }, () => g.device.createTexture({ size: [bgW, bgH], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }))
-    const blurGroup = (pipe: GPURenderPipeline, tex: GPUTexture) => g.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: tex.createView() }, { binding: 1, resource: g.sampler }, { binding: 2, resource: { buffer: g.blurBuffer } }] })
-    bgHGroup = blurGroup(g.horizontal, targets[0]); bgVGroup = blurGroup(g.vertical, targets[1])
+    targetViews = targets.map(t => t.createView())
+    const blurGroup = (pipe: GPURenderPipeline, view: GPUTextureView) => g.device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: view }, { binding: 1, resource: g.sampler }, { binding: 2, resource: { buffer: g.blurBuffer } }] })
+    bgHGroup = blurGroup(g.horizontal, targetViews[0]); bgVGroup = blurGroup(g.vertical, targetViews[1])
     composite = g.device.createBindGroup({
       layout: g.pipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: g.buffer } },
         { binding: 1, resource: g.texture.createView() },
         { binding: 2, resource: g.sampler },
-        { binding: 3, resource: targets[2].createView() },
+        { binding: 3, resource: targetViews[2] },
         { binding: 4, resource: { buffer: g.surfacesBuffer! } },
       ],
     })
@@ -142,17 +166,18 @@ export async function createGlassCompositor(canvas: HTMLCanvasElement, overlayCa
           { binding: 0, resource: { buffer: overlayBuffer } },
           { binding: 1, resource: g.texture.createView() },
           { binding: 2, resource: g.sampler },
-          { binding: 3, resource: targets[2].createView() },
+          { binding: 3, resource: targetViews[2] },
           { binding: 4, resource: { buffer: g.surfacesBuffer! } },
         ],
       })
     }
+    overlayCleared = false
   }
 
   function upload(source: HTMLCanvasElement) { g.device.queue.copyExternalImageToTexture({ source }, { texture: g.texture }, [512, 512]) }
 
   async function draw(state: CompositorState) {
-    if (destroyed || busy) return; busy = true
+    if (destroyed || busy || inFlight >= 3) return; busy = true
     try {
       const ratio = Math.min(devicePixelRatio || 1, 1.5)
       const w = Math.max(1, Math.round(canvas.clientWidth * ratio)), h = Math.max(1, Math.round(canvas.clientHeight * ratio))
@@ -166,14 +191,19 @@ export async function createGlassCompositor(canvas: HTMLCanvasElement, overlayCa
       const preset = state.preset ?? getGlassPreset(state.light)
       const nowSec = (performance.now() / 1000) % 600
       const audio = state.audio ?? [0, 0, 0, 0]
-      const uniforms = new Float32Array([
-        w, h, ...state.pointer, ...state.lens, state.merge, ...state.tint, state.light ? 1 : 0,
-        state.source === 'cover' ? 1 : 0, 1 / bgW, 1 / bgH, count,
-        0, audio[0], audio[1], audio[3], ...state.play,
-        preset.refractionStrength, preset.rimIntensity, preset.chromaticFringe, preset.tintOpacity,
-        preset.frost, nowSec, preset.caustic, preset.bevel,
-      ])
-      g.device.queue.writeBuffer(g.buffer, 0, uniforms)
+      const t2 = state.tint2 ?? fallbackTint2(state.tint)
+      const t3 = state.tint3 ?? fallbackTint3(state.tint)
+      uniformData[0] = w; uniformData[1] = h; uniformData[2] = state.pointer[0]; uniformData[3] = state.pointer[1]
+      uniformData[4] = state.lens[0]; uniformData[5] = state.lens[1]; uniformData[6] = state.lens[2]; uniformData[7] = state.merge
+      uniformData[8] = state.tint[0]; uniformData[9] = state.tint[1]; uniformData[10] = state.tint[2]; uniformData[11] = state.light ? 1 : 0
+      uniformData[12] = state.source === 'cover' ? 1 : 0; uniformData[13] = 1 / bgW; uniformData[14] = 1 / bgH; uniformData[15] = count
+      uniformData[16] = 0; uniformData[17] = audio[0]; uniformData[18] = audio[1]; uniformData[19] = audio[3]
+      uniformData[20] = state.play[0]; uniformData[21] = state.play[1]; uniformData[22] = state.play[2]; uniformData[23] = state.play[3]
+      uniformData[24] = preset.refractionStrength; uniformData[25] = preset.rimIntensity; uniformData[26] = preset.chromaticFringe; uniformData[27] = preset.tintOpacity
+      uniformData[28] = preset.frost; uniformData[29] = nowSec; uniformData[30] = preset.caustic; uniformData[31] = preset.bevel
+      uniformData[32] = t2[0]; uniformData[33] = t2[1]; uniformData[34] = t2[2]; uniformData[35] = 0
+      uniformData[36] = t3[0]; uniformData[37] = t3[1]; uniformData[38] = t3[2]; uniformData[39] = 0
+      g.device.queue.writeBuffer(g.buffer, 0, uniformData)
       let hasOverlay = false
       surfaceData.fill(0)
       for (let i = 0; i < count; i++) {
@@ -188,11 +218,12 @@ export async function createGlassCompositor(canvas: HTMLCanvasElement, overlayCa
         surfaceData[o + 6] = s.layer
         surfaceData[o + 7] = s.playFusion
       }
-      g.device.queue.writeBuffer(g.blurBuffer, 0, new Float32Array([preset.blurRadius, 0, 0, 0]))
+      blurData[0] = preset.blurRadius
+      g.device.queue.writeBuffer(g.blurBuffer, 0, blurData)
       g.device.queue.writeBuffer(g.surfacesBuffer!, 0, surfaceData)
       if (overlayBuffer && hasOverlay) {
-        uniforms[16] = 1
-        g.device.queue.writeBuffer(overlayBuffer, 0, uniforms)
+        uniformData[16] = 1
+        g.device.queue.writeBuffer(overlayBuffer, 0, uniformData)
       }
       const encoder = g.device.createCommandEncoder()
       const pass = (pipe: GPURenderPipeline, group: GPUBindGroup, view: GPUTextureView, clearA: number) => {
@@ -200,20 +231,27 @@ export async function createGlassCompositor(canvas: HTMLCanvasElement, overlayCa
         p.setPipeline(pipe); p.setBindGroup(0, group); p.draw(3); p.end()
       }
       if (count > 0) {
-        pass(g.background, g.backgroundGroup, targets[0].createView(), 1)
-        pass(g.horizontal, bgHGroup, targets[1].createView(), 1)
-        pass(g.vertical, bgVGroup, targets[2].createView(), 1)
+        pass(g.background, g.backgroundGroup, targetViews[0], 1)
+        pass(g.horizontal, bgHGroup, targetViews[1], 1)
+        pass(g.vertical, bgVGroup, targetViews[2], 1)
       }
       pass(g.pipeline, composite, g.context.getCurrentTexture().createView(), 0)
       if (overlayContext && overlayComposite) {
         if (hasOverlay) {
+          overlayCleared = false
           pass(g.pipeline, overlayComposite, overlayContext.getCurrentTexture().createView(), 0)
-        } else {
+        } else if (!overlayCleared) {
+          overlayCleared = true
           const p = encoder.beginRenderPass({ colorAttachments: [{ view: overlayContext.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
           p.end()
         }
       }
+      inFlight++
       g.device.queue.submit([encoder.finish()])
+      void g.device.queue.onSubmittedWorkDone().then(
+        () => { if (inFlight > 0) inFlight-- },
+        () => { if (inFlight > 0) inFlight-- },
+      )
     } finally { busy = false }
   }
 
@@ -282,12 +320,15 @@ export async function createOffscreenGlassRenderer() {
     const count = Math.min(32, state.surfaces.length)
     const preset = state.preset ?? getGlassPreset(state.light)
     const tSec = ((state.timeSec % 600) + 600) % 600
+    const t2 = state.tint2 ?? fallbackTint2(state.tint)
+    const t3 = state.tint3 ?? fallbackTint3(state.tint)
     const uniforms = new Float32Array([
       w, h, ...state.pointer, ...state.lens, state.merge, ...state.tint, state.light ? 1 : 0,
       state.source === 'cover' ? 1 : 0, 1 / bgW, 1 / bgH, count,
       0, 0, 0, 0, ...state.play,
       preset.refractionStrength, preset.rimIntensity, preset.chromaticFringe, preset.tintOpacity,
       preset.frost, tSec, preset.caustic, preset.bevel,
+      ...t2, 0, ...t3, 0,
     ])
     g.device.queue.writeBuffer(g.buffer, 0, uniforms)
     surfaceData.fill(0)

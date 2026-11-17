@@ -4,7 +4,7 @@ import { createGlassCompositor, type CompositorSurface } from './engine'
 import { getGlassPreset, getGlassLook, useGlassLookKey } from './presets'
 import { getSkin } from '../skins'
 import { buildImageUrl } from '../juicewrldApi'
-import { fetchImageBlob } from '../coverImage'
+import { extractCoverPalette, fetchCoverBitmap } from '../adaptivePalette'
 import { useEffectsState } from '../effectsPreference'
 import { listenToMeter } from '../../desktop/meter'
 import { useStore } from '../../store/useStore'
@@ -27,8 +27,10 @@ let overflowWarned = false
 const overflowedElements = new Set<HTMLElement>()
 let cachedGeometry: Array<{ el: HTMLElement; opts: GlassSurfaceOptions; r: DOMRect; radius: number }> = []
 let cachedPlayRect: DOMRect | null = null
-let cachedModals: HTMLElement[] = []
+let cachedModalVisible = false
 let cachedSliderInputs: HTMLInputElement[] = []
+const cachedSliderRects = new Map<HTMLInputElement, DOMRect | null>()
+let lastInteractionMs = 0
 
 const KIND_MAP: Record<GlassSurfaceKind, number> = { panel: 0, pill: 1, field: 2, player: 3, segthumb: 4 }
 
@@ -68,6 +70,7 @@ export function setCompositorSlider(id: string, hover: number, press: number): v
     }
     sliderSprings.set(id, st)
   }
+  lastInteractionMs = performance.now()
   st.hover.target = hover
   st.press.target = press
   scheduleFn()
@@ -91,6 +94,8 @@ const backdropState: {
   light: boolean
   source: 'ambient' | 'cover'
   tint: [number, number, number]
+  tint2: [number, number, number]
+  tint3: [number, number, number]
   pointer: [number, number]
   artUrl: string | null
   coverCanvas: HTMLCanvasElement | null
@@ -98,6 +103,8 @@ const backdropState: {
   light: false,
   source: 'ambient',
   tint: [0.42, 0.32, 0.8],
+  tint2: [0.5, 0.35, 0.56],
+  tint3: [0.42, 0.52, 0.89],
   pointer: [0.5, 0.25],
   artUrl: null,
   coverCanvas: null,
@@ -142,12 +149,14 @@ export function syncGlassLayout(ms: number): void {
 export function registerGlassSurface(el: HTMLElement, opts: GlassSurfaceOptions = {}): () => void {
   entries.set(el, opts)
   layoutDirty = true
+  lastInteractionMs = performance.now()
   scheduleFn()
   return () => {
     entries.delete(el)
     el.removeAttribute('data-glass-overflow')
     overflowedElements.delete(el)
     layoutDirty = true
+    lastInteractionMs = performance.now()
     scheduleFn()
   }
 }
@@ -167,6 +176,7 @@ export function useGlassSurface(ref: RefObject<HTMLElement | null>, opts: GlassS
 export function setCompositorPlayEl(el: HTMLElement | null): void {
   playerExtras.playEl = el
   layoutDirty = true
+  lastInteractionMs = performance.now()
   scheduleFn()
 }
 
@@ -175,16 +185,27 @@ export function setCompositorLens(x: number | null, y: number | null, active: nu
   if (y !== null) playerExtras.lens[1] = y
   if (active !== null) playerExtras.targetLens = active
   if (merge !== undefined) playerExtras.targetMerge = merge
+  lastInteractionMs = performance.now()
   scheduleFn()
 }
 
-function readAccentTint(): [number, number, number] {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim()
+function readRgbVar(name: string): [number, number, number] | null {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  if (!raw) return null
   const parts = raw.split(/[\s,]+/).map(Number)
-  if (parts.length >= 3 && parts.every(Number.isFinite)) {
+  if (parts.length >= 3 && parts.slice(0, 3).every(Number.isFinite)) {
     return [parts[0] / 255, parts[1] / 255, parts[2] / 255]
   }
-  return [0.42, 0.32, 0.8]
+  return null
+}
+
+function applyAmbientTints(): void {
+  const t1 = readRgbVar('--accent-rgb') ?? [0.42, 0.32, 0.8]
+  const t2 = readRgbVar('--accent-2-rgb') ?? [t1[1] * 0.55 + 0.32, t1[2] * 0.45 + 0.14, t1[0] * 0.65 + 0.28]
+  const t3 = readRgbVar('--accent-3-rgb') ?? [t1[0] * 0.45 + 0.23, t1[1] * 0.45 + 0.37, t1[2] * 0.45 + 0.53]
+  backdropState.tint = t1
+  backdropState.tint2 = t2
+  backdropState.tint3 = t3
 }
 
 let frameStyles = new WeakMap<Element, CSSStyleDeclaration>()
@@ -307,12 +328,19 @@ function rebuildGeometryCache(): void {
   }
   cachedGeometry = nextGeometry
   cachedPlayRect = playerExtras.playEl ? isVisibleRect(playerExtras.playEl) : null
-  cachedModals = Array.from(document.querySelectorAll<HTMLElement>('.modal-glass, .glab-overlay'))
+  const modals = Array.from(document.querySelectorAll<HTMLElement>('.modal-glass, .glab-overlay'))
+  cachedModalVisible = modals.some((el) => isVisibleRect(el) !== null)
   cachedSliderInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[data-glass-slider]'))
+  cachedSliderRects.clear()
+  for (const input of cachedSliderInputs) {
+    cachedSliderRects.set(input, isVisibleRect(input))
+  }
+  frameStyles = new WeakMap<Element, CSSStyleDeclaration>()
+  frameRects = new WeakMap<Element, DOMRect>()
   layoutDirty = false
 }
 
-function collectSurfaces(dt: number, reducedMotion: boolean): { surfaces: CompositorSurface[]; play: [number, number, number, number]; animating: boolean } {
+function collectSurfaces(dt: number, reducedMotion: boolean, beatBoost = 0): { surfaces: CompositorSurface[]; play: [number, number, number, number]; animating: boolean } {
   if (layoutDirty) {
     rebuildGeometryCache()
   }
@@ -322,7 +350,7 @@ function collectSurfaces(dt: number, reducedMotion: boolean): { surfaces: Compos
   let animating = false
   const vw = Math.max(1, window.innerWidth)
   const vh = Math.max(1, window.innerHeight)
-  const modalOpen = cachedModals.some((el) => isVisibleRect(el) !== null)
+  const modalOpen = cachedModalVisible
 
   for (const { el, opts, r, radius } of cachedGeometry) {
     const kind = opts.kind ?? 'panel'
@@ -364,10 +392,12 @@ function collectSurfaces(dt: number, reducedMotion: boolean): { surfaces: Compos
   // Register player seek & volume liquid-glass capsule thumbs when no modal or Glass Lab covers them.
   for (const input of cachedSliderInputs) {
     const id = input.dataset.glassSlider
-    const ir = isVisibleRect(input)
+    const ir = cachedSliderRects.get(input) ?? null
     // Each slider needs both a capsule and its rail lens in the 32-surface buffer.
     const drawable = !modalOpen && Boolean(id) && Boolean(ir && ir.width >= 24) && surfaces.length + 2 <= 32
-    input.toggleAttribute('data-glass-slider-ready', drawable)
+    if (input.hasAttribute('data-glass-slider-ready') !== drawable) {
+      input.toggleAttribute('data-glass-slider-ready', drawable)
+    }
     if (!drawable || !id || !ir) continue
     const min = Number(input.min || 0)
     const max = Number(input.max || 1)
@@ -387,7 +417,8 @@ function collectSurfaces(dt: number, reducedMotion: boolean): { surfaces: Compos
     const baseHh = 7
     const thumbCx = ir.left + baseHw + ratio * Math.max(0, ir.width - baseHw * 2)
     const thumbCy = ir.top + ir.height * 0.5
-    const lensStrength = Math.max(0, Math.min(1, hoverVal * 0.35 + pressVal))
+    const seekPulse = id === 'seek' ? beatBoost * 0.35 : 0
+    const lensStrength = Math.max(0, Math.min(1, hoverVal * 0.35 + pressVal + seekPulse))
     surfaces.push({
       cx: thumbCx,
       cy: thumbCy,
@@ -417,6 +448,8 @@ function collectSurfaces(dt: number, reducedMotion: boolean): { surfaces: Compos
 export function GlassCompositorLayer(): JSX.Element | null {
   const { reducedMotion, reducedTransparency, gameMode } = useEffectsState()
   const theme = useStore((s) => s.theme)
+  const adaptiveColors = useStore((s) => s.adaptiveColors)
+  const adaptiveManualHold = useStore((s) => s.adaptiveManualHold)
   const activeView = useStore((s) => s.activeView)
   const currentTrack = useStore((s) => s.currentTrack)
   const currentTrackFull = useStore((s) => s.currentTrackFull)
@@ -440,14 +473,20 @@ export function GlassCompositorLayer(): JSX.Element | null {
 
     let stopped = false
     let raf = 0
+    let audioTimer: ReturnType<typeof setTimeout> | 0 = 0
     let running = false
     let lastTime = performance.now()
+    let lastAudioDrawMs = 0
     let engine: Awaited<ReturnType<typeof createGlassCompositor>> | null = null
     let rawPunch = 0
     let rawRms = 0
     let smoothPunch = 0
     let smoothRms = 0
     const liveFlow = !reducedMotion && !gameMode
+    const isPlaybackActive = (): boolean => {
+      const st = useStore.getState()
+      return st.radioFmActive ? !st.radioFmPaused : st.isPlaying
+    }
 
     const unlistenMeter = liveFlow
       ? listenToMeter((m) => {
@@ -455,21 +494,6 @@ export function GlassCompositorLayer(): JSX.Element | null {
           rawRms = Math.min(1, Math.max(0, (m.decibels + 52) / 52))
         })
       : () => {}
-
-    const syncBeatVars = (): void => {
-      const root = document.documentElement
-      if (liveFlow && smoothRms > 0.015) {
-        if (!root.classList.contains('beat-live')) root.classList.add('beat-live')
-        const b1 = Math.min(1, Math.max(0.24, 0.24 + smoothRms * 0.48 + smoothPunch * 0.45))
-        const b2 = Math.min(1, Math.max(0.28, 0.30 + smoothRms * 0.62 + smoothPunch * 0.28))
-        const b3 = Math.min(1, Math.max(0.22, 0.22 + smoothRms * 0.44 + smoothPunch * 0.52))
-        root.style.setProperty('--beat-1', b1.toFixed(3))
-        root.style.setProperty('--beat-2', b2.toFixed(3))
-        root.style.setProperty('--beat-3', b3.toFixed(3))
-      } else if (root.classList.contains('beat-live')) {
-        root.classList.remove('beat-live')
-      }
-    }
 
     const uploadTintOrCover = (): void => {
       if (!engine) return
@@ -487,6 +511,10 @@ export function GlassCompositorLayer(): JSX.Element | null {
     }
 
     const run = (): void => {
+      if (audioTimer) {
+        clearTimeout(audioTimer)
+        audioTimer = 0
+      }
       if (stopped || document.hidden || running || !engine) return
       running = true
       raf = requestAnimationFrame(async (now) => {
@@ -498,7 +526,8 @@ export function GlassCompositorLayer(): JSX.Element | null {
         const factor = reducedMotion ? 1 : preset.springStiffness
         playerExtras.lens[2] += (playerExtras.targetLens - playerExtras.lens[2]) * factor
         playerExtras.merge += (playerExtras.targetMerge - playerExtras.merge) * factor
-        if (liveFlow) {
+        const playing = liveFlow && isPlaybackActive()
+        if (playing) {
           const punchRate = rawPunch > smoothPunch ? 24 : 7
           smoothPunch += (rawPunch - smoothPunch) * Math.min(1, dt * punchRate)
           smoothRms += (rawRms - smoothRms) * Math.min(1, dt * 10)
@@ -506,27 +535,44 @@ export function GlassCompositorLayer(): JSX.Element | null {
           smoothPunch = 0
           smoothRms = 0
         }
-        syncBeatVars()
-        const { surfaces, play, animating } = collectSurfaces(dt, reducedMotion)
-        await engine.draw({
-          light: backdropState.light,
-          source: backdropState.source,
-          pointer: backdropState.pointer,
-          lens: [...playerExtras.lens] as [number, number, number],
-          merge: playerExtras.merge,
-          tint: backdropState.tint,
-          play,
-          preset,
-          surfaces,
-          audio: [smoothPunch, smoothRms, 0, liveFlow ? 1 : 0],
-        })
-        if (
-          liveFlow ||
+        const { surfaces, play, animating } = collectSurfaces(dt, reducedMotion, playing ? smoothPunch : 0)
+        const tNow = performance.now()
+        const needsFullRate =
           animating ||
+          tNow < animUntil ||
+          tNow - lastInteractionMs < 180 ||
+          Math.abs(playerExtras.lens[2] - playerExtras.targetLens) > 0.005 ||
+          Math.abs(playerExtras.merge - playerExtras.targetMerge) > 0.005
+
+        if (needsFullRate || !playing || tNow - lastAudioDrawMs >= 32) {
+          lastAudioDrawMs = tNow
+          await engine.draw({
+            light: backdropState.light,
+            source: backdropState.source,
+            pointer: backdropState.pointer,
+            lens: [...playerExtras.lens] as [number, number, number],
+            merge: playerExtras.merge,
+            tint: backdropState.tint,
+            tint2: backdropState.tint2,
+            tint3: backdropState.tint3,
+            play,
+            preset,
+            surfaces,
+            audio: [smoothPunch, smoothRms, 0, playing ? 1 : 0],
+          })
+        }
+
+        const after = performance.now()
+        if (
+          animating ||
+          after < animUntil ||
+          after - lastInteractionMs < 180 ||
           Math.abs(playerExtras.lens[2] - playerExtras.targetLens) > 0.005 ||
           Math.abs(playerExtras.merge - playerExtras.targetMerge) > 0.005
         ) {
           run()
+        } else if (playing) {
+          audioTimer = setTimeout(run, 32)
         }
       })
     }
@@ -538,7 +584,7 @@ export function GlassCompositorLayer(): JSX.Element | null {
       if (stopped) { inst.destroy(); return }
       engine = inst
       backdropState.light = !getSkin(useStore.getState().theme).dark
-      backdropState.tint = readAccentTint()
+      applyAmbientTints()
       uploadTintOrCover()
       setReady(true)
       inst.lost.then(() => {
@@ -554,6 +600,7 @@ export function GlassCompositorLayer(): JSX.Element | null {
 
     // The top bar is left out: pressing one of its buttons must not swell the whole bar.
     const surfaceSelector = '.app-player, .glass-seg, .glass-field, .glass-pane:not(.app-sidebar), .glass-button, .glass-bar, .glass-chip, .app-menu-glass, .menu-glass, .glass-popover, .modal-glass'
+    const LAYOUT_PROPS = new Set(['transform', 'translate', 'scale', 'width', 'height', 'left', 'right', 'top', 'bottom', 'inset', 'max-width', 'max-height', 'margin', 'padding'])
     const onPointerMove = (e: PointerEvent): void => {
       backdropState.pointer = [
         e.clientX / Math.max(1, window.innerWidth),
@@ -561,20 +608,23 @@ export function GlassCompositorLayer(): JSX.Element | null {
       ]
       const target = e.target instanceof Element ? e.target.closest<HTMLElement>(surfaceSelector) : null
       hoveredSurface = target
+      lastInteractionMs = performance.now()
       run()
     }
     const onPointerDown = (e: PointerEvent): void => {
       pressedSurface = e.target instanceof Element ? e.target.closest<HTMLElement>(surfaceSelector) : null
+      lastInteractionMs = performance.now()
       run()
     }
     const onPointerUp = (): void => {
       if (pressedSurface) {
         pressedSurface = null
+        lastInteractionMs = performance.now()
         run()
       }
     }
-    const onScrollOrResize = (): void => { layoutDirty = true; run() }
-    const onVisibility = (): void => { if (!document.hidden) { layoutDirty = true; run() } }
+    const onScrollOrResize = (): void => { layoutDirty = true; lastInteractionMs = performance.now(); run() }
+    const onVisibility = (): void => { if (!document.hidden) { layoutDirty = true; lastInteractionMs = performance.now(); run() } }
     let animUntil = 0
     let animRaf = 0
     const pumpAnim = (): void => {
@@ -586,22 +636,52 @@ export function GlassCompositorLayer(): JSX.Element | null {
     }
     const startAnimSync = (ms = 560): void => {
       layoutDirty = true
-      const next = performance.now() + ms
-      const wasActive = performance.now() < animUntil
+      const now = performance.now()
+      lastInteractionMs = now
+      const next = now + ms
+      const wasActive = now < animUntil
       animUntil = Math.max(animUntil, next)
       if (!wasActive) animRaf = requestAnimationFrame(pumpAnim)
     }
-    const onAnimOrTransition = (): void => startAnimSync(560)
+    const onAnimOrTransition = (e: Event): void => {
+      if (e instanceof TransitionEvent && e.propertyName && !LAYOUT_PROPS.has(e.propertyName)) return
+      if (e instanceof AnimationEvent && (e.animationName === 'img-fade-in' || e.animationName === 'pulse' || e.animationName === 'spin' || e.animationName === 'ambient-drift' || e.animationName === 'ambient-art-drift' || e.animationName === 'view-skeleton-in')) return
+      const target = e.target instanceof Element ? e.target : null
+      if (!target || (!target.matches(surfaceSelector) && !target.classList.contains('glass-seg-thumb') && !target.closest('.modal-glass, .app-menu-glass, .menu-glass, .glass-popover'))) return
+      startAnimSync(420)
+    }
     animSyncFn = startAnimSync
 
     const mo = new MutationObserver((records) => {
+      let hasOverlayMut = false
+      let hasElementMut = false
       for (const rec of records) {
         for (let i = 0; i < rec.addedNodes.length; i++) {
-          if (rec.addedNodes[i].nodeType === 1) { startAnimSync(320); return }
+          const n = rec.addedNodes[i]
+          if (n.nodeType === 1) {
+            hasElementMut = true
+            const el = n as Element
+            if (el.matches?.('.modal-glass, .app-menu-glass, .menu-glass, .glass-popover') || el.querySelector?.('.modal-glass, .app-menu-glass, .menu-glass, .glass-popover')) {
+              hasOverlayMut = true
+              break
+            }
+          }
         }
+        if (hasOverlayMut) break
         for (let i = 0; i < rec.removedNodes.length; i++) {
-          if (rec.removedNodes[i].nodeType === 1) { startAnimSync(320); return }
+          if (rec.removedNodes[i].nodeType === 1) { hasElementMut = true; break }
         }
+      }
+      if (hasOverlayMut) {
+        startAnimSync(320)
+      } else if (hasElementMut) {
+        layoutDirty = true
+        run()
+      }
+    })
+    const unsubscribePlay = useStore.subscribe((st, prev) => {
+      if (st.isPlaying !== prev.isPlaying || st.radioFmActive !== prev.radioFmActive || st.radioFmPaused !== prev.radioFmPaused) {
+        run()
       }
     })
     const rootEl = document.getElementById('root') ?? document.body
@@ -621,7 +701,9 @@ export function GlassCompositorLayer(): JSX.Element | null {
 
     return () => {
       stopped = true
+      if (audioTimer) clearTimeout(audioTimer)
       unlistenMeter()
+      unsubscribePlay()
       document.documentElement.classList.remove('beat-live')
       cancelAnimationFrame(raf)
       cancelAnimationFrame(animRaf)
@@ -651,14 +733,14 @@ export function GlassCompositorLayer(): JSX.Element | null {
     backdropState.light = !getSkin(theme).dark
     layoutDirty = true
     const raf = requestAnimationFrame(() => {
-      if (backdropState.source === 'ambient') {
-        backdropState.tint = readAccentTint()
+      if (backdropState.source === 'ambient' || !adaptiveColors || adaptiveManualHold) {
+        applyAmbientTints()
         uploadFn()
       }
       scheduleFn()
     })
     return () => cancelAnimationFrame(raf)
-  }, [theme, glassLookKey, activeView])
+  }, [theme, glassLookKey, activeView, adaptiveColors, adaptiveManualHold])
 
   useEffect(() => {
     if (reducedTransparency) return
@@ -666,7 +748,7 @@ export function GlassCompositorLayer(): JSX.Element | null {
       backdropState.source = 'ambient'
       backdropState.coverCanvas = null
       backdropState.artUrl = null
-      backdropState.tint = readAccentTint()
+      applyAmbientTints()
       uploadFn()
       scheduleFn()
       return
@@ -678,21 +760,53 @@ export function GlassCompositorLayer(): JSX.Element | null {
       return
     }
     let cancelled = false
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
+    const toAmbient = (): void => {
       if (cancelled) return
+      backdropState.source = 'ambient'
+      backdropState.coverCanvas = null
+      backdropState.artUrl = null
+      applyAmbientTints()
+      uploadFn()
+      scheduleFn()
+    }
+
+    void (async () => {
+      const [bitmap, palette] = await Promise.all([
+        fetchCoverBitmap(effectiveArt),
+        extractCoverPalette(effectiveArt, backdropState.light),
+      ])
+      if (cancelled) {
+        bitmap?.close()
+        return
+      }
+      if (!bitmap) {
+        toAmbient()
+        return
+      }
       try {
         const c = document.createElement('canvas')
         c.width = 512; c.height = 512
         const ctx = c.getContext('2d')!
-        ctx.drawImage(img, 0, 0, 512, 512)
-        const d = ctx.getImageData(0, 0, 64, 64).data
-        let r = 0, g = 0, b = 0, n = 0
-        for (let i = 0; i < d.length; i += 16) {
-          r += d[i]; g += d[i + 1]; b += d[i + 2]; n++
+        ctx.drawImage(bitmap, 0, 0, 512, 512)
+        if (palette && adaptiveColors && !adaptiveManualHold) {
+          backdropState.tint = [palette.dominant.rgb[0] / 255, palette.dominant.rgb[1] / 255, palette.dominant.rgb[2] / 255]
+          backdropState.tint2 = [palette.complementary.rgb[0] / 255, palette.complementary.rgb[1] / 255, palette.complementary.rgb[2] / 255]
+          backdropState.tint3 = [palette.tertiary.rgb[0] / 255, palette.tertiary.rgb[1] / 255, palette.tertiary.rgb[2] / 255]
+        } else if (!adaptiveColors || adaptiveManualHold) {
+          applyAmbientTints()
+        } else {
+          const d = ctx.getImageData(0, 0, 64, 64).data
+          let r = 0, g = 0, b = 0, n = 0
+          for (let i = 0; i < d.length; i += 16) {
+            r += d[i]; g += d[i + 1]; b += d[i + 2]; n++
+          }
+          if (n > 0) {
+            const avg: [number, number, number] = [r / n / 255, g / n / 255, b / n / 255]
+            backdropState.tint = avg
+            backdropState.tint2 = avg
+            backdropState.tint3 = avg
+          }
         }
-        if (n > 0) backdropState.tint = [r / n / 255, g / n / 255, b / n / 255]
         backdropState.coverCanvas = c
         backdropState.artUrl = effectiveArt
         backdropState.source = 'cover'
@@ -700,37 +814,13 @@ export function GlassCompositorLayer(): JSX.Element | null {
         scheduleFn()
       } catch {
         toAmbient()
+      } finally {
+        bitmap.close()
       }
-    }
-    // A cover that can't be read falls back to the accent glow at once, not the last song's colors.
-    const toAmbient = (): void => {
-      if (cancelled) return
-      backdropState.source = 'ambient'
-      backdropState.coverCanvas = null
-      backdropState.artUrl = null
-      backdropState.tint = readAccentTint()
-      uploadFn()
-      scheduleFn()
-    }
-    img.onerror = toAmbient
-    // Album-theme covers live under the site's /assets/, served with no CORS
-    // header: canvas can't read them directly, so they go through fetchImageBlob
-    // (Electron's main process) and arrive as a same-origin blob.
-    let objectUrl: string | null = null
-    if (themeArt && effectiveArt === themeArt) {
-      fetchImageBlob(themeArt)
-        .then((blob) => {
-          if (cancelled) return
-          objectUrl = URL.createObjectURL(blob)
-          img.src = objectUrl
-        })
-        .catch(toAmbient)
-    } else {
-      img.src = effectiveArt
-    }
+    })()
+
     return () => {
       cancelled = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [effectiveArt, themeArt, reducedTransparency])
 

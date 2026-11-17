@@ -107,6 +107,7 @@ export interface UserSettings {
   gradients_enabled?: boolean
   surface_gradients_enabled?: boolean
   wrld_theme_background?: boolean
+  adaptive_colors?: boolean
   playlist_hero_enabled_dark?: boolean
   playlist_hero_enabled_light?: boolean
   sidebar_position?: string

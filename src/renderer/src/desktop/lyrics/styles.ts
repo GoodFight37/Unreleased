@@ -34,20 +34,22 @@ export class SpreadScene extends LyricScene {
     this.wallLine = line
     this.words = []
     if (!line?.words.length) return
-    const room = 330 * this.s
-    let size = 46 * this.s * this.textSize, css = this.font(size), set = this.rows(line, css, room, size * 0.3)
-    while (set.length > 5 && size > 22 * this.s * this.textSize) { size *= 0.9; css = this.font(size); set = this.rows(line, css, room, size * 0.3) }
+    const room = Math.min(this.width - 28 * this.s, 420 * this.s)
+    let size = 52 * this.s * this.textSize, css = this.font(size), set = this.rows(line, css, room, size * 0.3)
+    while (set.length > 5 && size > 24 * this.s * this.textSize) { size *= 0.9; css = this.font(size); set = this.rows(line, css, room, size * 0.3) }
     const m = this.metrics(size)
     const rowHeight = Math.ceil(m.ascent + m.descent), pitch = rowHeight + size * 0.12
     const block = this.block(room, set.length * pitch - size * 0.12, this.width / 2, this.height / 2)
-    const glows = [{ color: cssColor(this.glow, 0.55), radius: 14 * this.s }, { color: 'rgba(0,0,0,0.45)', radius: 3 * this.s }]
+    const glows = this.isLightBg
+      ? [{ color: cssColor(this.glow, 0.24), radius: 10 * this.s }, { color: this.softShadow, radius: 2.5 * this.s }]
+      : [{ color: cssColor(this.glow, 0.55), radius: 14 * this.s }, { color: 'rgba(0,0,0,0.45)', radius: 3 * this.s }]
     const shown: HTMLElement[] = []
     set.forEach((row, number) => {
       const used = row.reduce((sum, w) => sum + w.width, 0)
       const gap = row.length > 1 ? (room - used) / (row.length - 1) : 0
       let x = 0
       for (const word of row) {
-        const picture = ink(line.words[word.index].text, css, '#fff', { glows })
+        const picture = ink(line.words[word.index].text, css, this.primaryInk, { glows })
         const el = this.place(picture, { x, y: number * pitch }, rowHeight, rowHeight)
         el.style.opacity = '0'
         block.appendChild(el)
@@ -126,8 +128,8 @@ export class KaraokeScene extends LyricScene {
     this.stage.style.maskImage = 'linear-gradient(to bottom, transparent 0%, black 18%, black 78%, transparent 100%)'
   }
 
-  get size(): number { return 30 * this.s * this.textSize }
-  get boxWidth(): number { return Math.min(this.width, 520 * this.s) }
+  get size(): number { return 34 * this.s * this.textSize }
+  get boxWidth(): number { return Math.min(this.width - 16 * this.s, 620 * this.s) }
   get room(): number { return this.boxWidth - 20 * this.s }
   get space(): number { return this.size * 0.28 }
   get rowGap(): number { return this.size * 0.08 }
@@ -360,7 +362,7 @@ export class KaraokeScene extends LyricScene {
       g.font = this.css
       const away = w * 4
       // A color picked for the other lines is painted whole: the row's own fading dims it as it does the white.
-      const dim = this.tune?.inactive || 'rgba(255,255,255,0.6)'
+      const dim = this.tune?.inactive || this.mutedInk
       g.fillStyle = dim
       if (blur) { g.shadowColor = dim; g.shadowBlur = blur * scale; g.shadowOffsetX = -away * scale }
       const ascent = this.metrics(this.size).ascent
@@ -395,10 +397,10 @@ export class KaraokeScene extends LyricScene {
   /** The line sung, lit whole as it begins: its words the dim ones' bright copies, glowing. */
   light(index: number, el: HTMLElement): HTMLElement[] {
     const line = this.lines[index], set = this.sets[index]
-    const glows = [{ color: cssColor(this.glow, 0.55), radius: 9 * this.s }]
+    const glows = [{ color: cssColor(this.glow, this.isLightBg ? 0.26 : 0.55), radius: 9 * this.s }]
     return line.words.map((word, i) => {
       const p = set.places[i]
-      const picture = ink(word.text, this.css, this.tune?.active || '#fff', { glows })
+      const picture = ink(word.text, this.css, this.tune?.active || this.primaryInk, { glows })
       el.appendChild(this.place(picture, { x: p.x, y: p.row * (this.rowHeight + this.rowGap) }, null, picture.h - 2 * picture.pad))
       return picture.el
     })
@@ -441,12 +443,12 @@ export class TypewriterScene extends LyricScene {
 
   restyle(): void { this.page.forEach((t) => t.block.remove()); this.page = [] }
 
-  get room(): number { return Math.min(this.width - 24 * this.s, 400 * this.s) }
+  get room(): number { return Math.min(this.width - 24 * this.s, 520 * this.s) }
 
   present(line: SceneLine | null, animated: boolean): void {
     if (!animated) { this.page.forEach((t) => t.block.remove()); this.page = [] }
     if (!line?.words.length) return
-    let size = 26 * this.s * this.textSize, css: string, set: Wrapped
+    let size = 30 * this.s * this.textSize, css: string, set: Wrapped
     const most = Math.max(3, Math.round(3 * this.textSize))
     for (;;) {
       css = this.font(size)
@@ -462,7 +464,7 @@ export class TypewriterScene extends LyricScene {
     Object.assign(block.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${this.room}px`, height: `${height}px` })
     const words = line.words.map((word, index): TypedWord => {
       const p = set.places[index]
-      const picture = ink(word.text, css, 'rgb(245,245,245)', { glows: [{ color: 'rgba(0,0,0,0.45)', radius: 3 * this.s }] })
+      const picture = ink(word.text, css, this.typewriterInk, { glows: [{ color: this.softShadow, radius: 3 * this.s }] })
       const y = p.row * row
       const win = document.createElement('div')
       Object.assign(win.style, { position: 'absolute', left: `${p.x - picture.pad}px`, top: `${y + (row - letters) / 2 - picture.pad}px`,
@@ -550,7 +552,8 @@ export class NeonScene extends LyricScene {
   present(line: SceneLine | null, animated: boolean): void {
     if (this.sign) {
       const old = this.sign
-      if (animated) {
+      if (animated && !this.frozen) {
+        old.dataset.exiting = '1'
         // The old sign dies: a stutter, then dark.
         this.animate(old, stepped([1, 0.25, 0.8, 0.1, 0], 'opacity', [0, 0.2, 0.4, 0.7, 1]), { duration: 0.24 }).finished
           .then(() => old.remove(), () => old.remove())
@@ -560,12 +563,12 @@ export class NeonScene extends LyricScene {
     this.signLine = line
     this.lit = []
     if (!line?.words.length) return
-    const set = this.centered(line, Math.min(this.width - 30 * this.s, 400 * this.s), 38 * this.s, 3, { leading: 1.18 })
+    const set = this.centered(line, Math.min(this.width - 30 * this.s, 490 * this.s), 44 * this.s, 3, { leading: 1.18 })
     const block = this.block(set.width, set.height, this.width / 2, this.height * 0.5)
     const color = line.index % 2 === 0 ? this.glow : this.secondGlow
     const tube = color.map((v) => v + (1 - v) * 0.6)
     line.words.forEach((word, i) => {
-      block.appendChild(this.place(ink(word.text, set.css, 'rgba(255,255,255,0.09)'), set.spots[i], set.row, set.letters))
+      block.appendChild(this.place(ink(word.text, set.css, this.dimTubeInk), set.spots[i], set.row, set.letters))
       const on = this.place(ink(word.text, set.css, cssColor(tube), {
         glows: [{ color: cssColor(color, 0.95), radius: 3.5 * this.s }, { color: cssColor(color, 0.7), radius: 13 * this.s }] }), set.spots[i], set.row, set.letters)
       on.style.opacity = '0'
@@ -605,7 +608,7 @@ export class EchoScene extends LyricScene {
   present(line: SceneLine | null, animated: boolean): void {
     if (!animated) { this.said.forEach((l) => l.block.remove()); this.said = [] }
     if (line?.words.length) {
-      const set = this.centered(line, Math.min(this.width - 30 * this.s, 390 * this.s), 40 * this.s, 3, { leading: 1.04 })
+      const set = this.centered(line, Math.min(this.width - 30 * this.s, 480 * this.s), 45 * this.s, 3, { leading: 1.04 })
       const block = this.block(set.width, set.height, this.width / 2, this.height * 0.6)
       const words: HTMLElement[] = [], rings: HTMLElement[][] = []
       line.words.forEach((word, i) => {
@@ -616,8 +619,8 @@ export class EchoScene extends LyricScene {
           return el
         }
         rings.push([ring(), ring()])
-        const el = this.place(ink(word.text, set.css, '#fff', {
-          glows: [{ color: cssColor(this.glow, 0.55), radius: 12 * this.s }, { color: 'rgba(0,0,0,0.4)', radius: 3 * this.s }] }), set.spots[i], set.row, set.letters)
+        const el = this.place(ink(word.text, set.css, this.primaryInk, {
+          glows: [{ color: cssColor(this.glow, this.isLightBg ? 0.24 : 0.55), radius: 12 * this.s }, { color: this.softShadow, radius: 3 * this.s }] }), set.spots[i], set.row, set.letters)
         el.style.opacity = '0'
         block.appendChild(el)
         words.push(el)
@@ -683,7 +686,8 @@ export class GlitchScene extends LyricScene {
   present(line: SceneLine | null, animated: boolean): void {
     if (this.torn) {
       const old = this.torn.block
-      if (animated) {
+      if (animated && !this.frozen) {
+        old.dataset.exiting = '1'
         const jolt = 9 * this.s
         this.animate(old, stepped([0, jolt, -jolt * 1.6, jolt * 0.5, 0].map((x) => `${x}px 0px`), 'translate'), { duration: 0.16 })
         this.animate(old, stepped([1, 0.7, 1, 0.35, 0], 'opacity'), { duration: 0.16 }).finished.then(() => old.remove(), () => old.remove())
@@ -691,7 +695,7 @@ export class GlitchScene extends LyricScene {
     }
     this.torn = null
     if (!line?.words.length) return
-    const set = this.centered(line, Math.min(this.width - 30 * this.s, 390 * this.s), 42 * this.s, 3, { leading: 1.02 })
+    const set = this.centered(line, Math.min(this.width - 30 * this.s, 480 * this.s), 46 * this.s, 3, { leading: 1.02 })
     const block = this.block(set.width, set.height, this.width / 2, this.height * 0.52)
     const slices: HTMLCanvasElement[][] = [], splits: HTMLElement[][] = []
     line.words.forEach((word, i) => {
@@ -702,7 +706,7 @@ export class GlitchScene extends LyricScene {
         return el
       }))
       // The word cut across into bands, each showing its part of the picture.
-      const picture = ink(word.text, set.css, '#fff', { glows: [{ color: 'rgba(0,0,0,0.45)', radius: 3 * this.s }] })
+      const picture = ink(word.text, set.css, this.primaryInk, { glows: [{ color: this.softShadow, radius: 3 * this.s }] })
       const whole = this.place(picture, set.spots[i], set.row, set.letters)
       const left = parseFloat(whole.style.left), top = parseFloat(whole.style.top)
       slices.push(Array.from({ length: BANDS }, (_, band) => {
@@ -760,7 +764,8 @@ export class CinemaScene extends LyricScene {
   present(line: SceneLine | null, animated: boolean): void {
     if (this.title) {
       const old = this.title.block
-      if (animated) {
+      if (animated && !this.frozen) {
+        old.dataset.exiting = '1'
         this.fadeAway(old, 0.45)
         this.animate(old, [{ translate: '0px 0px' }, { translate: `0px ${-22 * this.s}px` }], { duration: 0.3, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' })
       } else old.remove()
@@ -768,12 +773,12 @@ export class CinemaScene extends LyricScene {
     this.title = null
     if (!line?.words.length) return
     const kern = 1.2 * this.s
-    const set = this.centered(line, Math.min(this.width - 40 * this.s, 380 * this.s), 33 * this.s, 3, { leading: 1.28, kern })
+    const set = this.centered(line, Math.min(this.width - 32 * this.s, 500 * this.s), 39 * this.s, 3, { leading: 1.24, kern })
     const block = this.block(set.width, set.height, this.width / 2, this.height * 0.52)
-    const inkColor = 'rgb(250,242,230)'
+    const inkColor = this.warmInk
     const words = line.words.map((word, i) => {
       const sharp = this.place(ink(word.text, set.css, inkColor, { kern,
-        glows: [{ color: cssColor(this.glow, 0.4), radius: 10 * this.s }, { color: 'rgba(0,0,0,0.5)', radius: 2.5 * this.s }] }), set.spots[i], set.row, set.letters)
+        glows: [{ color: cssColor(this.glow, this.isLightBg ? 0.24 : 0.4), radius: 10 * this.s }, { color: this.softShadow, radius: 2.5 * this.s }] }), set.spots[i], set.row, set.letters)
       const soft = this.place(ink(word.text, set.css, inkColor, { kern, blur: 5 * this.s, detail: 0.5 }), set.spots[i], set.row, set.letters)
       sharp.style.opacity = '0'
       soft.style.opacity = '0'

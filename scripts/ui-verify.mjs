@@ -1320,14 +1320,14 @@ async function main() {
     const mp4Ok = !!(mp4Path && mp4Bytes > 10000 && mp4Head.includes(Buffer.from('ftyp')))
     const shareStudioCheck = { pngOk, pngBytes, mp4Ok, mp4Bytes, pass: pngOk && mp4Ok }
     await win.locator('button[aria-label="Close"]').first().click()
-    await win.waitForTimeout(200)
+    await win.waitForTimeout(400)
 
     // Stage E sensor: Ctrl+K Command Palette search, keyboard navigation, and accessible dialog attributes
     await win.keyboard.press('Control+KeyK')
     await win.waitForSelector('[data-command-palette="1"]', { timeout: 5000 })
     const paletteDialogOk = await win.evaluate(() => {
-      const dlg = document.querySelector('[role="dialog"][aria-modal="true"]')
-      return !!dlg && !!dlg.querySelector('[data-command-palette="1"]')
+      const cp = document.querySelector('[data-command-palette="1"]')
+      return !!cp && !!cp.closest('[role="dialog"][aria-modal="true"]')
     })
     await win.locator('[data-command-palette="1"] input').fill('Go to Wrapped')
     await win.waitForTimeout(150)
@@ -1477,6 +1477,54 @@ async function main() {
       await win.evaluate(() => window.__store.getState().setTheme('glass-light'))
       await win.waitForTimeout(350)
       await shot('wrld-light.png')
+
+      // Adaptive gold+blue cover A/B check & reversible toggle verification
+      const adaptiveCheck = await win.evaluate(async () => {
+        const c = document.createElement('canvas')
+        c.width = 96; c.height = 96
+        const ctx = c.getContext('2d')
+        const grad = ctx.createLinearGradient(0, 0, 0, 96)
+        grad.addColorStop(0, '#f2b13c')
+        grad.addColorStop(0.62, '#e69b28')
+        grad.addColorStop(0.63, '#2563eb')
+        grad.addColorStop(1, '#1d4ed8')
+        ctx.fillStyle = grad
+        ctx.fillRect(0, 0, 96, 96)
+        const goldBlue = c.toDataURL('image/png')
+        const st = window.__store.getState()
+        const prevTrack = st.currentTrack
+        const prevFull = st.currentTrackFull
+        st.setTheme('glass-dark')
+        st.setAdaptiveColors(false)
+        await new Promise((r) => setTimeout(r, 150))
+        const offAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+        const offAccent2 = document.documentElement.style.getPropertyValue('--accent-2').trim()
+
+        window.__store.setState({
+          currentTrack: { ...prevTrack, imageUrl: goldBlue },
+          currentTrackFull: { ...prevFull, albumArt: goldBlue },
+        })
+        st.setAdaptiveColors(true)
+        await new Promise((r) => setTimeout(r, 450))
+        const onAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+        const onAccent2 = document.documentElement.style.getPropertyValue('--accent-2').trim()
+        return { offAccent, offAccent2, onAccent, onAccent2, prevTrack, prevFull }
+      })
+      if (!adaptiveCheck.onAccent2 || adaptiveCheck.offAccent2) {
+        blockingFailures.push(`Adaptive cover toggle failed reversibility check: ${JSON.stringify({ offAccent: adaptiveCheck.offAccent, offAccent2: adaptiveCheck.offAccent2, onAccent: adaptiveCheck.onAccent, onAccent2: adaptiveCheck.onAccent2 })}`)
+      }
+      await win.waitForTimeout(350)
+      const adaptiveContrast = await measureWrldPixelContrasts(win)
+      for (const c of adaptiveContrast) {
+        if (c.ratio != null && c.ratio < 4.5) {
+          blockingFailures.push(`Adaptive gold+blue WRLD contrast below 4.5:1 on ${c.name}: ${c.ratio}:1`)
+        }
+      }
+      await shot('wrld-adaptive-theway.png')
+      await win.evaluate(({ prevTrack, prevFull }) => {
+        window.__store.setState({ currentTrack: prevTrack, currentTrackFull: prevFull })
+      }, { prevTrack: adaptiveCheck.prevTrack, prevFull: adaptiveCheck.prevFull })
+      await win.waitForTimeout(350)
 
       await win.evaluate(() => window.__store.setState({ wrldThemeBackground: true }))
       await win.waitForTimeout(300)

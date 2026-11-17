@@ -364,6 +364,10 @@ interface AppState {
   // behind, theme text colors on top, so the tab stops recoloring itself every
   // track.
   wrldThemeBackground: boolean
+  // Additive cover-color override (ON by default): tints --accent/--accent-2/--accent-3,
+  // AmbientBackdrop, and WebGPU glass edges from the playing song's cover on non-album skins.
+  adaptiveColors: boolean
+  adaptiveManualHold: boolean
   // When enabled, if a track has a linked "OG" version (same song, grouped via
   // the versions system, labeled e.g. "OG"/"OG File"), play that version's
   // file instead of the currently selected one.
@@ -735,7 +739,7 @@ interface AppActions {
   setPauseOnDisconnect: (enabled: boolean) => void
   setSleepTimer: (endTimestamp: number | null) => void
   setAudioOutput: (deviceId: string) => void
-  setAccentColor: (color: string) => void
+  setAccentColor: (color: string, opts?: { keepAdaptive?: boolean }) => void
   setAppTextScale: (scale: number) => void
   setAppFont: (id: string) => void
   setLyricsFont: (id: string) => void
@@ -753,6 +757,7 @@ interface AppActions {
   setGradientsEnabled: (enabled: boolean) => void
   setSurfaceGradientsEnabled: (enabled: boolean) => void
   setWrldThemeBackground: (enabled: boolean) => void
+  setAdaptiveColors: (enabled: boolean) => void
   setPreferOgVersion: (enabled: boolean) => void
   setRotateSuggestedCovers: (enabled: boolean) => void
   /** Sets (or, with raw = null, clears) the cover override for one era and
@@ -1217,6 +1222,7 @@ function buildUserSettings(s: AppStore): UserSettings {
     gradients_enabled: s.gradientsEnabled,
     surface_gradients_enabled: s.surfaceGradientsEnabled,
     wrld_theme_background: s.wrldThemeBackground,
+    adaptive_colors: s.adaptiveColors,
     playlist_hero_enabled_dark: s.playlistHeroEnabledDark,
     playlist_hero_enabled_light: s.playlistHeroEnabledLight,
     // The fork keeps its bar on top locally; push back the old saved value so the upstream app on the same account keeps its own layout.
@@ -1903,6 +1909,8 @@ export const useStore = create<AppStore>((set, get, store) => ({
   gradientsEnabled: ls.get<boolean>('gradientsEnabled') ?? true,
   surfaceGradientsEnabled: ls.get<boolean>('surfaceGradientsEnabled') ?? false,
   wrldThemeBackground: ls.get<boolean>('wrldThemeBackground') ?? false,
+  adaptiveColors: ls.get<boolean>('adaptiveColors') ?? true,
+  adaptiveManualHold: false,
   preferOgVersion: ls.get<boolean>('preferOgVersion') ?? false,
   rotateSuggestedCovers: ls.get<boolean>('rotateSuggestedCovers') ?? false,
   eraCovers: ls.get<Record<string, string>>('eraCovers') ?? {},
@@ -2008,7 +2016,14 @@ export const useStore = create<AppStore>((set, get, store) => ({
     set({ popoutWindows })
     ls.set('popoutWindows', popoutWindows)
   },
-  setAccentColor: (color) => { set({ accentColor: color }); ls.set('accentColor', color); get()._scheduleProfilePush(['userSettings']) },
+  setAccentColor: (color, opts) => {
+    set((s) => ({
+      accentColor: color,
+      adaptiveManualHold: opts?.keepAdaptive ? s.adaptiveManualHold : s.adaptiveColors,
+    }))
+    ls.set('accentColor', color)
+    get()._scheduleProfilePush(['userSettings'])
+  },
   setAppTextScale: (appTextScale) => { set({ appTextScale }); ls.set('appTextScale', appTextScale); get()._scheduleProfilePush(['userSettings']) },
   setAppFont: (appFont) => { set({ appFont }); ls.set('appFont', appFont); get()._scheduleProfilePush(['userSettings']) },
   setLyricsFont: (lyricsFont) => { set({ lyricsFont }); ls.set('lyricsFont', lyricsFont); get()._scheduleProfilePush(['userSettings']) },
@@ -2035,6 +2050,11 @@ export const useStore = create<AppStore>((set, get, store) => ({
   setGradientsEnabled: (gradientsEnabled) => { set({ gradientsEnabled }); ls.set('gradientsEnabled', gradientsEnabled); get()._scheduleProfilePush(['userSettings']) },
   setSurfaceGradientsEnabled: (surfaceGradientsEnabled) => { set({ surfaceGradientsEnabled }); ls.set('surfaceGradientsEnabled', surfaceGradientsEnabled); get()._scheduleProfilePush(['userSettings']) },
   setWrldThemeBackground: (wrldThemeBackground) => { set({ wrldThemeBackground }); ls.set('wrldThemeBackground', wrldThemeBackground); get()._scheduleProfilePush(['userSettings']) },
+  setAdaptiveColors: (adaptiveColors) => {
+    set({ adaptiveColors, adaptiveManualHold: false })
+    ls.set('adaptiveColors', adaptiveColors)
+    get()._scheduleProfilePush(['userSettings'])
+  },
   setHotkeyBinding: (actionId, combo) => {
     const current = get().hotkeyBindings
     const next = { ...current }
@@ -3680,7 +3700,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
       set({ donorPlaylists: serverSettings.donor_playlists })
       ls.set('donorPlaylists', serverSettings.donor_playlists)
     }
-    if (serverSettings.accent_color !== undefined && serverSettings.accent_color !== s.accentColor) s.setAccentColor(serverSettings.accent_color)
+    if (serverSettings.accent_color !== undefined && serverSettings.accent_color !== s.accentColor) s.setAccentColor(serverSettings.accent_color, { keepAdaptive: true })
     if (serverSettings.app_text_scale !== undefined && serverSettings.app_text_scale !== s.appTextScale) s.setAppTextScale(serverSettings.app_text_scale)
     // syncedFontId is null for an imported font file this device doesn't have.
     const syncedApp = serverSettings.app_font ? syncedFontId(serverSettings.app_font) : null
@@ -3698,6 +3718,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
     if (serverSettings.gradients_enabled !== undefined && serverSettings.gradients_enabled !== s.gradientsEnabled) s.setGradientsEnabled(serverSettings.gradients_enabled)
     if (serverSettings.surface_gradients_enabled !== undefined && serverSettings.surface_gradients_enabled !== s.surfaceGradientsEnabled) s.setSurfaceGradientsEnabled(serverSettings.surface_gradients_enabled)
     if (serverSettings.wrld_theme_background !== undefined && serverSettings.wrld_theme_background !== s.wrldThemeBackground) s.setWrldThemeBackground(serverSettings.wrld_theme_background)
+    if (serverSettings.adaptive_colors !== undefined && serverSettings.adaptive_colors !== s.adaptiveColors) s.setAdaptiveColors(serverSettings.adaptive_colors)
     if (serverSettings.playlist_hero_enabled_dark !== undefined && serverSettings.playlist_hero_enabled_dark !== s.playlistHeroEnabledDark) {
       set({ playlistHeroEnabledDark: serverSettings.playlist_hero_enabled_dark }); ls.set('playlistHeroEnabledDark', serverSettings.playlist_hero_enabled_dark)
     }

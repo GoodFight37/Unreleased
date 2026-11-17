@@ -20,7 +20,9 @@ import {
   Radio,
   Info,
   SlidersHorizontal,
+  Palette,
 } from 'lucide-react'
+import { getSkin } from '../lib/skins'
 import { useStore, useStorePick } from '../store/useStore'
 import { useVizStore } from '../store/vizStore'
 import { registerPlayerCommandHandler, runPlayerCommand } from '../lib/windowSync'
@@ -263,17 +265,29 @@ function sameMediaSrc(current: string, wanted: string): boolean {
 // Playback position (progress / currentTime) changes ~4x/sec. Reading it in the
 // Player body re-rendered the entire (huge) component on every tick, so the
 // parts that actually display it subscribe on their own.
-function useLiveProgressRaf(active: boolean, onRatio: (ratio: number) => void): void {
+function useLiveProgressRaf(active: boolean, onRatio: (ratio: number) => void, targetRef?: React.RefObject<HTMLElement | null>): void {
   const onRatioRef = useRef(onRatio)
   onRatioRef.current = onRatio
   useEffect(() => {
     if (!active) return
     let raf = 0
-    const tick = (): void => {
+    let lastAt = 0
+    let lastRatio = -1
+    const tick = (now: number): void => {
       if (document.hidden) { raf = 0; return }
-      const dur = getAudioDuration()
-      if (dur > 0) {
-        onRatioRef.current(Math.max(0, Math.min(1, getAudioCurrentTime() / dur)))
+      const target = targetRef?.current
+      if (!target || target.getClientRects().length > 0) {
+        if (now - lastAt >= 45) {
+          const dur = getAudioDuration()
+          if (dur > 0) {
+            const next = Math.max(0, Math.min(1, getAudioCurrentTime() / dur))
+            if (Math.abs(next - lastRatio) >= 0.001) {
+              lastAt = now
+              lastRatio = next
+              onRatioRef.current(next)
+            }
+          }
+        }
       }
       raf = requestAnimationFrame(tick)
     }
@@ -287,7 +301,7 @@ function useLiveProgressRaf(active: boolean, onRatio: (ratio: number) => void): 
       document.removeEventListener('visibilitychange', onVis)
       cancelAnimationFrame(raf)
     }
-  }, [active])
+  }, [active, targetRef])
 }
 
 function ProgressFill({ seekDrag, className }: { seekDrag: number | null; className: string }): JSX.Element {
@@ -299,7 +313,7 @@ function ProgressFill({ seekDrag, className }: { seekDrag: number | null; classN
 
   useLiveProgressRaf(isPlaying && !radioFmActive && seekDrag === null && !reducedMotion && !gameMode, (ratio) => {
     if (ref.current) ref.current.style.width = `${ratio * 100}%`
-  })
+  }, ref)
 
   return <div ref={ref} className={className} style={{ width: `${(seekDrag !== null ? seekDrag : progress) * 100}%` }} />
 }
@@ -388,7 +402,7 @@ function SeekRange({ seekDrag, radioFmActive, ...rest }: SeekRangeProps): JSX.El
     if (!ref.current) return
     ref.current.value = ratio.toFixed(4)
     ref.current.style.setProperty('--val', `${ratio * 100}%`)
-  })
+  }, ref)
   return (
     <input
       ref={ref}
@@ -457,7 +471,7 @@ export default function Player(): JSX.Element {
     toggleLike,
     setActiveView,
     activeView,
-    playNext, account, updateLibraryTrack } = useStorePick('currentTrack', 'currentTrackFull', 'isPlaying', 'volume', 'shuffle', 'repeat', 'setIsPlaying', 'setVolume', 'setProgress', 'setCurrentTime', 'setCurrentTrackFull', 'toggleShuffle', 'toggleRepeat', 'setRepeat', 'nextTrack', 'prevTrack', 'setShowNowPlaying', 'showNowPlaying', 'showQueue', 'setShowQueue', 'queue', 'queueIndex', 'crossfadeEnabled', 'crossfadeDuration', 'sleepTimerEnd', 'setSleepTimer', 'audioOutput', 'setAudioOutput', 'playbackSpeed', 'setPlaybackSpeed', 'likedTrackIds', 'toggleLike', 'setActiveView', 'activeView', 'playNext', 'account', 'updateLibraryTrack')
+    playNext, account, updateLibraryTrack, theme, adaptiveColors, setAdaptiveColors } = useStorePick('currentTrack', 'currentTrackFull', 'isPlaying', 'volume', 'shuffle', 'repeat', 'setIsPlaying', 'setVolume', 'setProgress', 'setCurrentTime', 'setCurrentTrackFull', 'toggleShuffle', 'toggleRepeat', 'setRepeat', 'nextTrack', 'prevTrack', 'setShowNowPlaying', 'showNowPlaying', 'showQueue', 'setShowQueue', 'queue', 'queueIndex', 'crossfadeEnabled', 'crossfadeDuration', 'sleepTimerEnd', 'setSleepTimer', 'audioOutput', 'setAudioOutput', 'playbackSpeed', 'setPlaybackSpeed', 'likedTrackIds', 'toggleLike', 'setActiveView', 'activeView', 'playNext', 'account', 'updateLibraryTrack', 'theme', 'adaptiveColors', 'setAdaptiveColors')
   const canEditSong = useCanEdit()
   // The bar grows into WRLD (lib/wrldExpand.ts).
   const expandToWrld = useCallback(() => runWrldExpand(() => setActiveView('wrld'), useStore.getState().activeView), [setActiveView])
@@ -3128,6 +3142,23 @@ export default function Player(): JSX.Element {
             title="Fullscreen player" aria-label="Fullscreen player">
             <Maximize2 size={16} />
           </button>}
+
+          {(() => {
+            const albumLocked = Boolean(getSkin(theme).art)
+            const active = adaptiveColors && !albumLocked
+            return (
+              <button
+                onClick={() => { if (!albumLocked) setAdaptiveColors(!adaptiveColors) }}
+                disabled={albumLocked}
+                aria-label="Cover colors"
+                aria-pressed={active}
+                title={albumLocked ? 'Cover colors follow the active album theme' : active ? 'Cover colors: on' : 'Cover colors: off'}
+                className={`transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${active ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
+              >
+                <Palette size={16} />
+              </button>
+            )
+          })()}
           </div>
 
           {/* Volume: mute + slider + output picker */}

@@ -49,7 +49,24 @@ interface Palette { main: RGB; second: RGB }
 
 /** The type's two colors from the song's artwork, each lifted until it reads over a dark picture; grey artwork gets
  *  warm white and the edit's golden yellow. */
-function paletteOf(colors: AlbumColors | null): Palette {
+function paletteOf(colors: AlbumColors | null, lightBg = false): Palette {
+  if (lightBg) {
+    if (!colors) return { main: [0.09, 0.08, 0.14], second: [0.42, 0.16, 0.48] }
+    const legible = (c: AlbumColors['primary'], deeper = 0): RGB => {
+      const sat = c.saturation < 0.14 ? c.saturation : Math.min(Math.max(c.saturation, 0.62), 0.96)
+      const rgb = hsbToRgb({ hue: c.hue, saturation: sat, brightness: 1 })
+      const light = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+      const target = Math.max(0.08, 0.16 - deeper * 0.04)
+      const factor = light > target ? target / light : Math.min(0.75, 0.16 / Math.max(light, 0.06))
+      return rgb.map((v) => Math.max(0.03, Math.min(0.85, v * factor))) as RGB
+    }
+    const apart = Math.abs(colors.primary.hue - colors.secondary.hue)
+    const main = legible(colors.primary)
+    const second = Math.min(apart, 1 - apart) > 0.08
+      ? legible(colors.secondary, 0.5)
+      : legible({ hue: (colors.primary.hue + 0.55) % 1, saturation: 0.75, brightness: 1 }, 0.3)
+    return { main, second }
+  }
   if (!colors) return { main: [0.97, 0.95, 0.9], second: [0.96, 0.8, 0.37] }
   const legible = (c: AlbumColors['primary'], extra = 0): RGB => {
     const rgb = hsbToRgb({ hue: c.hue, saturation: Math.min(c.saturation, 0.9), brightness: 1 })
@@ -70,11 +87,11 @@ let penContext: CanvasRenderingContext2D | null = null
 const drawn = new Map<string, Art>()
 const DRAWN_MOST = 300
 
-function drawWord(text: string, key: string, size: number, inkColor: RGB, outline: boolean): Art {
-  const id = JSON.stringify([text, key, size, inkColor, outline, window.devicePixelRatio || 1])
+function drawWord(text: string, key: string, size: number, inkColor: RGB, outline: boolean, lightBg = false): Art {
+  const id = JSON.stringify([text, key, size, inkColor, outline, lightBg, window.devicePixelRatio || 1])
   let art = drawn.get(id)
   if (art) drawn.delete(id)
-  else art = paintWord(text, key, size, inkColor, outline)
+  else art = paintWord(text, key, size, inkColor, outline, lightBg)
   drawn.set(id, art)
   if (drawn.size > DRAWN_MOST) drawn.delete(drawn.keys().next().value!)
   return art
@@ -82,7 +99,7 @@ function drawWord(text: string, key: string, size: number, inkColor: RGB, outlin
 
 /** A word drawn once: its letters with a soft shadow under them. (The blur a word comes in from is the strips' own
  *  filter, in enter.) */
-function paintWord(text: string, key: string, size: number, inkColor: RGB, outline: boolean): Art {
+function paintWord(text: string, key: string, size: number, inkColor: RGB, outline: boolean, lightBg = false): Art {
   const font = faceCSS(key, size)
   penContext ??= document.createElement('canvas').getContext('2d')!
   penContext.font = font
@@ -100,8 +117,8 @@ function paintWord(text: string, key: string, size: number, inkColor: RGB, outli
   const g = canvas.getContext('2d', { willReadFrequently: true })!
   g.scale(scale, scale)
   g.font = font
-  g.shadowColor = 'rgba(0, 0, 0, 0.4)'
-  g.shadowBlur = 0.22 * size * scale
+  g.shadowColor = lightBg ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.4)'
+  g.shadowBlur = (lightBg ? 0.12 : 0.22) * size * scale
   g.shadowOffsetY = 0.03 * size * scale
   if (outline) { g.lineWidth = 0.045 * size; g.lineJoin = 'round'; g.strokeStyle = cssColor(inkColor); g.strokeText(text, margin, margin + ascent) }
   else { g.fillStyle = cssColor(inkColor); g.fillText(text, margin, margin + ascent) }
@@ -163,17 +180,26 @@ export class WordBlock implements LyricRenderer {
     this.interlude = new InterludeMark(host)
   }
 
-  get size(): number { return 64 * this.s }
-  get width(): number { return 5.1 * this.size }
+  lightBg = false
+  get size(): number { return 70 * this.s }
+  get width(): number { return 4.9 * this.size }
   get radius(): number { return 172 * this.s }
   get eye(): number { return 360 * this.s }
 
   /** Everything the block follows; it sets itself afresh only when the song, its look or the clock's course changed. */
-  show(song: StageSong, { clock, isSeen, colors, face, scale }: StageLook): void {
+  show(song: StageSong, { clock, isSeen, colors, face, scale, tune }: StageLook): void {
     let redo = false
+    const lightBg = Boolean(tune?.lightBg)
+    this.host.classList.toggle('is-light', lightBg)
     if (face !== this.face) { this.face = face; this.song = null; this.arts.clear() }
-    if (JSON.stringify(colors) !== JSON.stringify(this.colors)) { this.colors = colors; this.palette = paletteOf(colors); this.arts.clear(); redo = true }
-    if (!this.palette) this.palette = paletteOf(colors)
+    if (lightBg !== this.lightBg || JSON.stringify(colors) !== JSON.stringify(this.colors)) {
+      this.lightBg = lightBg
+      this.colors = colors
+      this.palette = paletteOf(colors, lightBg)
+      this.arts.clear()
+      redo = true
+    }
+    if (!this.palette) this.palette = paletteOf(colors, lightBg)
     if (scale !== this.s || song.id !== this.song?.id || song.lyrics !== this.song?.lyrics) {
       this.s = scale
       this.song = song
@@ -323,7 +349,7 @@ export class WordBlock implements LyricRenderer {
     if (!art) {
       const cue = this.cues[index]
       const palette = this.palette!
-      art = drawWord(cue.text, this.face, this.fontSize * cue.shrink, cue.style.accent ? palette.second : palette.main, cue.style.outline)
+      art = drawWord(cue.text, this.face, this.fontSize * cue.shrink, cue.style.accent ? palette.second : palette.main, cue.style.outline, this.lightBg)
       this.arts.set(index, art)
     }
     return art
@@ -478,12 +504,12 @@ export class WordBlock implements LyricRenderer {
     const rows = this.rows(name.split(/\s+/).filter(Boolean)).slice(0, MOST - 1)
     rows.forEach((row, number) => {
       for (const [text, x, shrink] of this.center(row)) {
-        const art = drawWord(text, this.face, this.fontSize * shrink, palette.main, false)
+        const art = drawWord(text, this.face, this.fontSize * shrink, palette.main, false, this.lightBg)
         this.strips(art, x, this.baseline(number, rows.length + 1), number, true).forEach((strip, i) => this.enter(strip, art, 'flip', i))
       }
     })
     if (!this.song.artist) return
-    const art = drawWord(this.song.artist, this.face, this.fontSize * 0.4, palette.second, false)
+    const art = drawWord(this.song.artist, this.face, this.fontSize * 0.4, palette.second, false, this.lightBg)
     const x = (this.width - art.size.width) / 2 + art.baseline.x
     this.strips(art, x, this.baseline(rows.length, rows.length + 1) + 0.3 * this.size, 99, true).forEach((strip, i) => this.enter(strip, art, 'blinds', i))
   }

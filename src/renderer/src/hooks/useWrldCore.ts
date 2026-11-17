@@ -7,7 +7,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AccountUser } from '../lib/userApi'
 import type { Track, FullTrack } from '../types'
 import type { RadioTrack, RadioVote } from '../lib/radioLive'
-import { buildImageUrl, getSongById, songToTrack, smallCoverUrl } from '../lib/juicewrldApi'
+import { buildImageUrl, getSongById, songToTrack } from '../lib/juicewrldApi'
+import { measureCoverToneLuma } from '../lib/adaptivePalette'
 import type { JWApiSong } from '../lib/juicewrldApi'
 import * as userApi from '../lib/userApi'
 import { getActiveRadioClient } from '../lib/radioSocketService'
@@ -71,30 +72,16 @@ export function useArtTextContrast(
       setTextIsDark(!isDarkSkin && !radioFmActive)
       return
     }
-    // A quick skip leaves the last cover loading: its answer is dropped.
-    let live = true
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      if (!live) return
-      try {
-        const canvas = document.createElement('canvas')
-        canvas.width = 50; canvas.height = 50
-        const ctx = canvas.getContext('2d')
-        if (!ctx) { setTextIsDark(false); return }
-        ctx.drawImage(img, 0, 0, 50, 50)
-        const data = ctx.getImageData(0, 0, 50, 50).data
-        let sum = 0
-        for (let i = 0; i < data.length; i += 4)
-          sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
-        const avg = sum / (data.length / 4)
-        const factor = isDarkSkin ? 0.22 : 0.34
-        setTextIsDark(avg * factor > 90)
-      } catch { setTextIsDark(false) }
+    if (isDarkSkin) {
+      setTextIsDark(false)
+      return
     }
-    img.onerror = () => { if (live) setTextIsDark(false) }
-    // Averaged over 50x50, so the degraded copy reads the same as the original.
-    img.src = smallCoverUrl(artSrc) ?? artSrc
+    let live = true
+    void measureCoverToneLuma(artSrc).then((luma) => {
+      if (!live) return
+      // On light skin, switch to dark text only when the AMLL tone-mapped cover is genuinely bright (> 0.74).
+      setTextIsDark(luma !== null && luma > 0.74)
+    })
     return () => { live = false }
   }, [artSrc, artError, isDarkSkin, radioFmActive, override])
   return textIsDark

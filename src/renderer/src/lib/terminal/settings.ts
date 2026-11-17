@@ -98,6 +98,7 @@ const SETTINGS: Setting[] = [
   bool('gradients', 'Accent gradients on the shell', () => st().gradientsEnabled, (v) => st().setGradientsEnabled(v)),
   bool('surface-gradients', 'Gradients on small surfaces too', () => st().surfaceGradientsEnabled, (v) => st().setSurfaceGradientsEnabled(v)),
   bool('wrld-theme-bg', 'WRLD tab uses the theme instead of the cover', () => st().wrldThemeBackground, (v) => st().setWrldThemeBackground(v)),
+  bool('adaptive-colors', 'Tint the app and glass from the playing cover', () => st().adaptiveColors, (v) => st().setAdaptiveColors(v)),
   bool('full-era-names', 'Show full era names', () => st().fullEraNames, (v) => st().setFullEraNames(v)),
   bool('prefer-og', 'Play the OG version when one is linked', () => st().preferOgVersion, (v) => st().setPreferOgVersion(v)),
   bool('rotate-covers', 'Rotate suggested covers on each play', () => st().rotateSuggestedCovers, (v) => st().setRotateSuggestedCovers(v)),
