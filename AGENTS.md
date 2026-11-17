@@ -1,6 +1,6 @@
 # Agent guide: Unreleased Glass & Juice WRLD API
 
-**Version 1.83** · updated 2026-11-17. Bump the version and date whenever you
+**Version 1.85** · updated 2026-11-17. Bump the version and date whenever you
 change this file (minor for fixes and additions, major for rewrites).
 
 **Keep this file current.** If you find something in the docs or this file that
@@ -44,7 +44,8 @@ Liquid Glass Electron desktop player powered by the Juice WRLD API
   **No `Co-Authored-By` lines, no "Generated with" footers** in commits or PRs.
   Never commit `HANDOFF*.md`, `.ui-verify/`, `.env.local`, or user profile data.
 - **Releases**: do not trigger automatic releases on every push; build and tag
-  releases deliberately once tested locally.
+  releases deliberately once tested locally. Follow `docs/RELEASING.md`; the legacy
+  `scripts/release.bat` publisher targets the original app and refuses this fork.
 
 ### Finishing the job
 
@@ -336,7 +337,8 @@ under the app CSP: no inline `style` attributes or `<style>` tags. Don't bring
 back WRLD's Cover Flow layout or iJWA's live wallpaper, artwork tray icon or
 energy rules.
 
-**Updates at launch** (`app`): a packaged launch shows the updating window
+**Updates at launch** (`app`): stable updates use `GoodFight37/Unreleased`,
+never the original app or its gated beta installers. A packaged launch shows the updating window
 (`electron/updating/`) first and only creates the main window once there is
 nothing to install. A newer build is downloaded and installed right there,
 with no prompt, and the installer reopens the app. Timeouts that open the app
@@ -557,6 +559,11 @@ Node 22.
 
 Newest first. One entry each: date, what went wrong, what to do instead. Delete
 entries that stop being true.
+
+- 2026-11-17: Floating cover controls vanished with WebGPU enabled: the GPU
+  `.glass-field` rule forces `position: relative`, overriding their absolute
+  positioning. Position a wrapper over the cover and keep the glass button
+  inside it, as in Catalogue, so GPU and fallback layouts agree.
 
 - 2026-11-14: Git Bash's `sed -i` on Windows rewrote CRLF files as LF
   (`WrldView.tsx`, `radioSocketService.ts`), so a follow-up edit matching

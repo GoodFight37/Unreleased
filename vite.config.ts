@@ -110,12 +110,13 @@ const devCspPlugin = {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react(), devCspPlugin],
   root: resolve(__dirname, 'src/renderer'),
   envDir: resolve(__dirname, '.'),
   base: './',
   define: {
+    ...(command === 'build' ? { 'import.meta.env.VITE_AUTH_TOKEN': 'undefined' } : {}),
     __APP_VERSION__: JSON.stringify(pkg.version),
     __COMMIT_HASH__: JSON.stringify(commitHash()),
     __BRANCH_NAME__: JSON.stringify(branchName()),
@@ -145,4 +146,4 @@ export default defineConfig({
     host: true,
     allowedHosts: ['.juicewrldapi.com', 'player.juicewrldapi.com', 'localhost', '127.0.0.1'],
   },
-})
+}))

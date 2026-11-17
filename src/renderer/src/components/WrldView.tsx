@@ -1,5 +1,5 @@
 import { effectsMotionMedia, useEffectsState } from '../lib/effectsPreference'
-import { resolveWrldEra } from '../lib/wrldAtmospheres'
+import { isWrldFanLyricId, resolveWrldEra } from '../lib/wrldAtmospheres'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
@@ -314,7 +314,9 @@ export default function WrldView(): JSX.Element {
   const wrldWidgets = developerMode && savedWrldWidgets
   const hideForViz = wrldWidgets ? { display: 'none' } : undefined
 
-  const textIsDark = useArtTextContrast(artSrc, artError, isDarkSkin, radioFmActive, useThemeBackground ? !isDarkSkin : null)
+  const videoShown = useVizStore(s => s.wrldVideoShown)
+  const artTextIsDark = useArtTextContrast(artSrc, artError, isDarkSkin, radioFmActive, useThemeBackground ? !isDarkSkin : null)
+  const textIsDark = !videoShown && artTextIsDark
 
   // ── Albums state ─────────────────────────────────────────────────────────────
   // Album objects carry track paths, not full song metadata, so a
@@ -528,7 +530,7 @@ export default function WrldView(): JSX.Element {
     wrldAnimations: s.wrldAnimations,
     wrldCleanView: s.wrldCleanView,
   })))
-  const stageAnimated = wrldAnimations && !reducedMotion && !gameMode && wrldAtmosphere !== 'off'
+  const stageAnimated = wrldAnimations && !reducedMotion && !gameMode && !videoShown && wrldAtmosphere !== 'off'
   const stageEra = useMemo(
     () => resolveWrldEra(artSrc && !artError ? artSrc : null, displayAlbum ?? null),
     [artSrc, artError, displayAlbum],
@@ -820,15 +822,7 @@ export default function WrldView(): JSX.Element {
                                      radial-gradient(100% 85% at 0% 100%, rgb(var(--accent-2-rgb, var(--accent-rgb)) / 0.12), transparent 55%)`,
                 } : undefined}
               />
-            ) : wrldAtmosphere === 'mesh' ? (
-              <LiquidMeshBackdrop
-                artUrl={artSrc && !artError ? artSrc : null}
-                eraAsset={stageEra.eraAsset}
-                isDark={!textIsDark}
-                playing={playbackActive}
-                animated={stageAnimated}
-              />
-            ) : artSrc && !artError ? (
+            ) : wrldAtmosphere === 'glass' && artSrc && !artError ? (
               // Blurred to 60px, so resolution is meaningless here - always the
               // degraded copy, which also gets the backdrop up on the first frame.
               <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]}
@@ -837,7 +831,14 @@ export default function WrldView(): JSX.Element {
                 onError={() => setArtError(true)}
               />
             ) : (
-              <div className={`absolute inset-0 ${radioFmActive ? 'bg-gradient-to-br from-red-950/60 to-black dark:from-red-950/60 dark:to-black' : 'bg-gradient-to-br from-gray-200 to-gray-100 dark:from-gray-900 dark:to-black'}`} />
+              <LiquidMeshBackdrop
+                artUrl={artSrc && !artError ? artSrc : null}
+                eraAsset={stageEra.eraAsset}
+                atmosphere={stageEra.atmosphere}
+                isDark={!textIsDark}
+                playing={playbackActive}
+                animated={stageAnimated && wrldAtmosphere === 'mesh'}
+              />
             )}
             {!useThemeBackground && (
               <>
@@ -2353,7 +2354,7 @@ const LyricsPanel = memo(function LyricsPanel({
   const wrldLyricLook = useVizStore((s) => s.wrldLyricLook)
   const radioFmPaused = useStore((s) => s.radioFmPaused)
   const lyricsPaused = radioFmActive && radioFmPaused
-  const lyricLook = developerMode ? savedLyricLook : wrldLyricLook
+  const lyricLook = developerMode ? savedLyricLook : (isWrldFanLyricId(wrldLyricLook) ? wrldLyricLook : 'classic')
   // null = auto, i.e. the art-derived text colors this tab already picks.
   const activeColor   = developerMode ? lyricsColorActive ?? txtPri : txtPri
   const inactiveColor = developerMode ? lyricsColorInactive ?? txtSec : txtSec

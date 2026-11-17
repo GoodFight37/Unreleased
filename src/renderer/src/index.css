@@ -1840,3 +1840,9 @@ img[data-img-fade="in"] { animation: img-fade-in 0.24s var(--ease-out); }
 :where(html[data-effects-quality="game"]) .wrld-drift { animation: none; }
 
 :where(html[data-effects-motion="reduce"]) img[data-img-fade="in"] { animation: none; }
+
+html:not(.glass-gpu-active) .glass-backdrop[data-lens]::before {
+  -webkit-backdrop-filter: var(--lens-filter) saturate(1.8);
+  backdrop-filter: var(--lens-filter) saturate(1.8);
+}
+.liquid-lens-defs { position: fixed; width: 0; height: 0; overflow: hidden; pointer-events: none; }

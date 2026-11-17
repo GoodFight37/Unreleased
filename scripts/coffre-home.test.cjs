@@ -9,7 +9,7 @@ const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/ren
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
 }).outputText
 
-function render({ catalogue = [], catalogueState = 'ready', recent = [], currentTrack = null } = {}) {
+function render({ catalogue = [], catalogueState = 'ready', recent = [], currentTrack = null, effects = { reducedMotion: false, gameMode: false } } = {}) {
   const calls = []
   const action = (name) => (...args) => calls.push({ name, args })
   const state = { currentTrack, playTrack: action('play'), playNext: action('next'), setActiveView: action('view'), setInfoSongId: action('info'), setApiTrackerCategory: action('category'), setApiTrackerEra: action('era'), setApiTrackerTab: action('tab') }
@@ -19,14 +19,17 @@ function render({ catalogue = [], catalogueState = 'ready', recent = [], current
     exports,
     require: (name) => {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
-      if (name === 'react') return { useMemo: (fn) => fn(), useState: () => [null, () => {}] }
+      if (name === 'react') return { useMemo: (fn) => fn(), useState: () => [null, () => {}], useEffect: () => {} }
       if (name.endsWith('/useStore')) return { useStorePick: () => state, useStore: { getState: () => state } }
       if (name.endsWith('/useChannelRoles')) return { useCanEdit: () => false }
       if (name.endsWith('/juicewrldApi')) return { buildImageUrl: (url) => url, songToTrack: (song) => ({ id: `jw-${song.id}`, title: song.name, path: song.path, era: song.era?.name }) }
-      if (name.endsWith('/eraLook')) return { ERA_LOOK: {} }
+      if (name.endsWith('/eraLook')) return require('../src/renderer/src/lib/eraLook.ts')
       if (name.endsWith('/apiTrackerShared')) return { saveTrackerSearch: () => {} }
       if (name.endsWith('/eras')) return { eraLabel: (name) => name }
       if (name.endsWith('/userApi')) return { trackIdToSongId: (id) => /^jw-\d+$/.test(id) ? Number(id.slice(3)) : null }
+      if (name.endsWith('/skins')) return { getSkin: () => ({ dark: true }) }
+      if (name.endsWith('/effectsPreference')) return { useEffectsState: () => effects }
+      if (name.endsWith('/wrldAtmospheres')) return require('../src/renderer/src/lib/wrldAtmospheres.ts')
       if (name.endsWith('/lazyView')) return { lazyOverlay: () => () => null }
       return {}
     },
@@ -45,13 +48,13 @@ function render({ catalogue = [], catalogueState = 'ready', recent = [], current
 
 const song = (id, category, file, era = 'DRFL') => ({ id, name: `Song ${id}`, category, path: file, era: { name: era }, image_url: `cover-${id}` })
 
-test('vault discovery includes playable unreleased tracks and counts only those tracks per era', () => {
+test('vault discovery includes playable unreleased tracks and sorts eras chronologically', () => {
   const result = render({ catalogue: [song(1, 'unreleased', 'one.mp3'), song(2, 'unreleased', ''), song(3, 'released', 'three.mp3'), song(4, 'recording_session', 'four.mp3'), song(5, 'unreleased', 'five.mp3', 'GB&GR')] })
   const cards = result.find('coffre-cover-card')
   assert.equal(cards.length, 2)
   assert.deepEqual(cards.map((card) => card.props['aria-label']), ['Play Song 1', 'Play Song 5'])
   assert.equal(result.find('coffre-era').length, 2)
-  result.find('coffre-era')[1].props.onClick()
+  result.find('coffre-era')[0].props.onClick()
   assert.deepEqual(result.calls.map((call) => [call.name, ...call.args]), [['category', 'unreleased'], ['era', 'GB&GR'], ['tab', 'songs'], ['view', 'api-tracker']])
 })
 
@@ -84,17 +87,16 @@ test('the discovery collection shortcut opens playlists without a detour through
   assert.deepEqual(result.calls, [{ name: 'view', args: ['playlists'] }])
 })
 
-test('the feature follows the selected song and shows only its catalogue credits and notes', () => {
+test('the feature follows the selected song and shows a single human line from its catalogue metadata', () => {
   const catalogue = [
     { ...song(1, 'unreleased', 'a.mp3'), producers: 'Producer A', additional_information: 'A documented session.' },
-    { ...song(2, 'released', 'b.mp3'), producers: 'Producer B', record_dates: 'File Exported\nJune 24, 2021.' },
+    { ...song(2, 'released', 'b.mp3'), producers: 'Producer B', additional_information: "Vocals from this Track were used for 'The Way'." },
   ]
   const result = render({ catalogue, currentTrack: { id: 'jw-2', title: 'Song 2', path: 'b.mp3' } })
-  const text = result.nodes.flatMap((node) => Array.isArray(node.props.children) ? node.props.children.filter((v) => typeof v === 'string') : [node.props.children]).filter((v) => typeof v === 'string')
-  assert.ok(text.includes('Producer B'))
-  assert.ok(text.includes('File Exported\nJune 24, 2021.'))
-  assert.ok(!text.includes('Producer A'))
-  assert.ok(!text.includes('A documented session.'))
+  const note = result.find('coffre-track-note')[0].props.children
+  assert.equal(note, "Vocals from this Track were used for 'The Way'.")
+  assert.ok(!note.includes('Producer A'))
+  assert.ok(!note.includes('A documented session.'))
   const details = result.nodes.find((node) => node.type === 'button' && node.props.children?.[0] === 'Full song details ')
   details.props.onClick()
   assert.deepEqual(result.calls, [{ name: 'info', args: [2] }])
@@ -104,7 +106,14 @@ test('local and missing catalogue tracks do not invent trivia or show unrelated 
   const result = render({ catalogue: [{ ...song(1, 'unreleased', 'a.mp3'), producers: 'Unrelated' }], currentTrack: { id: 'local-one', title: 'Local', path: 'local.mp3' } })
   assert.equal(result.nodes.some((node) => node.props.children === 'Unrelated'), false)
   assert.equal(result.nodes.some((node) => node.props.children?.[0] === 'Full song details '), false)
-  assert.equal(result.find('coffre-track-note')[0].props.children, 'Choose a catalogue track to explore its story and credits.')
+  assert.equal(result.find('coffre-track-note').length, 0)
+})
+
+test('missing notes stay absent even with recording dates and producers', () => {
+  for (const value of [undefined, null, '', '  ', 'null']) {
+    const result = render({ catalogue: [{ ...song(1, 'unreleased', 'a.mp3'), additional_information: value, notes: value, producers: 'Producer', record_dates: 'Recorded June 17, 2018' }], currentTrack: { id: 'jw-1', title: 'One', path: 'a.mp3' } })
+    assert.equal(result.find('coffre-track-note').length, 0)
+  }
 })
 
 test('loading and failed catalogues have explicit feedback and a safe catalogue action', () => {

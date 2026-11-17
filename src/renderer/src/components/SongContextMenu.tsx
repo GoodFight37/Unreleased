@@ -2,7 +2,7 @@ import { copyText } from '../lib/clipboard'
 import { useEffect, useState } from 'react'
 import type { ComponentProps } from 'react'
 import {
-  Info, ListPlus, ListEnd, Plus, Folder, Pencil, Download, HardDrive, PackageOpen, Check, Loader2, CheckSquare2, Heart, Trash2, ListMusic, CircleArrowDown, Flag, FileAudio2, Clipboard, ClipboardCopy, Copy, FolderInput, FileCog, Share2, X, Link2, Layers, MicVocal, Sparkles, Ellipsis, ImagePlus,
+  Clapperboard, Info, ListPlus, ListEnd, Plus, Folder, Pencil, Download, HardDrive, PackageOpen, Check, Loader2, CheckSquare2, Heart, Trash2, ListMusic, CircleArrowDown, Flag, FileAudio2, Clipboard, ClipboardCopy, Copy, FolderInput, FileCog, Share2, X, Link2, Layers, MicVocal, Sparkles, Ellipsis, ImagePlus,
 } from 'lucide-react'
 import { useStore, IS_FLOAT_WINDOW } from '../store/useStore'
 import { useShallow } from 'zustand/react/shallow'
@@ -19,6 +19,7 @@ import { lazyOverlay } from '../lib/lazyView'
 import { addSongsInBackground, addTracksInBackground } from '../lib/optimisticPlaylist'
 import { isPrivateEntry, playlistTrackIds, trackToPlaylistEntry } from '../lib/playlistItems'
 import { downloadFileSmart } from '../lib/cdn'
+import { loadSongFootage } from '../lib/footageIndex'
 import { showAppToast } from '../lib/appToast'
 
 // Staff-only (it pulls in the chat store) - fetched when opened.
@@ -167,6 +168,20 @@ export default function SongContextMenu({
     }))
   )
   const { track, songId } = state
+  const footageChannel = useStore(s => s.activeChannel) ?? ''
+  const developerMode = useStore(s => s.developerMode)
+  const [footageCount, setFootageCount] = useState(0)
+  const footageTitle = song?.name ?? track.apiTitle ?? track.title
+  useEffect(() => {
+    let stale = false
+    setFootageCount(0)
+    if (songId != null && songId > 0) {
+      loadSongFootage(footageTitle, footageChannel).then(matches => {
+        if (!stale) setFootageCount(matches?.length ?? 0)
+      }).catch(() => {})
+    }
+    return () => { stale = true }
+  }, [songId, footageTitle, footageChannel])
   // After "Download session (ZIP)" finds more than one candidate the menu swaps
   // to a pick-one page.
   const [zipCandidates, setZipCandidates] = useState<JWApiFileEntry[] | null>(null)
@@ -443,6 +458,7 @@ export default function SongContextMenu({
         onPlay && canQueue && { icon: ListEnd, label: 'Play', onSelect: onPlay },
         onPlayNext && canQueue && { icon: ListEnd, label: 'Play next', onSelect: onPlayNext },
         hasValidSong && { icon: Info, label: 'Song info', onSelect: onInfo },
+        footageCount > 0 && { icon: Clapperboard, label: `Watch footage (${footageCount})`, onSelect: onInfo },
         onSelect && { icon: CheckSquare2, label: 'Select', onSelect },
         onAddToQueue && canQueue && { icon: ListPlus, label: 'Add to queue', onSelect: onAddToQueue },
         canAddToPlaylist && {
@@ -456,7 +472,7 @@ export default function SongContextMenu({
         moreRows.length > 1 && { icon: Ellipsis, label: 'More', children: moreRows },
         moreRows.length === 1 && moreRows[0],
         canCopyLink && { icon: linkCopied ? Check : Link2, label: linkCopied ? 'Link copied' : 'Copy link', keepOpen: true, onSelect: handleCopyLink },
-        onShowInFiles && !!track.path && { icon: Folder, label: 'Show in Files', onSelect: onShowInFiles },
+        developerMode && onShowInFiles && !!track.path && { icon: Folder, label: 'Show in Files', onSelect: onShowInFiles },
         canEdit && hasValidSong && { icon: Pencil, label: 'Edit', onSelect: () => useStore.getState().openSongEditor(songId as number) },
         onEditLocalMetadata && { icon: Pencil, label: 'Edit metadata', onSelect: onEditLocalMetadata },
         // Everything that touches the user's actual file lives in its own

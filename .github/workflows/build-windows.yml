@@ -1,103 +1,58 @@
 name: Build Windows release
-
-# release.py no longer builds locally for stable releases — it just publishes
-# the GitHub release (no assets) and lets this fire on that publish, same
-# pattern as build-mac.yml / build-linux.yml. Runs on all three repos this
-# gets pushed to (origin + the Juice-WRLD-API mirror), since each publishes
-# its own release and each needs its own installer attached.
-#
-# latest.yml is what electron-updater reads to find updates on Windows —
-# without it, Windows clients log an update error on every launch.
-
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to build (e.g. v1.22.0)"
+        description: "Existing release tag from app (for example v2.6.50)"
         required: true
-
 jobs:
   windows:
+    if: github.repository == 'GoodFight37/Unreleased'
     runs-on: windows-latest
     permissions:
       contents: write
-
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      YOUTUBE_DL_SKIP_DOWNLOAD: "1"
     steps:
-      - name: Resolve tag
-        id: tag
-        shell: bash
-        run: |
-          tag="${{ github.event.release.tag_name || inputs.tag }}"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout release tag
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ steps.tag.outputs.tag }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
+      - name: Validate release identity and app ancestry
+        shell: bash
+        run: |
+          node scripts/check-release.cjs "$RELEASE_TAG"
+          git fetch origin app
+          git merge-base --is-ancestor HEAD FETCH_HEAD
       - name: Install dependencies
-        env:
-          # youtube-dl-exec's postinstall downloads a yt-dlp binary from
-          # GitHub releases — unauthenticated, so it hits the rate limit on
-          # shared runner IPs (broke this build 2026-08-17). It's a
-          # devDependency only for local-dev convenience; the app fetches
-          # its own yt-dlp on demand at runtime, so skip it in CI.
-          YOUTUBE_DL_SKIP_DOWNLOAD: "1"
         run: npm ci
-
+      - name: Check main process and tests
+        run: |
+          npm run typecheck:electron
+          npm run test:scripts
+          npm run test:electron
       - name: Build renderer
         env:
           VITE_LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           VITE_LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
         run: npm run build
-
-      # package.json's win.extraResources embeds this file (the nsis-web
-      # repair/reinstall stub) into the packaged installer — electron-builder
-      # needs it to exist before packaging starts. It's gitignored (nothing
-      # in the checkout provides it), so grab it from whichever recent
-      # Juice-WRLD-API/Unreleased release still has one. The asset filter
-      # naturally skips the release this workflow is building for (it was
-      # JUST published with no assets yet), so this is safe to source from
-      # the same repo the workflow runs in.
-      - name: Fetch bundled installer stub
+      - name: Package Windows x64 installer
+        run: npx electron-builder --win --x64 --publish never
+      - name: Upload installer, then update manifest
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p build/bundled
-          # Collect every match first, then take the first: piping --paginate
-          # straight into `head -n1` closes the pipe early and gh dies with
-          # "write /dev/stdout: The pipe is being closed" under pipefail.
-          tags=$(gh api repos/Juice-WRLD-API/Unreleased/releases --paginate \
-            -q '.[] | select(.assets[]?.name=="Unreleased-Setup.exe") | .tag_name')
-          tag=$(printf '%s\n' "$tags" | head -n1)
-          if [ -z "$tag" ]; then
-            echo "::error::No Juice-WRLD-API/Unreleased release has an Unreleased-Setup.exe asset to seed build/bundled/ from"
-            exit 1
-          fi
-          curl -fL -o build/bundled/Unreleased-Setup.exe \
-            "https://github.com/Juice-WRLD-API/Unreleased/releases/download/$tag/Unreleased-Setup.exe"
-
-      - name: Package installers (offline + web)
-        run: npx electron-builder --win --publish never
-
-      - name: Upload assets to release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "${{ steps.tag.outputs.tag }}" \
-            release/nsis-web/latest.yml \
-            release/nsis-web/Unreleased-Setup.exe \
-            release/nsis-web/unreleased-*.nsis.7z \
-            "release/Unreleased-Setup-${{ steps.tag.outputs.version }}.exe" \
-            --clobber --repo "${{ github.repository }}"
+          version=$(node -p "require('./package.json').version")
+          installer="release/Unreleased Glass-Setup-$version.exe"
+          test -f "$installer"
+          test -f "$installer.blockmap"
+          test -f release/latest.yml
+          gh release upload "$RELEASE_TAG" "$installer" "$installer.blockmap" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$RELEASE_TAG" release/latest.yml --clobber --repo "$GITHUB_REPOSITORY"

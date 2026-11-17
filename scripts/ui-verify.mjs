@@ -316,7 +316,7 @@ async function runLayoutSensors(page, scenario) {
       const trackerBgs = [[24, 18, 32], [68, 28, 46]] // surface sombre + dégradé ambiant
       const colHeader =
         Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim()?.toUpperCase() === 'TITLE' && rectOf(b)) ||
-        document.querySelector('.glass-seg [role="tab"][aria-selected="true"]')
+        document.querySelector('.glass-seg [data-seg-on="true"], .glass-seg [role="tab"][aria-selected="true"]')
       const rowSub = Array.from(document.querySelectorAll('p.text-text-muted, span.text-text-muted, div.text-text-muted')).find((el) => el.textContent?.trim() && rectOf(el) && !el.closest('.app-player'))
       measureElContrast('tracker-col-header', colHeader, trackerBgs, 4.5)
       measureElContrast('tracker-row-muted', rowSub, trackerBgs, 4.5)

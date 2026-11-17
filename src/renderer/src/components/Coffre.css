@@ -1,42 +1,61 @@
-.coffre-home { flex:1;min-height:0;overflow-y:auto;background:transparent }
-.coffre-home-inner { max-width:1420px;margin:0 auto;padding:34px 42px 35px;display:flex;flex-direction:column;gap:34px }
-.coffre-hero { display:grid;grid-template-columns:1fr minmax(220px,.95fr);align-items:center;gap:48px;min-height:275px }
-.coffre-hero h1 { font-size:clamp(36px,4.6vw,62px);line-height:1.06;font-weight:800;letter-spacing:-.035em;color:var(--text-primary);margin-bottom:20px }
-.coffre-hero p { color:var(--text-secondary);font-size:14px;line-height:1.8;margin-bottom:24px }
-.coffre-primary { display:inline-flex;align-items:center;gap:13px;background:var(--text-primary);color:var(--surface);border-radius:12px;font-size:13px;font-weight:700;padding:13px 19px;transition:opacity 180ms }
-.coffre-primary:hover { opacity:.88 }
-.coffre-hero-art { position:relative;isolation:isolate;display:flex;align-items:center;justify-content:center;width:100%;height:285px;border-radius:16px;background:var(--fill);overflow:hidden }
-.coffre-hero-art .coffre-hero-cover { width:100%;height:100%;object-fit:contain }
-.coffre-art-caption { position:absolute;left:0;right:0;bottom:0;display:flex;align-items:end;justify-content:space-between;gap:12px;padding:36px 20px 16px;background:linear-gradient(transparent,rgba(0,0,0,.88));color:#fff;text-align:left;font-size:18px;font-weight:700 }
-.coffre-art-caption small { display:block;color:#f1f1f1;font-size:12px;font-weight:400;margin-top:5px }
-.coffre-feature { min-width:0 }
-.coffre-track-context { padding:18px 0 0;color:var(--text-primary) }
-.coffre-track-context h2 { font-size:15px;font-weight:700;margin-bottom:12px }
-.coffre-track-context dl { display:grid;gap:8px;font-size:12px }
-.coffre-track-context dl>div { display:grid;grid-template-columns:85px minmax(0,1fr);gap:12px }
-.coffre-track-context dt { color:var(--text-secondary) }
-.coffre-track-context dd { white-space:pre-line;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical }
-.coffre-track-note { font-size:12px;line-height:1.7;margin-top:12px;color:var(--text-secondary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;white-space:pre-line }
-.coffre-track-context>button { display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;margin-top:12px }
+.coffre-home { position:relative;isolation:isolate;flex:1;min-height:0;overflow-y:auto;background:transparent }
+.coffre-stage-backdrop { position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden }
+.coffre-stage-vignette { position:absolute;inset:0;pointer-events:none }
+.coffre-stage-vignette.is-dark { background:linear-gradient(180deg,rgba(8,7,12,.36) 0%,rgba(8,7,12,.18) 38%,rgba(8,7,12,.58) 100%) }
+.coffre-stage-vignette.is-light { background:linear-gradient(180deg,rgba(244,243,247,.34) 0%,rgba(244,243,247,.16) 40%,rgba(244,243,247,.48) 100%) }
+.coffre-home-inner { position:relative;z-index:1;max-width:1380px;margin:0 auto;padding:24px 38px 34px;display:flex;flex-direction:column;gap:26px }
+.coffre-home .coffre-home-inner { padding-bottom:calc(var(--player-dock,100px) + 34px) }
+.coffre-hero-head { display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap }
+.coffre-hero-titles { min-width:0;max-width:700px }
+.coffre-kicker { display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-primary);background:color-mix(in srgb,var(--accent) 16%,var(--surface-raised));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));margin-bottom:10px }
+.coffre-kicker-dot { width:6px;height:6px;border-radius:999px;background:var(--accent) }
+.coffre-hero-titles h1 { font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:var(--text-primary);margin-bottom:8px }
+.coffre-hero-titles p { color:var(--text-secondary);font-size:13px;line-height:1.55;margin:0 }
+.coffre-banner { position:relative;display:grid;grid-template-columns:196px minmax(0,1fr);align-items:center;gap:26px;padding:20px 24px;border-radius:22px;background:radial-gradient(circle at 12% 18%,color-mix(in srgb,var(--era-accent,var(--accent)) 18%,transparent),transparent 58%),color-mix(in srgb,var(--surface-raised) 64%,transparent);border:1px solid var(--border);overflow:hidden }
+.coffre-hero-art { position:relative;width:196px;height:196px;border-radius:16px;background:var(--fill);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);border:1px solid color-mix(in srgb,var(--text-primary) 14%,transparent);box-shadow:0 22px 46px rgba(0,0,0,.34),0 4px 12px rgba(0,0,0,.22);transition:transform 200ms cubic-bezier(.22,1,.36,1) }
+.coffre-hero-art:hover { transform:translateY(-2px) scale(1.02) }
+.coffre-hero-cover { width:100%;height:100%;object-fit:cover }
+.coffre-banner-play { position:absolute;right:10px;bottom:10px;width:36px;height:36px;border-radius:999px;display:grid;place-items:center;background:var(--text-primary);color:var(--surface);box-shadow:0 4px 14px rgba(0,0,0,.28);transition:transform 180ms cubic-bezier(.22,1,.36,1) }
+.coffre-hero-art:hover .coffre-banner-play { transform:scale(1.08) }
+.coffre-banner-body { min-width:0;display:flex;flex-direction:column;gap:10px }
+.coffre-banner-top { display:flex;align-items:center;flex-wrap:wrap;gap:10px }
+.coffre-context-badge { display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border-radius:999px;background:var(--fill-strong);border:1px solid var(--border);color:var(--text-primary);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase }
+.coffre-context-dot { width:6px;height:6px;border-radius:999px;background:var(--era-accent,var(--accent)) }
+.coffre-context-badge.is-live .coffre-context-dot { animation:coffre-pulse 1.6s ease-in-out infinite }
+.coffre-banner-meta { color:var(--text-secondary);font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.coffre-banner-title { font-size:clamp(22px,2.2vw,30px);line-height:1.15;font-weight:800;letter-spacing:-.025em;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.coffre-track-note { font-size:13px;line-height:1.5;margin:0;color:var(--text-secondary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical }
+.coffre-banner-actions { display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:4px }
+.coffre-primary { display:inline-flex;align-items:center;gap:9px;background:var(--text-primary);color:var(--surface);border-radius:12px;font-size:13px;font-weight:700;padding:10px 17px;transition:transform 160ms cubic-bezier(.22,1,.36,1),opacity 160ms }
+.coffre-primary:hover { opacity:.9;transform:translateY(-1px) }
+.coffre-secondary { display:inline-flex;align-items:center;gap:7px;background:var(--fill);color:var(--text-primary);border:1px solid var(--border);border-radius:12px;font-size:12px;font-weight:600;padding:10px 14px;transition:background-color 160ms,transform 160ms cubic-bezier(.22,1,.36,1) }
+.coffre-secondary:hover { background:var(--fill-strong);transform:translateY(-1px) }
 .coffre-home button:focus-visible,.collection-navigation button:focus-visible,.catalogue-sections>button:focus-visible { outline:2px solid var(--text-primary);outline-offset:3px }
-.coffre-section-heading { display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:18px }
-.coffre-section-heading h2 { color:var(--text-primary);font-size:20px;font-weight:700;letter-spacing:-.025em }
-.coffre-section-heading>button,.coffre-empty button { display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:12px }
-.coffre-cover-row { display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:20px }
+.coffre-section-heading { display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:14px }
+.coffre-section-heading h2 { color:var(--text-primary);font-size:19px;font-weight:700;letter-spacing:-.025em }
+.coffre-section-heading>button,.coffre-empty button { display:flex;align-items:center;gap:7px;color:var(--text-secondary);font-size:12px;transition:color 150ms }
+.coffre-section-heading>button:hover,.coffre-empty button:hover { color:var(--text-primary) }
+.coffre-cover-row { display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px }
 .coffre-cover-card { min-width:0;text-align:left;color:var(--text-primary) }
-.coffre-cover { display:flex;position:relative;align-items:center;justify-content:center;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--fill);margin-bottom:10px }
-.coffre-cover>img { width:100%;height:100%;object-fit:contain }
+.coffre-cover { display:flex;position:relative;align-items:center;justify-content:center;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--fill);margin-bottom:9px;box-shadow:0 8px 20px rgba(0,0,0,.18);transition:transform 200ms cubic-bezier(.22,1,.36,1) }
+.coffre-cover-card:hover .coffre-cover,.coffre-cover-card:focus-visible .coffre-cover { transform:translateY(-3px) }
+.coffre-cover>img { width:100%;height:100%;object-fit:cover }
 .coffre-cover-card strong { display:block;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
-.coffre-cover-card>span:last-child { display:block;color:var(--text-secondary);font-size:12px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
-.coffre-card-play { position:absolute;bottom:9px;right:9px;display:grid;place-items:center;width:34px;height:34px;background:var(--surface-raised);color:var(--text-primary);border-radius:50% }
-.coffre-era-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px }
-.coffre-era { display:flex;align-items:center;gap:13px;padding:13px 0;text-align:left;border-top:1px solid var(--border);color:var(--text-primary);min-width:0 }
-.coffre-era-cover { width:55px;height:55px;flex-shrink:0;border-radius:8px;overflow:hidden;background:var(--fill) }
+.coffre-cover-card>span:last-child { display:block;color:var(--text-secondary);font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.coffre-card-play { position:absolute;bottom:8px;right:8px;display:grid;place-items:center;width:32px;height:32px;background:var(--surface-raised);color:var(--text-primary);border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,.24);opacity:.9;transition:transform 180ms cubic-bezier(.22,1,.36,1),opacity 180ms }
+.coffre-cover-card:hover .coffre-card-play { opacity:1;transform:scale(1.08) }
+.coffre-era-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px }
+.coffre-era { display:flex;align-items:center;gap:14px;padding:12px 14px;text-align:left;border-radius:16px;border:1px solid var(--border);background:color-mix(in srgb,var(--era-accent,var(--accent)) 9%,color-mix(in srgb,var(--surface-raised) 58%,transparent));color:var(--text-primary);min-width:0;transition:transform 180ms cubic-bezier(.22,1,.36,1),background-color 180ms }
+.coffre-era:hover { transform:translateY(-2px);background:color-mix(in srgb,var(--era-accent,var(--accent)) 16%,color-mix(in srgb,var(--surface-raised) 72%,transparent)) }
+.coffre-era-cover { width:62px;height:62px;flex-shrink:0;border-radius:10px;overflow:hidden;background:var(--fill);box-shadow:0 6px 16px rgba(0,0,0,.22) }
 .coffre-era>span:nth-child(2) { flex:1;min-width:0 }
-.coffre-era strong { font-size:12px;font-weight:600;display:block;line-height:1.5 }
-.coffre-era small { display:block;font-size:11px;color:var(--text-secondary);margin-top:4px }
-.coffre-album-row { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:22px }
-.coffre-empty { padding:24px 0;color:var(--text-secondary);display:flex;align-items:center;gap:18px;font-size:13px;flex-wrap:wrap }
+.coffre-era strong { font-size:13px;font-weight:700;display:block;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.coffre-era small { display:block;font-size:11px;color:var(--text-secondary);margin-top:3px }
+.coffre-album-row { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:20px }
+.coffre-empty { padding:20px 0;color:var(--text-secondary);display:flex;align-items:center;gap:18px;font-size:13px;flex-wrap:wrap }
+.coffre-reveal { animation:coffre-enter 280ms cubic-bezier(.22,1,.36,1) var(--coffre-reveal-delay,0ms) both }
+@keyframes coffre-enter { from { opacity:0;transform:translateY(8px) } to { opacity:1;transform:translateY(0) } }
+@keyframes coffre-pulse { 0%,100% { opacity:1;transform:scale(1) } 50% { opacity:.45;transform:scale(.82) } }
 .collection-page { display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden }
 .collection-navigation { display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:12px 22px 4px;flex-shrink:0 }
 .collection-navigation button { display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:10px;color:var(--text-secondary);font-size:12px }
@@ -54,7 +73,16 @@
 .settings-detail-back { display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:12px;margin-bottom:20px }
 .floating-panel-glass.glass-thick { background:color-mix(in srgb,var(--surface) 72%,transparent);backdrop-filter:blur(24px) saturate(1.05);-webkit-backdrop-filter:blur(24px) saturate(1.05);--text-muted:color-mix(in srgb,var(--text-primary) 84%,var(--surface));--text-secondary:var(--text-muted) }
 :where(html[data-effects-transparency="reduce"]) .floating-panel-glass.glass-thick { background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none }
-@media (max-width:1100px) { .coffre-home-inner{padding:28px}.coffre-cover-row{grid-template-columns:repeat(3,minmax(0,1fr))}.coffre-era-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
-@media (min-width:1101px) and (max-height:820px) { .coffre-home-inner{padding:24px 32px;gap:24px}.coffre-hero{min-height:220px}.coffre-hero-art{height:220px}.coffre-hero h1{font-size:48px;margin-bottom:15px}.coffre-hero p{margin-bottom:18px} }
-@media (max-width:680px) { .coffre-home-inner{padding:24px 20px;gap:28px}.coffre-hero{grid-template-columns:1fr;gap:25px}.coffre-hero-art{height:250px}.coffre-hero-copy{order:2}.coffre-hero h1{font-size:38px}.coffre-cover-row{grid-template-columns:repeat(2,minmax(0,1fr))}.coffre-album-row{grid-template-columns:repeat(2,minmax(0,1fr))}.coffre-era-grid{grid-template-columns:1fr}.coffre-section-heading h2{font-size:18px}.collection-navigation{padding:10px 12px 4px}.collection-navigation button{padding:8px;font-size:11px} }
-@media (prefers-reduced-motion:reduce) { .coffre-primary { transition:none } }
+@media (max-width:1100px) { .coffre-home-inner{padding:24px 28px 32px}.coffre-banner{grid-template-columns:168px minmax(0,1fr);gap:20px}.coffre-hero-art{width:168px;height:168px}.coffre-cover-row{grid-template-columns:repeat(3,minmax(0,1fr))}.coffre-era-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (min-width:1101px) and (max-height:820px) { .coffre-home-inner{padding:18px 34px 26px;gap:20px}.coffre-hero-titles h1{font-size:36px;margin-bottom:4px}.coffre-banner{grid-template-columns:164px minmax(0,1fr);padding:14px 18px;gap:20px}.coffre-hero-art{width:164px;height:164px}.coffre-section-heading{margin-bottom:11px} }
+@media (max-width:680px) { .coffre-home-inner{padding:20px 18px 28px;gap:22px}.coffre-banner{grid-template-columns:1fr;padding:16px;gap:16px}.coffre-hero-art{width:100%;height:auto;aspect-ratio:1;max-height:260px}.coffre-cover-row{grid-template-columns:repeat(2,minmax(0,1fr))}.coffre-album-row{grid-template-columns:repeat(2,minmax(0,1fr))}.coffre-era-grid{grid-template-columns:1fr}.coffre-section-heading h2{font-size:18px}.collection-navigation{padding:10px 12px 4px}.collection-navigation button{padding:8px;font-size:11px} }
+:where(html[data-effects-motion="reduce"]) .coffre-reveal,
+:where(html[data-effects-motion="reduce"]) .coffre-context-badge.is-live .coffre-context-dot { animation:none }
+:where(html[data-effects-motion="reduce"]) .coffre-primary,
+:where(html[data-effects-motion="reduce"]) .coffre-secondary,
+:where(html[data-effects-motion="reduce"]) .coffre-hero-art,
+:where(html[data-effects-motion="reduce"]) .coffre-banner-play,
+:where(html[data-effects-motion="reduce"]) .coffre-cover,
+:where(html[data-effects-motion="reduce"]) .coffre-card-play,
+:where(html[data-effects-motion="reduce"]) .coffre-era { transition:none }
+@media (prefers-reduced-motion:reduce) { .coffre-reveal,.coffre-context-badge.is-live .coffre-context-dot{animation:none}.coffre-primary,.coffre-secondary,.coffre-hero-art,.coffre-banner-play,.coffre-cover,.coffre-card-play,.coffre-era{transition:none} }

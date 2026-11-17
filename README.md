@@ -1,61 +1,27 @@
 # Unreleased Glass
 
-Juice WRLD's unreleased catalogue, with a cover-led interface and Liquid Glass controls.
-Built from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased), powered by the
-[Juice WRLD API](https://juicewrldapi.com).
+Desktop client for the Juice WRLD catalogue ([Juice WRLD API](https://juicewrldapi.com)), forked from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased) with a WebGPU Liquid Glass shell and a WebGL2 era backdrop engine.
 
-## What's different
+## Engine & Fan Experience
 
-- **Discover, Catalogue, Collection.** Three main destinations, larger covers
-  and exploration through Juice WRLD's eras. Collection opens your playlists
-  directly, with liked songs, albums and local files alongside them.
-  Discover follows the selected song with catalogue credits, dates and notes.
-- **Glass where it floats.** The navigation, player, menus and dialogs keep
-  their glass treatment with audio-reactive rim highlights, slow idle caustics
-  and orbital specular light, and 120+ fps smooth seek playback; music lists
-  stay crisp and readable with beat-synced playing indicators. A **Game &
-  economy mode** toggle in Settings pauses continuous loops while keeping the
-  static glass look intact.
-- **Adaptive cover colors & themes.** Extract hue-preserved dominant and
-  complementary colors from the playing cover to tint Liquid Glass surfaces,
-  ambient lighting and UI accents across Light, Dark and album themes; the
-  saved palette is restored before the main interface loads.
-- **Simple settings.** Everyday music controls stay visible. Technical tools
-  and detailed customization live behind Developer mode, without removing
-  saved preferences. Settings open large inside the main window.
-- **Clearer listening.** Version groups offer direct playback, missing audio
-  is distinguished from playable versions, and WRLD has a visible return action.
-  Pause 999 FM and resume on the live stream without leaving the station.
-- **Curated 999 Stage in WRLD.** Full-screen listening pairs an integrated GPU
-  Liquid Mesh backdrop with a balanced 40/60 layout, responsive cover depth on
-  play/pause and hover, larger typography with automatic dark/light contrast
-  across every lyric style (*Classic*, *Karaoke*, *Cinema*, *999 Edit* and more),
-  a Clean stage toggle (`C`) for screen recordings, and an instant calm toggle.
-- **A compiled launch.** The Windows launcher opens the built application
-  directly instead of starting a development server every time. It starts on
-  Discover in normal mode and uses its own data profile, importing existing
-  preferences once without overwriting the original player's profile.
-- **Connected panels.** Notifications link directly to the news page;
-  notifications and downloads share a neutral, translucent glass finish.
+- **Navigation (fan path).** Three top-level destinations: **Discover**, **Catalogue**, and **Collection** (playlists, liked songs, albums, and local files). Technical tools, tracker tables, diagnostics, and Glass Lab stay behind **Settings → Advanced → Developer options**.
+- **WebGPU Liquid Glass compositor.** Floating controls (navigation pill, player bar, segmented toggles, sliders, menus, and dialogs) render over a half-resolution separable blur pass (`ceil(w/2) × ceil(h/2)`, DPR capped at `1.5`), with SDF pill merging (`smin`), pointer-tracked specular highlights, interactive slider loupe, and `onSubmittedWorkDone()` frame backpressure. Readability is maintained by adaptive luminance clamping in `glass.wgsl` rather than opaque dark boxes.
+- **WebGL2 Liquid Mesh & era atmospheres.** 64×64 bicubic tensor-product mesh fed by a GPU AMLL hue-preserving tone map and Dual Kawase pyramid (`128→64→32→64→128`). Four era atmosphere profiles (**999**, **GB&GR**, **DRFL**, **LND**) adjust drift speed, subtle grain, color warmth, and audio energy displacement (`u_energy`), with inherited tuning for later eras and 2–3 slow SVG butterflies reserved strictly for *Legends Never Die*.
+- **Adaptive cover palette.** Extracts dominant, complementary, and tertiary hues from the playing cover via Electron/CORS-safe blob loading (`fetchImageBlob`), driving UI accents and mesh gradients across Dark, Light, and album themes with one-click toggle and restoration.
+- **Kinetic lyrics & Stage.** WRLD pairs the era mesh with a 40/60 stage layout, automatic dark/light contrast calibration across the three fan lyric presentations (*Classic*, *Cinema*, *999*), Clean stage mode (`C`), and **Game & economy mode** / `prefers-reduced-motion`, which halts continuous loops while keeping a static era frame on screen.
+- **Catalogue & Footage.** Catalogue opens on a chronological cover showcase (`eraStart`) with 1-click era playback and an optional *Details* table toggle. Song info and context menus surface strict-matched `Footage/`, `Snippets/`, and `Studio Sessions/` video clips (`preload="none"`). No pixel mascot is displayed.
 
 ![Discover](docs/screenshots/home.png)
 
 ![WRLD 999 Stage](docs/screenshots/wrld.png)
 
-Screenshots captured directly from the running desktop app using live
-catalogue tracks and artwork from the Juice WRLD API.
+![Catalogue](docs/screenshots/tracker-dark.png)
 
-## Windows
+![Catalogue Album Theme](docs/screenshots/tracker-album-theme.png)
 
-An installer has not been published yet. The current local version opens with
-**Lancer Unreleased Glass.cmd** (or its desktop shortcut).
-An installable `.exe` will be a separate release after application validation.
+![Settings](docs/screenshots/settings.png)
 
-For the original player's downloads and full feature list, see
-[Unreleased](https://github.com/Juice-WRLD-API/Unreleased#readme).
-
-<details>
-<summary>Build from source and contribute</summary>
+## Windows & Build
 
 Requires Node.js 22 and npm.
 
@@ -64,27 +30,12 @@ npm install
 npm run build
 ```
 
-Then open `Lancer Unreleased Glass.cmd` on Windows. After editing sources,
-run `npm run build` again before using this launcher.
+Windows installer downloads belong in [Unreleased Glass releases](https://github.com/GoodFight37/Unreleased/releases). Local packaging: `npm run electron:build -- --win --publish never` creates `release/Unreleased Glass-Setup-2.6.50.exe` and `release/win-unpacked/Unreleased Glass.exe`. Installed builds update only from this fork's releases. See [release instructions](docs/RELEASING.md). Verification commands: `npm run typecheck:electron`, `npm run test:scripts`, `npm run test:electron`, `npm run ui:verify`, `npm run ui:motion`, `npm run terminal:check-coverage`.
 
-Close the original player and earlier Glass windows before the first launch
-with the separate profile. An active browser database stops the import so its
-preferences can be copied safely. Offline downloads are copied into Glass's
-own storage, which can require extra disk space; the originals stay untouched.
-Your scanned music-folder paths are preserved.
+Glass uses a separate profile. On the first launch, close the original player so Glass can import its preferences safely. Offline files are copied into Glass storage; the original profile and media stay intact. No installer release is published by a push to `app` alone.
 
-The development server is optional and reserved for development.
-Verification: `npm run typecheck:electron`, `npm run test:electron`,
-`npm run test:scripts`, `npm run ui:verify`, `npm run ui:discover`, `npm run ui:motion`.
+See [docs/VALIDATION.md](docs/VALIDATION.md) for the baseline validation notes and [docs/UI_REFERENCES.md](docs/UI_REFERENCES.md) for the UI/motion guidelines.
 
-See [validation and known limits](docs/VALIDATION.md) for the current audit baseline.
-The [next WRLD project](docs/WRLD-STORIES.md) builds on the existing full-screen
-lyrics experience, with optional layouts for shareable videos. It is a proposal.
+## License
 
-</details>
-
-## Credits and license
-
-The original player, API and catalogue are the work of the Unreleased team.
-This fork keeps the [MIT license](LICENSE), copyright leanwrldd.
-Bundled third-party licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+The original player, API and catalogue are the work of the Unreleased team. This fork keeps the MIT license and copyright leanwrldd (see [LICENSE](LICENSE)) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

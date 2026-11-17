@@ -1,0 +1,18 @@
+.catalog-showcase-eras { display: flex; gap: 16px; overflow-x: auto; padding: 4px 2px 16px; margin-block: 8px; }
+.catalog-showcase-era { flex: 0 0 112px; min-width: 0; color: var(--text-primary); }
+.catalog-showcase-era-art { width: 112px; height: 112px; border-radius: 18px; overflow: hidden; position: relative; background: var(--fill); }
+.catalog-showcase-era-art img { width: 100%; height: 100%; object-fit: cover; }
+.catalog-showcase-era-art .catalog-showcase-era-play { position: absolute; bottom: 7px; right: 7px; }
+.catalog-showcase-era button[aria-pressed="true"] { text-decoration: underline; text-underline-offset: 4px; }
+.catalog-showcase-tile { height: 100%; display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; color: var(--text-primary); }
+.catalog-showcase-cover { width: 100%; aspect-ratio: 1; overflow: hidden; flex-shrink: 0; position: relative; }
+.catalog-showcase-cover .catalog-showcase-play { position: absolute; inset: auto 10px 10px auto; }
+.catalog-showcase-tile button:focus-visible, .catalog-showcase-era button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -3px; }
+.catalog-showcase-meta { padding: 10px 12px; min-width: 0; flex: 1; display: flex; gap: 8px; align-items: center; }
+.catalog-showcase-meta p { margin: 0; }
+.catalog-showcase-meta .catalog-showcase-status { font-size: .75rem; margin-top: 4px; }
+@media (max-width: 760px) {
+  .catalog-showcase-toolbar { flex-wrap: wrap; }
+  .catalog-showcase-toolbar > div:first-child { flex-basis: 100%; }
+  .catalog-showcase-toolbar .catalog-toolbar { flex-wrap: wrap; }
+}

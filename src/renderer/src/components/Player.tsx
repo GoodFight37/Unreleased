@@ -36,7 +36,7 @@ import { rememberRecentTrack } from '../lib/recentTracks'
 import { useCanEdit } from '../hooks/useChannelRoles'
 import { toFileUrl } from '../lib/fileTypes'
 import { FullTrack, OfflineTrackMeta, Track } from '../types'
-import SongContextMenu from './SongContextMenu'
+import SongContextMenu, { openInFiles } from './SongContextMenu'
 import ContextMenu from './ContextMenu'
 import EqualizerPanel from './EqualizerPanel'
 import {
@@ -61,6 +61,9 @@ import { CoverFade, LikePop, SwapIcon, TrackSwap } from './PlayerMotion'
 import { PopLayer } from './PopLayer'
 import { useGlassSurface, useGlassCompositorReady, setCompositorPlayEl, setCompositorLens, setCompositorSlider, scheduleGlassCompositor } from '../lib/glass/compositor'
 import { useEffectsState } from '../lib/effectsPreference'
+import { useLiquidLens } from '../hooks/useLiquidLens'
+
+const PLAYER_LENS = { bezel: 18, strength: 14, coreBlur: 16 }
 
 // Downloaded-for-offline audio always wins over streaming — same track id,
 // just playing from local disk instead of the API. Donor cloud files can't be
@@ -312,10 +315,11 @@ function ProgressFill({ seekDrag, className }: { seekDrag: number | null; classN
   const ref = useRef<HTMLDivElement>(null)
 
   useLiveProgressRaf(isPlaying && !radioFmActive && seekDrag === null && !reducedMotion && !gameMode, (ratio) => {
-    if (ref.current) ref.current.style.width = `${ratio * 100}%`
+    if (ref.current) ref.current.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio))})`
   }, ref)
 
-  return <div ref={ref} className={className} style={{ width: `${(seekDrag !== null ? seekDrag : progress) * 100}%` }} />
+  const ratio = Math.max(0, Math.min(1, seekDrag !== null ? seekDrag : progress))
+  return <div ref={ref} className={`${className} w-full origin-left`} style={{ transform: `scaleX(${ratio})` }} />
 }
 
 function ElapsedTime(): JSX.Element {
@@ -363,8 +367,8 @@ function useFmProgress(): number {
 }
 
 function FmProgressFill({ className }: { className: string }): JSX.Element {
-  const progress = useFmProgress()
-  return <div className={className} style={{ width: `${progress * 100}%` }} />
+  const progress = Math.max(0, Math.min(1, useFmProgress()))
+  return <div className={`${className} w-full origin-left`} style={{ transform: `scaleX(${progress})` }} />
 }
 
 function FmElapsedTime(): JSX.Element {
@@ -2303,6 +2307,11 @@ export default function Player(): JSX.Element {
     },
     'remove-queue': (arg) => { if (typeof arg === 'number') useStore.getState().removeFromQueue(arg) },
     'clear-queue': () => useStore.getState().clearQueue(),
+    // Song info's "Show in Files" from its pop-out window.
+    'open-in-files': (arg) => {
+      const at = arg as { folder?: unknown; channel?: unknown } | undefined
+      if (typeof at?.folder === 'string') openInFiles({ folder: at.folder, channel: typeof at.channel === 'string' ? at.channel : null })
+    },
   }
   useEffect(() => {
     const el = (window as any).electron
@@ -2687,6 +2696,8 @@ export default function Player(): JSX.Element {
   const handlePlayBtnTarget = (merge: number): void => {
     setCompositorLens(null, null, null, merge)
   }
+  // Rows scroll under the bar in most views, so its rim bends them.
+  useLiquidLens(dockRef, 'lens-player', PLAYER_LENS)
   useLayoutEffect(() => {
     const root = document.documentElement
     const el = dockRef.current

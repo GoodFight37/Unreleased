@@ -9,6 +9,7 @@ import {
 } from '../lib/wrldAtmospheres'
 import { LOOKS } from '../desktop/light/looks'
 import { useStore } from './useStore'
+import type { MusicVideoChoice } from '../lib/musicVideos'
 
 // Fullscreen visualizer preferences. Kept on this device rather than synced to
 // the account: quality in particular is a per-GPU choice that shouldn't follow
@@ -24,6 +25,7 @@ export type VizCycle = 'off' | 'track' | 'album'
 const QUALITIES: readonly Quality[] = ['low', 'medium', 'high', 'ultra']
 const BOOSTS: readonly Boost[] = ['off', 'auto', '2', '4', '8']
 const CYCLES: readonly VizCycle[] = ['off', 'track', 'album']
+const VIDEO_CHOICES: readonly MusicVideoChoice[] = ['off', 'music', 'all']
 
 function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? (value as T) : fallback
@@ -41,6 +43,20 @@ const fmSize = (v: unknown): { w: number; h: number } | null => {
   return p && typeof p.w === 'number' && typeof p.h === 'number' && Number.isFinite(p.w) && Number.isFinite(p.h)
     ? { w: Math.round(p.w), h: Math.round(p.h) }
     : null
+}
+
+export interface WrldVideoNow {
+  songPath: string
+  videos: { path: string; label: string }[]
+  active: string | null
+  /** The administrators' default for the song: a video's path, '' for no video, null for none set. */
+  serverDefault: string | null
+}
+
+const videoPicks = (v: unknown): Record<string, string> => {
+  const out: Record<string, string> = {}
+  if (v && typeof v === 'object') for (const [k, p] of Object.entries(v)) if (typeof p === 'string' && p) out[k] = p
+  return out
 }
 
 const edgeLook = (id: unknown): string | null => (LOOKS.some((l) => l.id === id) ? (id as string) : null)
@@ -85,6 +101,16 @@ interface VizState {
   /** How many pickers are open over the page (not saved). WRLD's visualizer and Edge light keep moving under them
    *  at a lower frame rate, so they don't fight the picker's own screens for the GPU. */
   vizCovered: number
+  /** The song's official video in place of the visualizer, when the archive has one: off, music videos, or
+   *  visualizers and lyric videos too. */
+  wrldVideos: MusicVideoChoice
+  /** A video is up and the visualizer stopped under it (not saved). */
+  wrldVideoShown: boolean
+  /** The video picked for a song (by its file path): a video's path, or 'none' for the visualizer. A song with no pick
+   *  gets the best video that lines up. */
+  wrldVideoPicks: Record<string, string>
+  /** The playing song's videos as WRLD found them, for the pickers (not saved). `active` is the one on screen. */
+  wrldVideoNow: WrldVideoNow | null
 
   selectMode: (id: string, persist: boolean) => void
   setVizQuality: (q: Quality) => void
@@ -115,6 +141,11 @@ interface VizState {
   setWrldAnimations: (on: boolean) => void
   setWrldLyricLook: (look: WrldCuratedLyricId) => void
   setWrldCleanView: (on: boolean) => void
+  setWrldVideos: (choice: MusicVideoChoice) => void
+  setWrldVideoShown: (on: boolean) => void
+  /** null: back to automatic. */
+  setWrldVideoPick: (songPath: string, pick: string | null) => void
+  setWrldVideoNow: (now: WrldVideoNow | null) => void
 }
 
 export const useVizStore = create<VizState>((set) => ({
@@ -142,6 +173,10 @@ export const useVizStore = create<VizState>((set) => ({
     return isWrldCuratedLyricId(v) ? v : 'classic'
   })(),
   wrldCleanView: false,
+  wrldVideos: pick(ls.get('wrldVideos'), VIDEO_CHOICES, 'off'),
+  wrldVideoShown: false,
+  wrldVideoPicks: videoPicks(ls.get('wrldVideoPicks')),
+  wrldVideoNow: null,
 
   selectMode: (id, persist) => {
     const mode = normalizeMode(id)
@@ -192,6 +227,16 @@ export const useVizStore = create<VizState>((set) => ({
     }
   },
   setWrldCleanView: (wrldCleanView) => set({ wrldCleanView }),
+  setWrldVideos: (wrldVideos) => { set({ wrldVideos }); ls.set('wrldVideos', wrldVideos) },
+  setWrldVideoShown: (wrldVideoShown) => set({ wrldVideoShown }),
+  setWrldVideoPick: (songPath, pick) => set((s) => {
+    const wrldVideoPicks = { ...s.wrldVideoPicks }
+    if (pick) wrldVideoPicks[songPath] = pick
+    else delete wrldVideoPicks[songPath]
+    ls.set('wrldVideoPicks', wrldVideoPicks)
+    return { wrldVideoPicks }
+  }),
+  setWrldVideoNow: (wrldVideoNow) => set({ wrldVideoNow }),
 }))
 
 // Settings usually runs in a pop-out window with its own copy of this store. What it saves arrives here as a storage
@@ -222,6 +267,8 @@ if (typeof window !== 'undefined') {
       case 'wrldAtmosphere': useVizStore.setState({ wrldAtmosphere: normalizeWrldBackdrop(value) }); break
       case 'wrldAnimations': useVizStore.setState({ wrldAnimations: value !== false }); break
       case 'wrldLyricLook': if (isWrldCuratedLyricId(value)) useVizStore.setState({ wrldLyricLook: value }); break
+      case 'wrldVideos': useVizStore.setState({ wrldVideos: pick(value, VIDEO_CHOICES, 'off') }); break
+      case 'wrldVideoPicks': useVizStore.setState({ wrldVideoPicks: videoPicks(value) }); break
     }
   })
 }

@@ -4,7 +4,8 @@ import { ExternalLink } from 'lucide-react'
 import type { ChatUserBrief } from '../../lib/chatApi'
 import { displayName } from '../../store/chatStore'
 import { useStore } from '../../store/useStore'
-import { getPublicProfile } from '../../lib/userApi'
+import { getPublicProfile, peekPublicProfile } from '../../lib/userApi'
+import type { PublicProfile } from '../../lib/userApi'
 import { ChatAvatar, useDismiss } from './ui'
 
 export { useOpenUserCard, UserCardHost } from './UserCardContext'
@@ -37,18 +38,32 @@ export function UserCardBody({ user, bio, children }: {
   )
 }
 
-export function OtherUserCard({ user, x, y, onClose }: { user: ChatUserBrief; x: number; y: number; onClose: () => void }): JSX.Element {
+// Callers outside chat (999 FM chat, Heardle) may know only an id and a name;
+// the profile fills in whatever they left blank.
+function withProfile(user: ChatUserBrief, p: PublicProfile | undefined): ChatUserBrief {
+  if (!p) return user
+  return {
+    ...user,
+    avatar: user.avatar || p.avatar || '',
+    display_name: user.display_name && user.display_name !== user.username ? user.display_name : (p.display_name || user.display_name),
+    username: user.username || p.username,
+  }
+}
+
+export function OtherUserCard({ user: given, x, y, onClose }: { user: ChatUserBrief; x: number; y: number; onClose: () => void }): JSX.Element {
   const openPublicProfile = useStore((s) => s.openPublicProfile)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: x, top: y })
-  const [bio, setBio] = useState<string | null>(null)
+  const [profile, setProfile] = useState<PublicProfile | undefined>(() => peekPublicProfile(given.id))
+  const user = withProfile(given, profile)
+  const bio = profile?.bio || null
   useDismiss(true, onClose, ref)
 
   useEffect(() => {
     let alive = true
-    getPublicProfile(user.id).then((p) => { if (alive) setBio(p.bio || null) }).catch(() => {})
+    getPublicProfile(given.id).then((p) => { if (alive) setProfile(p) }).catch(() => {})
     return () => { alive = false }
-  }, [user.id])
+  }, [given.id])
 
   useLayoutEffect(() => {
     const el = ref.current

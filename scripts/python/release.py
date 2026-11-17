@@ -811,6 +811,9 @@ def rollback(state):
 def main(force_beta=False):
     """force_beta=True (beta.py) skips the question and goes straight down the
     beta path; otherwise the first prompt decides."""
+    publish = json.loads((ROOT / 'package.json').read_text(encoding='utf-8')).get('build', {}).get('publish') or {}
+    if publish.get('owner') != REPO_OWNER or publish.get('repo') != REPO_NAME:
+        raise SystemExit('This legacy publisher targets the original app. Use the Glass GitHub release workflow documented in docs/RELEASING.md.')
     banner()
     # First question, before anything touches git: a beta skips all of it.
     if not force_beta:

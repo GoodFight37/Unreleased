@@ -73,6 +73,7 @@ import ThemedSelect from './ThemedSelect'
 import { GlassSegmented } from './GlassSegmented'
 import { GLASS_SEARCH, GLASS_SEARCH_WRAP, glassToolButton, glassPillButton } from './glassControls'
 import ApiFilesView from './ApiFilesView'
+import './CatalogShowcase.css'
 
 const StatisticsPanel = lazyView(() => import('./StatisticsPanel'))
 
@@ -1565,6 +1566,37 @@ function useElementWidth(ref: React.RefObject<HTMLElement>): number {
   return width
 }
 
+function CatalogShowcase({ scrollRef, songs, onPlay, onInfo, onContextMenu }: Pick<VirtualSongsProps, 'scrollRef' | 'songs' | 'onPlay' | 'onInfo' | 'onContextMenu'>): JSX.Element {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const width = useElementWidth(contentRef)
+  const scale = useStore(s => s.appTextScale)
+  const cols = Math.max(1, Math.floor((width + 16) / (160 * scale + 16)))
+  const cellW = Math.max(0, (width - 16 * (cols - 1)) / cols)
+  const stride = cellW + 104 * scale + 16
+  const { start, end, totalHeight } = useVirtualWindow(scrollRef, contentRef, Math.ceil(songs.length / cols), stride)
+  return <div ref={contentRef} style={{ height: totalHeight, position: 'relative' }}>
+    {width > 0 && songs.slice(start * cols, end * cols).map((song, i) => {
+      const position = start * cols + i
+      return <article key={song.id} className="catalog-showcase-tile glass-card"
+        style={{ position: 'absolute', top: Math.floor(position / cols) * stride, left: (position % cols) * (cellW + 16), width: cellW, height: stride - 16 }}
+        onContextMenu={e => { e.preventDefault(); onContextMenu(song, e) }}>
+        <button className="catalog-showcase-cover" onClick={() => song.path ? onPlay(song) : onInfo(song)}
+          aria-label={`${song.path ? 'Play' : 'Song info:'} ${displaySongName(song)}`}>
+          <AlbumArtThumbnail track={songToTrack(song)} size={Math.ceil(cellW)} shimmer={false} />
+          {song.path && <span className="catalog-showcase-play"><span className={glassPillButton(false)}><Play size={16} /></span></span>}
+        </button>
+        <div className="catalog-showcase-meta">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium line-clamp-2">{displaySongName(song)}</p>
+            <p className="catalog-showcase-status truncate">{song.era?.name ?? 'Juice WRLD'}{!song.path ? ' · Audio unavailable' : ''}</p>
+          </div>
+          <button className={glassToolButton(false)} aria-label={`Song info: ${displaySongName(song)}`} onClick={() => onInfo(song)}><Info size={16} /></button>
+        </div>
+      </article>
+    })}
+  </div>
+}
+
 function VirtualSongGrid({
   scrollRef, songs, onPlay, onQueue, onCategoryClick, onEraClick, onInfo, onContextMenu,
   selectMode, selected, onToggleSelect,
@@ -1880,9 +1912,11 @@ export default function ApiTrackerView(): JSX.Element {
   // once so eraLabel() has something to show once the user opts in.
   useEffect(() => { loadEraFullNames().catch(() => {}) }, [])
 
-  const [trackerTab, setTrackerTab] = useState<TrackerTab>(
+  const developerMode = useStore((s) => s.developerMode)
+  const [storedTrackerTab, setTrackerTab] = useState<TrackerTab>(
     () => (isTrackerTab(apiTrackerTab) ? apiTrackerTab : 'songs'),
   )
+  const trackerTab = developerMode ? storedTrackerTab : 'songs'
   // Deep link is one-shot - consumed into the initial state above, so it must
   // not linger and re-apply on a later render (e.g. after switching tabs by
   // hand and coming back to this view).
@@ -1930,10 +1964,12 @@ export default function ApiTrackerView(): JSX.Element {
   // - tying it to sortedSongs previously meant a group's members could be
   // missed if they hadn't scrolled into view yet, and re-querying on every
   // page load compounded into serious lag as more pages loaded.
-  const developerMode = useStore((s) => s.developerMode)
   const [showSections, setShowSections] = useState(false)
-  const [compactView, setCompactViewState] = useState(() => versionsEnabled && localStorage.getItem(LS_TRACKER_COMPACT) === 'true')
+  const [storedCompactView, setCompactViewState] = useState(() => versionsEnabled && localStorage.getItem(LS_TRACKER_COMPACT) === 'true')
+  const [fanCompactView, setFanCompactView] = useState(false)
+  const compactView = developerMode ? storedCompactView : fanCompactView
   const setCompactView = (v: boolean | ((prev: boolean) => boolean)): void => {
+    if (!developerMode) { setFanCompactView(v); return }
     setCompactViewState(prev => {
       const next = typeof v === 'function' ? v(prev) : v
       localStorage.setItem(LS_TRACKER_COMPACT, String(next))
@@ -2023,10 +2059,12 @@ export default function ApiTrackerView(): JSX.Element {
   // The song-list scroll container - CompactGroupList windows against it.
   const listScrollRef = useRef<HTMLDivElement>(null)
 
-  const [viewMode, setViewModeState] = useState<ViewMode>(() => {
+  const [developerViewMode, setViewModeState] = useState<ViewMode>(() => {
     const stored = localStorage.getItem(LS_TRACKER_VIEW)
     return stored === 'detail' || stored === 'grid' ? stored : 'list'
   })
+  const [fanVisual, setFanVisual] = useState(true)
+  const viewMode = developerMode ? developerViewMode : fanVisual ? 'grid' : 'list'
   const [showFilterMenu, setShowFilterMenu] = useState(false)
 
   const setViewMode = (v: ViewMode): void => { setViewModeState(v); localStorage.setItem(LS_TRACKER_VIEW, v) }
@@ -2811,7 +2849,7 @@ export default function ApiTrackerView(): JSX.Element {
       <div className="px-4 md:px-5 pt-4 md:pt-5 pb-3 shrink-0">
         <h1 className="text-text-primary text-xl font-bold mb-1 md:mb-6">{developerMode ? 'Tracker' : 'Catalogue'}</h1>
         {!developerMode && <p className="catalogue-intro">Find a title, explore an era or compare versions.</p>}
-        <div className="catalogue-sections">
+        {developerMode && <div className="catalogue-sections">
         <button onClick={() => setShowSections((value) => !value)} aria-expanded={showSections || trackerTab !== 'songs' || developerMode}>Catalogue sections <ChevronDown size={14} aria-hidden /></button>
         {(showSections || trackerTab !== 'songs' || developerMode) && (
 
@@ -2833,7 +2871,7 @@ export default function ApiTrackerView(): JSX.Element {
         />
 
         )}
-        </div>
+        </div>}
         {developerMode && trackerTab === 'songs' && <StatsBar stats={stats} />}
         {developerMode && trackerTab === 'songs' && (
           <EraRow
@@ -2850,7 +2888,7 @@ export default function ApiTrackerView(): JSX.Element {
         {trackerTab === 'songs' && <div className="flex flex-col gap-2">
           {/* Search - uses searchall to include producers; field:"value" tokens
               (see trackerSearch.ts) are parsed out and applied client-side. */}
-          <div className="flex items-center gap-1.5 w-full">
+          <div className={`flex items-center gap-1.5 w-full ${developerMode ? '' : 'catalog-showcase-toolbar'}`}>
             <div className={`${GLASS_SEARCH_WRAP} flex-1 min-w-0`}>
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none z-20" />
               <input
@@ -2940,12 +2978,15 @@ export default function ApiTrackerView(): JSX.Element {
               ]}
             />
 
-            </> : versionsEnabled && <button
+            </> : <>
+            <GlassSegmented ariaLabel="Catalogue layout" value={fanVisual ? 'visual' : 'details'}
+              onChange={v => setFanVisual(v === 'visual')} options={[{ value: 'visual', label: 'Visual', icon: <LayoutGrid size={15} /> }, { value: 'details', label: 'Détails', icon: <LayoutList size={15} /> }]} />
+            {versionsEnabled && <button
               className={glassPillButton(compactView)}
               onClick={() => { setCompactView(!compactView); clearExpandedGroups() }}
               aria-pressed={compactView} title="Show songs that have a named version group">
               <Layers size={15} /><span className="text-xs">Version groups</span>
-            </button>}
+            </button>}</>}
             {/* Always laid out (hidden outside the detailed view) so switching
                 layout never shifts the toolbar sideways. */}
             {developerMode && (() => {
@@ -3484,6 +3525,31 @@ export default function ApiTrackerView(): JSX.Element {
           {/* relative so CompactGroupList's offset math is measured against
               this scroller rather than some higher positioned ancestor. */}
           <div ref={listScrollRef} className="relative flex-1 overflow-y-auto px-3 md:px-5 pb-4 pb-player">
+            {!developerMode && fanVisual && <>
+              <h2 className="text-sm font-semibold text-text-primary">Through the eras</h2>
+              <div className="catalog-showcase-eras" role="group" aria-label="Eras">
+                {[...eras].sort((a, b) => eraStart(a.time_frame) - eraStart(b.time_frame)).map(era => {
+                  const eraSongs = sortedSongs.filter(s => s.era?.name === era.name && !!s.path)
+                  const cover = smallCoverUrl(buildImageUrl(ERA_LOOK[era.name]?.art)) ?? eraCovers.get(era.name)
+                  return <div key={era.id} className="catalog-showcase-era">
+                    <div className="catalog-showcase-era-art">
+                      {cover && <img src={cover} alt="" loading="lazy" onError={e => { const fallback = eraCovers.get(era.name); if (fallback && e.currentTarget.src !== fallback) e.currentTarget.src = fallback; else e.currentTarget.hidden = true }} />}
+                      <div className="catalog-showcase-era-play">
+                      <button className={glassPillButton(false)} disabled={!eraSongs.length}
+                        aria-label={`Play ${eraLabel(era.name, fullEraNamesPref)}`} onClick={() => {
+                          const tracks = eraSongs.map(songToTrack)
+                          if (tracks.length) playTrack(tracks[0], tracks, null, 'tracker')
+                        }}><Play size={14} /></button>
+                      </div>
+                    </div>
+                    <button className="text-xs font-medium text-left mt-2 w-full truncate" aria-pressed={eraFilter.has(era.name)}
+                      onClick={() => { toggleEraFilter(era.name); resetSongs() }}>{eraLabel(era.name, fullEraNamesPref)}</button>
+                    <p className="text-xs mt-1 text-text-primary">{era.time_frame?.match(/(?:19|20)\d{2}/)?.[0] ?? 'Undated'}</p>
+                  </div>
+                })}
+              </div>
+              <h2 className="text-sm font-semibold text-text-primary mb-3">Songs</h2>
+            </>}
             {compactView ? loadingCompact ? (
               <div className="flex items-center justify-center h-40 gap-2 text-text-muted">
                 <Loader2 size={18} className="animate-spin" />
@@ -3527,6 +3593,8 @@ export default function ApiTrackerView(): JSX.Element {
                 <Music2 size={32} className="text-text-muted opacity-30" />
                 <p className="text-text-muted text-sm">No songs found</p>
               </div>
+            ) : !developerMode && fanVisual ? (
+              <CatalogShowcase scrollRef={listScrollRef} songs={sortedSongs} onPlay={handlePlay} onInfo={handleInfo} onContextMenu={handleContextMenu} />
             ) : viewMode === 'list' ? (
               <VirtualSongList
                 scrollRef={listScrollRef}

@@ -21,6 +21,7 @@ function render(name, state) {
       if (id.endsWith('/useStore')) return { useStorePick: () => state, useStore: Object.assign((fn) => fn(state), { getState: () => state }) }
       if (id.endsWith('/platform')) return { IS_ELECTRON: true }
       if (id.endsWith('/useSlidingIndicator')) return { useSlidingIndicator: () => ({}) }
+      if (id.endsWith('/useLiquidLens')) return { useLiquidLens: () => {} }
       if (id.endsWith('/useNotificationHistory')) return { useUnreadNotificationCount: () => 0 }
       if (id.endsWith('/chatAccess')) return { hasChatAccess: () => false }
       if (id.endsWith('/userApi')) return { showStaffProfile: () => false }

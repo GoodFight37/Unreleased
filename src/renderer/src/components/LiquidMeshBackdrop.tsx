@@ -4,14 +4,17 @@ import { extractCoverPalette, fetchCoverBitmap } from '../lib/adaptivePalette'
 import { ERA_PALETTES } from '../lib/eraPalettes'
 import { smallCoverUrl } from '../lib/juicewrldApi'
 import { paletteFromAccent, parseColor } from '../lib/viz/palette'
+import { resolveEraAtmosphere, type EraAtmosphereProfile } from '../lib/wrldAtmospheres'
 import type { RGB } from '../lib/viz/types'
 
 interface Props {
   artUrl: string | null
   eraAsset: string | null
+  atmosphere?: EraAtmosphereProfile
   isDark: boolean
   playing: boolean
   animated: boolean
+  audioReactive?: boolean
 }
 
 const GRID = 64
@@ -125,6 +128,10 @@ uniform float u_hasCurr;
 uniform float u_morph;
 uniform float u_dark;
 uniform float u_energy;
+uniform float u_energyPush;
+uniform float u_grain;
+uniform float u_warmth;
+uniform float u_entry;
 uniform vec3 u_c0;
 uniform vec3 u_c1;
 uniform vec3 u_c2;
@@ -141,22 +148,34 @@ void main() {
   vec3 currCol = u_hasCurr > 0.5 ? texture(u_currTex, v_uv).rgb : paletteField(v_uv);
   vec3 col = mix(prevCol, currCol, u_morph);
 
+  // Smooth stage entry: bloom outward from the cover's dominant tone
+  if (u_entry < 0.999) {
+    float r = length(v_screen - 0.5);
+    float mask = smoothstep(0.0, 0.85, u_entry * 1.35 - r * 0.45);
+    col = mix(u_c0 * (u_dark > 0.5 ? 0.42 : 0.88), col, mask);
+  }
+
+  // Era temperature tint
+  col.r = clamp(col.r + u_warmth * 0.06, 0.0, 1.0);
+  col.b = clamp(col.b - u_warmth * 0.05, 0.0, 1.0);
+
   // Preserve AMLL hue/chroma fidelity: upper field blooms with vibrant cover hues,
   // while the lower text/controls third naturally settles toward darker saturated troughs
   // so white typography holds >= 4.5:1 contrast without a flat black overlay.
+  float audioLift = u_energy * u_energyPush;
   if (u_dark > 0.5) {
     float edge = smoothstep(0.45, 1.15, length((v_screen - 0.5) * vec2(0.82, 1.0)));
     float lowerZone = 1.0 - smoothstep(0.05, 0.72, v_screen.y);
     float textCradle = mix(1.0, 0.64, lowerZone) * (1.0 - edge * 0.20);
     float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
-    vec3 vivid = mix(vec3(luma), col, 1.12 + u_energy * 0.10);
-    col = clamp(vivid * textCradle, vec3(0.03), vec3(0.95));
+    vec3 vivid = mix(vec3(luma), col, 1.12 + audioLift * 0.45);
+    col = clamp(vivid * textCradle * (1.0 + audioLift * 0.16), vec3(0.03), vec3(0.95));
   } else {
-    col = mix(vec3(0.92, 0.91, 0.94), col, 0.68);
+    col = mix(vec3(0.92, 0.91, 0.94), col, clamp(0.68 + audioLift * 0.12, 0.60, 0.86));
   }
 
   float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-  col = clamp(col + (ign - 0.5) / 255.0, 0.0, 1.0);
+  col = clamp(col + (ign - 0.5) * (1.0 / 255.0 + u_grain), 0.0, 1.0);
   fragColor = vec4(col, 1.0);
 }
 `
@@ -239,9 +258,13 @@ function fillControlPoints(
   beatEnv: number,
   cornerPairIdx: number,
   uvShift: number,
+  calmness: number,
+  energyPush: number,
 ): void {
   const pair = CORNER_PAIRS[cornerPairIdx % CORNER_PAIRS.length]
   const angle = phase * 0.42 + seed * Math.PI * 2
+  const driftScale = 1 - calmness * 0.45
+  const beatPush = beatEnv * energyPush
   for (let j = 0; j < 4; j++) {
     for (let i = 0; i < 4; i++) {
       const idx = j * 4 + i
@@ -255,20 +278,23 @@ function fillControlPoints(
       let py = by
       if (isInner) {
         const p = phase * 0.58 + seed * 6.28 + idx * 1.17
-        px += Math.cos(p) * 0.34 + Math.sin(p * 0.63 + j) * 0.14
-        py += Math.sin(p * 0.87) * 0.34 + Math.cos(p * 0.71 + i) * 0.14
+        px += (Math.cos(p) * 0.34 + Math.sin(p * 0.63 + j) * 0.14) * driftScale
+        py += (Math.sin(p * 0.87) * 0.34 + Math.cos(p * 0.71 + i) * 0.14) * driftScale
+        // Single musical gesture tied to u_energy: inner wave breathes outward on beat
+        px += (i === 1 ? -1 : 1) * beatPush * 0.24
+        py += (j === 1 ? -1 : 1) * beatPush * 0.24
       } else if (!isCorner) {
         const p = phase * 0.35 + seed * 4.1 + idx * 0.9
-        px += Math.sin(p) * 0.14
-        py += Math.cos(p * 0.9) * 0.14
+        px += Math.sin(p) * 0.14 * driftScale
+        py += Math.cos(p * 0.9) * 0.14 * driftScale
       }
 
       if (idx === pair[0] || idx === pair[1]) {
-        // Gentle corner lobe swell (~4-6%) on beat without flashing brightness
+        // Gentle corner lobe swell scaled by era audio sensitivity
         const signX = i === 0 ? -1 : 1
         const signY = j === 0 ? -1 : 1
-        px -= signX * beatEnv * 0.22
-        py -= signY * beatEnv * 0.22
+        px -= signX * beatPush * 0.68
+        py -= signY * beatPush * 0.68
       }
 
       outPos[o] = px
@@ -278,7 +304,7 @@ function fillControlPoints(
       const uBase = (i / 3) * 0.82 + 0.09
       const vBase = (j / 3) * 0.82 + 0.09
       const swirlA = angle + i * 0.85 + j * 1.15 + uvShift
-      const amp = isInner ? 0.14 : 0.09
+      const amp = (isInner ? 0.14 : 0.09) * driftScale + beatPush * 0.05
       outUv[o] = uBase + Math.cos(swirlA) * amp
       outUv[o + 1] = vBase + Math.sin(swirlA * 0.83) * amp
     }
@@ -315,22 +341,72 @@ function CssFallbackMesh({ colors, isDark, animated }: { colors: [number, number
  *    with 2-corner kick expansion from the shared audio meter and 1.1s track cross-morph.
  * Demand-driven: pauses rAF automatically when hidden, in Game mode, or after settling on pause.
  */
+function LndButterflies({ isDark }: { isDark: boolean }): JSX.Element {
+  const b0 = useRef<SVGSVGElement>(null)
+  const b1 = useRef<SVGSVGElement>(null)
+  const b2 = useRef<SVGSVGElement>(null)
+
+  useEffect(() => {
+    const specs: Array<[React.RefObject<SVGSVGElement | null>, Keyframe[], number, number]> = [
+      [b0, [
+        { transform: 'translate3d(0px, 0px, 0) rotate(-6deg) scale(1)', opacity: 0.18 },
+        { transform: 'translate3d(38px, -28px, 0) rotate(5deg) scale(1.06)', opacity: 0.34 },
+        { transform: 'translate3d(-16px, -46px, 0) rotate(-4deg) scale(0.96)', opacity: 0.22 },
+        { transform: 'translate3d(0px, 0px, 0) rotate(-6deg) scale(1)', opacity: 0.18 },
+      ], 26000, 0],
+      [b1, [
+        { transform: 'translate3d(0px, 0px, 0) rotate(8deg) scale(0.92)', opacity: 0.14 },
+        { transform: 'translate3d(-44px, -22px, 0) rotate(-5deg) scale(1)', opacity: 0.28 },
+        { transform: 'translate3d(20px, -40px, 0) rotate(6deg) scale(0.95)', opacity: 0.2 },
+        { transform: 'translate3d(0px, 0px, 0) rotate(8deg) scale(0.92)', opacity: 0.14 },
+      ], 31000, -9000],
+      [b2, [
+        { transform: 'translate3d(0px, 0px, 0) rotate(-4deg) scale(0.88)', opacity: 0.12 },
+        { transform: 'translate3d(26px, 24px, 0) rotate(7deg) scale(0.96)', opacity: 0.24 },
+        { transform: 'translate3d(-22px, 10px, 0) rotate(-7deg) scale(0.9)', opacity: 0.16 },
+        { transform: 'translate3d(0px, 0px, 0) rotate(-4deg) scale(0.88)', opacity: 0.12 },
+      ], 35000, -17000],
+    ]
+    const anims = specs
+      .map(([ref, frames, duration, delay]) =>
+        ref.current?.animate(frames, { duration, delay, iterations: Infinity, easing: 'ease-in-out' }))
+      .filter((a): a is Animation => Boolean(a))
+    return () => { anims.forEach((a) => a.cancel()) }
+  }, [])
+
+  const fill = isDark ? 'rgba(134, 212, 255, 0.72)' : 'rgba(65, 130, 215, 0.56)'
+  const wing = (
+    <path d="M12 12 C9 5, 2 4, 3 10 C3 13, 8 14, 11 13 C7 15, 4 19, 7 21 C10 22, 11 17, 12 14 C13 17, 14 22, 17 21 C20 19, 17 15, 13 13 C16 14, 21 13, 21 10 C22 4, 15 5, 12 12 Z" />
+  )
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      <svg ref={b0} viewBox="0 0 24 24" className="absolute w-7 h-7" style={{ left: '16%', top: '24%', fill }}>{wing}</svg>
+      <svg ref={b1} viewBox="0 0 24 24" className="absolute w-5 h-5" style={{ right: '18%', top: '34%', fill }}>{wing}</svg>
+      <svg ref={b2} viewBox="0 0 24 24" className="absolute w-6 h-6" style={{ left: '72%', bottom: '24%', fill }}>{wing}</svg>
+    </div>
+  )
+}
+
 export default function LiquidMeshBackdrop({
   artUrl,
   eraAsset,
+  atmosphere,
   isDark,
   playing,
   animated,
+  audioReactive = true,
 }: Props): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const kickLoopRef = useRef<(() => void) | null>(null)
   const [webglFailed, setWebglFailed] = useState(false)
   const [fallbackPalette, setFallbackPalette] = useState<[number, number, number][]>(() => accentPalette())
+  const resolvedAtm = atmosphere ?? resolveEraAtmosphere(null, eraAsset)
 
   const stateRef = useRef({
     isDark,
     playing,
     animated,
+    atmosphere: resolvedAtm,
     target: accentPalette(),
     current: accentPalette(),
     pendingBitmap: null as ImageBitmap | null,
@@ -338,6 +414,7 @@ export default function LiquidMeshBackdrop({
     seed: 0.25,
     prevSeed: 0.25,
     morph: 1,
+    entryStartMs: performance.now(),
     lastTrackChangeMs: performance.now(),
     motionSpeed: playing ? 1 : 0,
   })
@@ -345,6 +422,7 @@ export default function LiquidMeshBackdrop({
   stateRef.current.isDark = isDark
   stateRef.current.playing = playing
   stateRef.current.animated = animated
+  stateRef.current.atmosphere = resolvedAtm
 
   // Load cover bitmap via CORS-safe fetchImageBlob + extract palette fallback
   useEffect(() => {
@@ -513,6 +591,10 @@ export default function LiquidMeshBackdrop({
     const uMorph = gl.getUniformLocation(meshProg, 'u_morph')
     const uDark = gl.getUniformLocation(meshProg, 'u_dark')
     const uEnergy = gl.getUniformLocation(meshProg, 'u_energy')
+    const uEnergyPush = gl.getUniformLocation(meshProg, 'u_energyPush')
+    const uGrain = gl.getUniformLocation(meshProg, 'u_grain')
+    const uWarmth = gl.getUniformLocation(meshProg, 'u_warmth')
+    const uEntry = gl.getUniformLocation(meshProg, 'u_entry')
     const uCols = [0, 1, 2, 3].map((i) => gl.getUniformLocation(meshProg, `u_c${i}`))
 
     const ctrlPos = new Float32Array(32)
@@ -565,7 +647,7 @@ export default function LiquidMeshBackdrop({
     let beatEnv = 0
     let cornerPairIdx = 0
     let lastBeatMs = 0
-    const unlistenMeter = listenToMeter((m) => {
+    const unlistenMeter = audioReactive ? listenToMeter((m) => {
       const st = stateRef.current
       if (!st.playing || !st.animated) {
         rawPunch = 0
@@ -573,7 +655,7 @@ export default function LiquidMeshBackdrop({
       }
       const normalized = Math.min(1, Math.max(0, m.punch > 1 ? (m.punch - 1) * 1.45 : m.punch * 0.2))
       rawPunch = normalized
-    })
+    }) : () => {}
 
     let phase = 0
     let last = performance.now()
@@ -639,17 +721,20 @@ export default function LiquidMeshBackdrop({
         lastBeatMs = now
       }
 
-      const targetSpeed = st.animated ? (st.playing ? 1 : 0) : 0
+      const atm = st.atmosphere
+      const targetSpeed = st.animated ? (st.playing ? atm.speed : 0) : 0
       st.motionSpeed += (targetSpeed - st.motionSpeed) * (1 - Math.exp(-dt * (st.playing ? 5 : 2.2)))
       if (st.motionSpeed < 0.005 && !st.playing) st.motionSpeed = 0
 
       if (st.animated) {
-        phase += dt * (0.28 * st.motionSpeed + beatEnv * 0.22)
+        phase += dt * (0.28 * st.motionSpeed + beatEnv * atm.energyPush * 0.65)
       }
 
       const morphElapsed = now - st.lastTrackChangeMs
       st.morph = st.animated ? Math.min(1, morphElapsed / MORPH_MS) : 1
       const smoothMorph = st.morph * st.morph * (3 - 2 * st.morph)
+      const entryProgress = st.animated ? Math.min(1, (now - st.entryStartMs) / 680) : 1
+      const smoothEntry = entryProgress * entryProgress * (3 - 2 * entryProgress)
 
       const lerpK = st.animated ? 1 - Math.exp(-dt * 3.0) : 1
       for (let i = 0; i < 4; i++) {
@@ -658,10 +743,10 @@ export default function LiquidMeshBackdrop({
         }
       }
 
-      fillControlPoints(ctrlPos, ctrlUv, phase, st.seed, beatEnv, cornerPairIdx, 0)
-      fillControlPoints(ctrlPos, ctrlUvAlt, phase, st.prevSeed, beatEnv, cornerPairIdx, 0.35)
+      fillControlPoints(ctrlPos, ctrlUv, phase, st.seed, beatEnv, cornerPairIdx, 0, atm.calmness, atm.energyPush)
+      fillControlPoints(ctrlPos, ctrlUvAlt, phase, st.prevSeed, beatEnv, cornerPairIdx, 0.35, atm.calmness, atm.energyPush)
       // Re-apply primary control positions after alt UV fill
-      fillControlPoints(ctrlPos, ctrlUv, phase, st.seed, beatEnv, cornerPairIdx, 0)
+      fillControlPoints(ctrlPos, ctrlUv, phase, st.seed, beatEnv, cornerPairIdx, 0, atm.calmness, atm.energyPush)
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
       gl.viewport(0, 0, canvas.width, canvas.height)
@@ -684,6 +769,10 @@ export default function LiquidMeshBackdrop({
       gl.uniform1f(uMorph, smoothMorph)
       gl.uniform1f(uDark, st.isDark ? 1 : 0)
       gl.uniform1f(uEnergy, beatEnv)
+      gl.uniform1f(uEnergyPush, atm.energyPush)
+      gl.uniform1f(uGrain, atm.grain)
+      gl.uniform1f(uWarmth, atm.warmth)
+      gl.uniform1f(uEntry, smoothEntry)
       for (let i = 0; i < 4; i++) {
         const c = st.current[i]
         gl.uniform3f(uCols[i], c[0], c[1], c[2])
@@ -696,7 +785,8 @@ export default function LiquidMeshBackdrop({
     const shouldKeepRunning = (): boolean => {
       const st = stateRef.current
       if (document.hidden || !st.animated) return false
-      return st.playing || st.morph < 0.999 || st.motionSpeed > 0.01 || beatEnv > 0.005
+      const entryOpen = performance.now() - st.entryStartMs < 720
+      return st.playing || st.morph < 0.999 || entryOpen || st.motionSpeed > 0.01 || beatEnv > 0.005
     }
 
     const loop = (now: number): void => {
@@ -756,15 +846,16 @@ export default function LiquidMeshBackdrop({
       gl.getExtension('WEBGL_lose_context')?.loseContext()
       host.replaceChildren()
     }
-  }, [])
+  }, [audioReactive])
 
   useEffect(() => {
     kickLoopRef.current?.()
-  }, [animated, playing, isDark])
+  }, [animated, playing, isDark, resolvedAtm.id])
 
   return (
     <div ref={hostRef} className="absolute inset-0 pointer-events-none" aria-hidden="true">
       {webglFailed && <CssFallbackMesh colors={fallbackPalette} isDark={isDark} animated={animated && playing} />}
+      {resolvedAtm.butterflies && animated && <LndButterflies isDark={isDark} />}
     </div>
   )
 }

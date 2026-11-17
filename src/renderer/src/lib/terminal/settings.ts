@@ -15,6 +15,7 @@ import cdnService from '../cdn'
 import { useSandboxStore } from '../../components/Modal'
 import { useChatStore } from '../../store/chatStore'
 import { useVizStore, wrldEdgeLook, type VizCycle } from '../../store/vizStore'
+import type { MusicVideoChoice } from '../musicVideos'
 import { VISUALIZERS, type Boost, type Quality } from '../viz'
 import { LOOKS } from '../../desktop/light/looks'
 import { NOTIFICATION_SOUNDS, getNotificationSoundId, playNotificationSound, setNotificationSoundId } from '../notifications'
@@ -97,6 +98,7 @@ const SETTINGS: Setting[] = [
   color('lyrics-color-inactive', 'Colour of the other lines (or auto)', () => st().lyricsColorInactive, (v) => st().setLyricsColorInactive(v)),
   bool('gradients', 'Accent gradients on the shell', () => st().gradientsEnabled, (v) => st().setGradientsEnabled(v)),
   bool('surface-gradients', 'Gradients on small surfaces too', () => st().surfaceGradientsEnabled, (v) => st().setSurfaceGradientsEnabled(v)),
+  bool('glass-refraction', 'Player bar and pill nav bend what is behind their edges, like glass (Chromium only)', () => st().glassRefraction, (v) => st().setGlassRefraction(v)),
   bool('wrld-theme-bg', 'WRLD tab uses the theme instead of the cover', () => st().wrldThemeBackground, (v) => st().setWrldThemeBackground(v)),
   bool('adaptive-colors', 'Tint the app and glass from the playing cover', () => st().adaptiveColors, (v) => st().setAdaptiveColors(v)),
   bool('full-era-names', 'Show full era names', () => st().fullEraNames, (v) => st().setFullEraNames(v)),
@@ -146,6 +148,7 @@ const SETTINGS: Setting[] = [
   choice('viz-quality','Visualizer quality', pills('low', 'medium', 'high', 'ultra'), () => vz().vizQuality, (v) => vz().setVizQuality(v as Quality)),
   choice('viz-boost', 'Visualizer input boost', pills('off', 'auto', '2', '4', '8'), () => vz().vizBoost, (v) => vz().setVizBoost(v as Boost)),
   choice('viz-cycle', 'Switch visualizer automatically', pills('off', 'track', 'album'), () => vz().vizCycle, (v) => vz().setVizCycle(v as VizCycle)),
+  choice('wrld-videos', 'A released song’s video from Files in place of the WRLD visualizer: off, music videos, or visualizers and lyric videos too', pills('off', 'music', 'all'), () => vz().wrldVideos, (v) => vz().setWrldVideos(v as MusicVideoChoice)),
   bool('wrld-widgets', 'WRLD shows the desktop player, playlist and clock instead of its own player', () => vz().wrldWidgets, (v) => vz().setWrldWidgets(v)),
   bool('wrld-fm', 'The 999 FM card (votes, suggestions, chat) in WRLD’s widgets while 999 FM is on, or opened without it', () => vz().wrldFm, (v) => vz().setWrldFm(v)),
   bool('wrld-fm-sound', 'Play the notification sound for new 999 FM chat lines and votes in WRLD’s 999 FM card', () => vz().wrldFmSound, (v) => vz().setWrldFmSound(v)),

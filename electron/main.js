@@ -377,13 +377,14 @@ function downloadFile(url, dest, onProgress, headers, signal) {
   })
 }
 
-// Fork builds must never install upstream releases, including beta and manual paths.
-const FORK_UPDATES_DISABLED = true
+// Gated beta installers belong to the original app, never to this fork.
+const UPSTREAM_BETA_DISABLED = true
+const STABLE_UPDATES_ENABLED = app.isPackaged && !isUiVerify && !isSmokeTest
 
 // ── Auto-updater setup ────────────────────────────────────────────────────────
 autoUpdater.logger = { info: log, warn: log, error: log, debug: () => {} }
-autoUpdater.autoDownload = !FORK_UPDATES_DISABLED && appSettings.autoDownload
-autoUpdater.autoInstallOnAppQuit = !FORK_UPDATES_DISABLED
+autoUpdater.autoDownload = STABLE_UPDATES_ENABLED && appSettings.autoDownload
+autoUpdater.autoInstallOnAppQuit = STABLE_UPDATES_ENABLED
 
 // Startup-only checking meant a user who left the app running (or asleep on a
 // laptop) for days never saw an update until their next full relaunch. These
@@ -398,7 +399,7 @@ let pendingUpdate = null
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
 async function runUpdateCheck(reason) {
-  if (FORK_UPDATES_DISABLED || isDev || updateCheckInProgress || updateDownloadedPending) return
+  if (!STABLE_UPDATES_ENABLED || isDev || updateCheckInProgress || updateDownloadedPending) return
   log(`Checking for updates (${reason})...`)
   updateCheckInProgress = true
   try {
@@ -423,12 +424,12 @@ const BETA_API_BASE = 'https://juicewrldapi.com/beta'
 const betaMarkerPath = path.join(app.getPath('userData'), 'beta-access')
 
 function readBetaCode() {
+  if (UPSTREAM_BETA_DISABLED) return null
   try { return fs.readFileSync(betaMarkerPath, 'utf-8').trim() || null } catch { return null }
 }
 
-// Stable feed's GitHub repo — see scripts/python/release.py, which publishes
-// every stable release here.
-const UPDATE_REPO = { owner: 'Juice-WRLD-API', repo: 'Unreleased' }
+// Stable releases of this fork, published deliberately by build-windows.yml.
+const UPDATE_REPO = { owner: 'GoodFight37', repo: 'Unreleased' }
 
 // electron-updater always follows the stable (GitHub) feed. Betas are not a
 // feed at all: with a code on disk, a check lists /beta/versions, and if the
@@ -437,8 +438,7 @@ const UPDATE_REPO = { owner: 'Juice-WRLD-API', repo: 'Unreleased' }
 // that check uses, so it takes effect immediately.
 let activeBetaCode = null
 function applyUpdateFeed(code) {
-  activeBetaCode = code || null
-  if (FORK_UPDATES_DISABLED) return
+  activeBetaCode = UPSTREAM_BETA_DISABLED ? null : code || null
   const { owner, repo } = UPDATE_REPO
   autoUpdater.setFeedURL({ provider: 'github', owner, repo })
   autoUpdater.requestHeaders = null
@@ -508,6 +508,7 @@ let betaInstallerPath = null
 // "no beta update" and the stable check carries on. Windows only: the beta
 // builds are NSIS installers. `force` ignores the auto-download setting.
 async function checkBetaUpdate({ force = false } = {}) {
+  if (UPSTREAM_BETA_DISABLED) return false
   const code = activeBetaCode
   if (!code || process.platform !== 'win32') return false
   let list
@@ -1020,6 +1021,9 @@ function sendTrayCommand(cmd) {
   mainWindow?.webContents.send('tray-command', cmd)
 }
 
+// Like / previous / play-pause / next under the taskbar preview (Windows).
+const thumbar = require('./thumbar').createThumbar({ getWindow: () => mainWindow, send: sendTrayCommand, log })
+
 function buildTrayMenu() {
   const { hasTrack, isPlaying, title, artist, liked, radioFmActive } = trayPlayback
   const canSkip = hasTrack && !radioFmActive
@@ -1151,6 +1155,7 @@ ipcMain.on('tray-playback-state', (_, state) => {
     radioFmActive: !!state.radioFmActive,
   }
   updateTray()
+  thumbar.update(trayPlayback)
   updateMainWindowTitle()
 })
 
@@ -1304,6 +1309,7 @@ function createWindow() {
   mainWindow.on('page-title-updated', (e) => e.preventDefault())
 
   rememberSize(mainWindow, 'main')
+  thumbar.attach(mainWindow)
 
   mainWindow.once('ready-to-show', () => {
     // Maximize before showing so the window doesn't visibly snap open at its
@@ -1480,7 +1486,6 @@ function trackDownload(_event, item) {
 // ── IPC: window controls ──────────────────────────────────────────────────────
 
 ipcMain.handle('force-update', async () => {
-  if (FORK_UPDATES_DISABLED) throw new Error('Updates are disabled in this fork build')
   const https = require('https')
   log('Force update requested')
 
@@ -1571,7 +1576,6 @@ ipcMain.handle('force-update', async () => {
 })
 
 ipcMain.handle('check-for-updates', async () => {
-  if (FORK_UPDATES_DISABLED) throw new Error('Updates are disabled in this fork build')
   log('Manual update check triggered')
   if (await checkBetaUpdate()) return
   if (process.platform === 'darwin') {
@@ -1585,7 +1589,6 @@ ipcMain.handle('check-for-updates', async () => {
   return autoUpdater.checkForUpdatesAndNotify()
 })
 ipcMain.handle('install-update', () => {
-  if (FORK_UPDATES_DISABLED) throw new Error('Updates are disabled in this fork build')
   log('Manual install-update triggered')
   installUpdateAndRestart()
 })
@@ -2045,31 +2048,10 @@ ipcMain.handle('show-item-in-folder', (_, p) => {
   shell.showItemInFolder(p)
 })
 
-// The small web-installer stub ships inside the app (see package.json
-// win.extraResources) as an emergency repair/reinstall tool — it works even
-// if the app itself is broken, since it's a standalone .exe next to the
-// install, not something the app has to run. Prefer that local copy (no
-// download needed); fall back to the GitHub download link when it's missing
-// (dev builds or an old install predating this).
-// macOS/Linux have no bundled repair stub (nothing analogous to the NSIS
-// installer), so they always fall back to the releases page.
+// Repair/reinstall downloads must come from this fork's releases too.
 ipcMain.handle('open-online-installer', async () => {
-  if (FORK_UPDATES_DISABLED) throw new Error('The upstream installer is disabled in this fork build')
   const { owner, repo } = UPDATE_REPO
-  if (process.platform === 'win32') {
-    const bundled = app.isPackaged ? path.join(process.resourcesPath, 'Unreleased-Setup.exe') : null
-    if (bundled && fs.existsSync(bundled)) {
-      const err = await shell.openPath(bundled)
-      if (!err) return { source: 'bundled' }
-      log('Bundled installer failed to launch, falling back to web:', err)
-    }
-    shell.openExternal(`https://github.com/${owner}/${repo}/releases/latest/download/Unreleased-Setup.exe`)
-    return { source: 'web' }
-  }
-  // Unlike the Windows .exe, mac/Linux asset filenames are versioned (and mac
-  // also varies by arch), so there's no fixed "latest/download/<name>" URL to
-  // link straight to — send the user to the releases page instead.
-  shell.openExternal(`https://github.com/${owner}/${repo}/releases/latest`)
+  await shell.openExternal(`https://github.com/${owner}/${repo}/releases/latest`)
   return { source: 'web' }
 })
 
@@ -2135,7 +2117,7 @@ ipcMain.handle('set-app-setting', (_, key, value) => {
   // to their built-in default sizes instead of silently keeping the old ones.
   if (key === 'rememberWindowSizes' && !value) appSettings.windowSizes = {}
   saveSettings()
-  if (key === 'autoDownload') autoUpdater.autoDownload = !FORK_UPDATES_DISABLED && value
+  if (key === 'autoDownload') autoUpdater.autoDownload = STABLE_UPDATES_ENABLED && value
   if (key === 'discordRpcEnabled') discordRpc.setEnabled(value)
   if (key === 'discordRpcLabel') discordRpc.refreshLabel(value)
   if (key === 'windowTitleNowPlaying') updateMainWindowTitle()
@@ -2169,7 +2151,7 @@ function checkBetaCode(code) {
 ipcMain.handle('beta-get-status', () => !!readBetaCode())
 
 ipcMain.handle('beta-join', async (_, code) => {
-  if (FORK_UPDATES_DISABLED) return 'unavailable'
+  if (UPSTREAM_BETA_DISABLED) return 'unavailable'
   const trimmed = String(code ?? '').trim()
   if (!trimmed) return false
   try {
@@ -2231,7 +2213,7 @@ ipcMain.handle('beta-leave', () => {
   try { fs.rmSync(betaMarkerPath, { force: true }) } catch {}
   applyUpdateFeed(null)
   log('Left beta channel')
-  if (!FORK_UPDATES_DISABLED && !isDev && process.platform === 'win32' && app.getVersion().includes('-')) installLatestStable()
+  if (!isDev && process.platform === 'win32' && app.getVersion().includes('-')) installLatestStable()
   return true
 })
 
@@ -4388,7 +4370,7 @@ function closeUpdatingWindow() {
 // Resolves when the main window may open: true when this launch checked for
 // updates itself, false when it skipped the check.
 async function updateBeforeLaunch() {
-  if (FORK_UPDATES_DISABLED || isDev || isSmokeTest || !appSettings.autoDownload) return false
+  if (!STABLE_UPDATES_ENABLED || isDev || isSmokeTest || !appSettings.autoDownload) return false
   // A Mac update is installed by hand from its DMG (checkMacUpdate), so don't
   // hold the launch for it: the startup check runs once the app is open.
   if (process.platform === 'darwin') return false
@@ -4969,7 +4951,6 @@ function recoverFromStuckInstall() {
 }
 
 async function installUpdateAndRestart() {
-  if (FORK_UPDATES_DISABLED) return
   // Startup install, the "Restart now" prompt and the renderer's install
   // button can race; a second handoff would start a second installer.
   if (installingUpdate) return

@@ -393,6 +393,10 @@ test('desktopBridge propagates radioFmPaused to widget state and guards FM seek/
       '../hooks/useWrldCore': { toggleRadioFm: () => {} },
       '../components/SongContextMenu': { downloadTrack: () => {}, filesLocation: () => null, openInFiles: () => {} },
       '../desktop/widgetMenu': { widgetMenu: () => ({}) },
+      '../store/vizStore': { useVizStore: {
+        getState: () => ({ wrldVideoNow: null, wrldVideoPicks: {} }),
+        subscribe: () => () => {},
+      } },
     },
     {
       window: { dispatchEvent: () => {} },

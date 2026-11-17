@@ -1,9 +1,29 @@
 # Validation and audit baseline
 
-Snapshot: November 17, 2026, branch `liquid-glass`. The two earlier external
+Snapshot: November 17, 2026, branch `app`, Glass 2.6.50. The two earlier external
 audits inspected `bab31378`, before these corrections. Review the current branch
 or pin its commit when producing a new audit. This is a source snapshot, not an
 installer release or a claim that every feature has been tested.
+
+## Current integration checks
+
+Upstream changes through `fbfecbb8` (v2.6.51) are ported into this fork's
+independent 2.6.50 version. The existing WebGPU compositor remains primary;
+SVG refraction is a fallback. WRLD music videos default to Off.
+
+- Renderer build and Electron type checking pass.
+- Script tests: 150 passed. Electron tests: 132 passed.
+- UI verification: no page errors or blocking failures. Motion audit: exit 0,
+  539 observations; existing long/loading transitions are still reported.
+- The Traveling check uses its actual catalogue note, hides an absent note
+  and finds no pixel character in the page. Both rejected character components
+  and their styles/assets are absent from the source tree.
+- Release identity checks validate this fork's GitHub feed, stable app id,
+  matching package/lock versions and release tag. Workflow YAML parses.
+- Terminal coverage remains at its pre-integration baseline: 496/522 request
+  functions reachable, with 26 existing gaps. New commands add no gaps.
+- A Windows installer and an installed-app update round trip are separate
+  checks. No release/tag is published as part of this source integration.
 
 ## Corrections in this snapshot
 
@@ -13,8 +33,8 @@ installer release or a claim that every feature has been tested.
 - Normal startup opens Discover. Collection opens playlists, with direct access
   to liked songs, albums and local files; returning from these stays in Collection.
 - Discover, Catalogue and Collection share an ambient backdrop. Navigation has
-  no brand badge. The selected track's catalogue credits, original date labels and
-  notes appear beside its artwork, with a full-details action. Missing metadata
+  no brand badge. Discover uses a slow cover-colored mesh and shows the selected
+  track's actual catalogue note beside its artwork. Missing metadata
   stays missing. Loading, empty and failed catalogue states offer a useful action.
 - Search, shortcut labels and navigation use consistent listening-page names,
   retaining original search aliases and saved shortcut identifiers. Terminal,
@@ -27,14 +47,14 @@ installer release or a claim that every feature has been tested.
   placeholders do not count as playable bulk selections or preloads.
 - Notifications link to News. Notifications and downloads use the same neutral
   translucent material and respect reduced transparency.
-- Desktop CI includes `liquid-glass`; the obsolete arena-branch packaging trigger
+- Desktop CI includes `app`; the obsolete arena-branch packaging trigger
   is removed. The installer workflow remains available manually.
 - Optional yt-dlp installation resolves one release tag for both binary and
   checksum, verifies the exact asset before replacement, and preserves reuse and
   explicit updates. Third-party notices are included as packaging resources.
   Product name is Unreleased Glass; its application identifier remains stable.
 
-## Local results
+## Earlier local results (before this integration)
 
 | Check | Observed result |
 | --- | --- |

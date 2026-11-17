@@ -1,23 +1,30 @@
-import { useEffect, useMemo, useState, CSSProperties, ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, CSSProperties, ReactNode } from 'react'
 import { ModalOverlay, LockToggle } from './Modal'
 import {
   X, Music2, Pencil, Flag,
   Clock, Hash, MicVocal, Music, Wrench, FileText, Piano, MapPin,
   Calendar, CalendarClock, CalendarDays, Droplets, Gauge, Layers,
   GitBranch, Info, StickyNote, Quote, Copy, Download, Loader2, LucideIcon, PictureInPicture2, Minimize2,
-  Activity, Music4, ImagePlus
+  Activity, Music4, ImagePlus, Clapperboard, ExternalLink, Play, FolderOpen, Star
 } from 'lucide-react'
-import { useStore, useStorePick } from '../store/useStore'
+import { useStore, useStorePick, IS_FLOAT_WINDOW } from '../store/useStore'
 import { useDragToDismiss } from '../hooks/useDragToDismiss'
 import { useCanEdit } from '../hooks/useChannelRoles'
-import { attachToMainWindow } from '../lib/windowSync'
+import { attachToMainWindow, sendPlayerCommand } from '../lib/windowSync'
 import { JWApiSong, CATEGORY_LABELS, CATEGORY_COLORS, buildImageUrl, parseDuration, getSongById, resolvePrefCoverUrl } from '../lib/juicewrldApi'
+import { isReleasedPath, loadMusicVideoIndex, videoFromPath, videosFor, VIDEO_KIND_LABEL, type MusicVideo } from '../lib/musicVideos'
+import { clearMusicVideoDefault, getMusicVideoDefaults, onMusicVideoDefaultsChange, setMusicVideoDefault } from '../lib/musicVideoDefaultsApi'
+import { openInFiles } from './SongContextMenu'
+import MediaLightbox from './MediaLightbox'
 import { versionsEnabled } from '../lib/versionsApi'
 import { useVersionEntries } from '../hooks/useSongVersions'
 import { formatDuration, displayDate } from '../lib/format'
 import { copyCoverImage, saveCoverImage } from '../lib/coverImage'
 import SongPrefsSection from './SongPrefsSection'
 import { ProgressiveCover } from './ProgressiveCover'
+import { loadSongFootage, footageBrowserOnly, type FootageMatch } from '../lib/footageIndex'
+import { buildStreamUrl } from '../lib/juicewrldApi'
+import { glassPillButton } from './glassControls'
 import { showAppToast } from '../lib/appToast'
 
 // Shared with the Tracker: -700 shades on light themes, -400 on dark (lib/juicewrldApi).
@@ -62,6 +69,195 @@ function SubVal({ label, value }: { label: string; value: string | null | undefi
     <p className="text-text-primary text-xs leading-relaxed whitespace-pre-wrap">
       <span className="text-text-muted">{label}: </span>{value}
     </p>
+  )
+}
+
+let activeFootageVideo: HTMLVideoElement | null = null
+function releaseFootage(video: HTMLVideoElement): void {
+  video.pause()
+  video.removeAttribute('src')
+  video.load()
+  if (activeFootageVideo === video) activeFootageVideo = null
+}
+
+function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
+  const channel = useStore(s => s.activeChannel) ?? ''
+  const [approximate, setApproximate] = useState(false)
+  const [matches, setMatches] = useState<FootageMatch[] | null>([])
+  const [loading, setLoading] = useState(true)
+  const [retry, setRetry] = useState(0)
+  const [active, setActive] = useState<FootageMatch | null>(null)
+  const [browserOnly, setBrowserOnly] = useState<Set<string>>(new Set())
+  const videoRef = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    let stale = false
+    setLoading(true)
+    setActive(null)
+    setMatches([])
+    loadSongFootage(song.name, channel, approximate).then(result => {
+      if (!stale) { setMatches(result); setLoading(false) }
+    }).catch(() => { if (!stale) { setMatches(null); setLoading(false) } })
+    return () => { stale = true }
+  }, [song.id, song.name, channel, approximate, retry])
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (activeFootageVideo && activeFootageVideo !== video) releaseFootage(activeFootageVideo)
+    activeFootageVideo = video
+    return () => releaseFootage(video)
+  }, [active])
+  return (
+    <Section icon={Clapperboard} label="Footage & Sessions">
+      <label className="flex items-center gap-2 text-xs text-text-primary mb-3 cursor-pointer">
+        <input type="checkbox" checked={approximate} onChange={e => setApproximate(e.target.checked)} />
+        Show approximate matches
+      </label>
+      {loading ? <p className="text-xs text-text-primary" role="status">Looking for footage…</p>
+        : matches === null ? <button className={glassPillButton(false)} onClick={() => setRetry(n => n + 1)}>Index unavailable · Retry</button>
+        : matches.length === 0 ? <p className="text-xs text-text-primary">No matching footage found.</p>
+        : <ul className="space-y-3 max-h-80 overflow-y-auto" aria-label="Matching footage">
+          {matches.map(match => {
+            const { entry } = match
+            const guarded = footageBrowserOnly(entry) || browserOnly.has(entry.path)
+            return <li key={entry.path} className="flex gap-3 items-start">
+              {/* The song artwork is a fallback, never a downloaded video frame. */}
+              <div className="w-12 h-12 rounded-lg overflow-hidden bg-[var(--fill)] shrink-0" title="Song artwork">
+                {song.image_url ? <img src={buildImageUrl(song.image_url) ?? undefined} alt="" loading="lazy" className="w-full h-full object-cover" /> : <Clapperboard className="m-3 text-text-primary" size={24} />}
+              </div>
+              <div className="min-w-0 flex-1 text-xs text-text-primary">
+                <p className="font-medium break-words">{entry.name}</p>
+                <p className="mt-1">{entry.duration || 'Duration unavailable'} · <span className="rounded px-1 bg-[var(--fill)]">{match.level === 'exact' ? 'Exact' : `${match.confidence}%${match.level === 'approximate' ? ' · Approximate' : ''}`}</span></p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {!guarded && <button className={glassPillButton(active?.entry.path === entry.path)} onClick={() => setActive(active?.entry.path === entry.path ? null : match)}><Play size={12} />{active?.entry.path === entry.path ? 'Close video' : 'Watch here'}</button>}
+                  <a href={buildStreamUrl(entry.path, channel || undefined)} target="_blank" rel="noopener noreferrer" className={glassPillButton(false)}><ExternalLink size={12} />Open in browser</a>
+                </div>
+                {guarded && <p className="mt-1">Use your browser for this video.</p>}
+              </div>
+            </li>
+          })}
+        </ul>}
+      {active && <video key={`${channel}:${active.entry.path}`} ref={videoRef} preload="none" controls playsInline
+        aria-label={active.entry.name} src={buildStreamUrl(active.entry.path, channel || undefined)}
+        className="w-full max-h-80 rounded-xl mt-3"
+        onLoadedMetadata={e => {
+          if (!Number.isFinite(e.currentTarget.duration) || e.currentTarget.duration > 3600) {
+            releaseFootage(e.currentTarget)
+            setBrowserOnly(paths => new Set([...paths, active.entry.path]))
+            setActive(null)
+          }
+        }}
+        onError={() => { setBrowserOnly(paths => new Set([...paths, active.entry.path])); setActive(null) }}
+      />}
+    </Section>
+  )
+}
+
+// The song's official videos in Files (Footage/Youtube): what WRLD plays in place of the visualizer. Listed by title,
+// so for a song WRLD hasn't played yet this doesn't say whether a video's sound lines up; it nearly always does.
+function MusicVideoSection({ song, onLeave }: { song: JWApiSong; onLeave: () => void }): JSX.Element | null {
+  const [videos, setVideos] = useState<MusicVideo[]>([])
+  const [watching, setWatching] = useState<number | null>(null)
+  // The administrators' default for every player: a video's path, '' for no video, null for none set.
+  const [serverDefault, setServerDefault] = useState<string | null>(null)
+  const [defaultsTurn, setDefaultsTurn] = useState(0)
+  useEffect(() => onMusicVideoDefaultsChange(() => setDefaultsTurn((n) => n + 1)), [])
+  const isAdmin = useStore((s) => !!s.account?.is_administrator)
+  const developerMode = useStore(s => s.developerMode)
+  const released = song.category === 'released' && isReleasedPath(song.path)
+  useEffect(() => {
+    setVideos([])
+    setServerDefault(null)
+    if (!released || !song.path) return
+    let live = true
+    const songPath = song.path
+    Promise.all([loadMusicVideoIndex(), getMusicVideoDefaults().catch(() => new Map<string, string>())])
+      .then(([map, defaults]) => {
+        if (!live) return
+        const list = videosFor(map, song.name, 'all')
+        const def = defaults.get(songPath) ?? null
+        if (def && !list.some((v) => v.path === def)) list.unshift(videoFromPath(def))
+        setVideos(list)
+        setServerDefault(def)
+      })
+      .catch(() => { /* no section without the list */ })
+    return () => { live = false }
+  }, [song.name, song.path, released, defaultsTurn])
+  if (!videos.length) return null
+
+  // Optimistic: shown at once, put back with a note if the server says no.
+  const setDefault = (next: string | null): void => {
+    const before = serverDefault
+    setServerDefault(next)
+    const job = next === null ? clearMusicVideoDefault(song.id) : setMusicVideoDefault(song.id, next)
+    job.then(() => showAppToast(next === null ? 'Back to the automatic video for everyone' : next === '' ? 'No video for everyone' : 'Default video for everyone set', { tone: 'info' }))
+      .catch((err) => { setServerDefault(before); showAppToast(`Couldn’t change the default: ${err instanceof Error ? err.message : err}`) })
+  }
+
+  const showInFiles = (v: MusicVideo): void => {
+    const at = { folder: v.path.split('/').slice(0, -1).join('/'), channel: useStore.getState().channels.find((c) => c.is_primary)?.slug ?? null }
+    // A pop-out can't leave its page: the main window opens Files.
+    if (IS_FLOAT_WINDOW) {
+      sendPlayerCommand('open-in-files', at)
+      ;(window as unknown as { electron?: { focusMainWindow?: () => void } }).electron?.focusMainWindow?.()
+      return
+    }
+    openInFiles(at)
+    onLeave()
+  }
+  const icon = 'shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors'
+  return (
+    <Section icon={Clapperboard} label={videos.length > 1 ? 'Music Videos' : 'Music Video'}>
+      <div className="space-y-1">
+        {videos.map((v, i) => (
+          <div key={v.path} className="flex items-center gap-2 -mx-1.5 px-1.5 py-0.5 rounded-lg">
+            <div className="flex-1 min-w-0">
+              <p className="text-text-primary text-xs truncate" title={v.path}>{v.path.split('/').pop()?.replace(/\.[^.]+$/, '')}</p>
+              <p className="text-text-muted text-[11px]">{VIDEO_KIND_LABEL[v.kind]}{v.date ? ` · uploaded ${new Date(`${v.date}T12:00:00`).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}` : ''}</p>
+            </div>
+            {serverDefault === v.path && !isAdmin && <span className="shrink-0 text-[10.5px] font-semibold text-text-muted">Default</span>}
+            {isAdmin && (
+              <button
+                onClick={() => setDefault(serverDefault === v.path ? null : v.path)}
+                className={`${icon} ${serverDefault === v.path ? 'text-[var(--accent)] hover:text-[var(--accent)]' : ''}`}
+                title={serverDefault === v.path ? 'The default for everyone - click to go back to the automatic pick' : 'Make this the video every player shows for this song'}
+                aria-label="Default for everyone"
+                aria-pressed={serverDefault === v.path}
+              >
+                <Star size={14} fill={serverDefault === v.path ? 'currentColor' : 'none'} />
+              </button>
+            )}
+            <button onClick={() => setWatching(i)} className={icon} title="Watch" aria-label="Watch"><Play size={14} /></button>
+            {developerMode && <button onClick={() => showInFiles(v)} className={icon} title="Show in Files" aria-label="Show in Files"><FolderOpen size={14} /></button>}
+          </div>
+        ))}
+      </div>
+      {serverDefault === '' && <p className="mt-1.5 text-text-muted text-[11px]">No video in WRLD for everyone: an administrator turned it off for this song.</p>}
+      {isAdmin && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setDefault(serverDefault === '' ? null : '')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${serverDefault === '' ? 'bg-[rgb(var(--accent-rgb)/0.16)] text-[var(--accent)]' : 'bg-[var(--fill)] text-text-muted hover:text-text-primary'}`}
+            title="Every player shows the visualizer for this song instead of a video"
+            aria-pressed={serverDefault === ''}
+          >
+            No video for everyone
+          </button>
+          {serverDefault !== null && (
+            <button onClick={() => setDefault(null)} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[var(--fill)] text-text-muted hover:text-text-primary transition-colors">
+              Use the automatic pick
+            </button>
+          )}
+        </div>
+      )}
+      {watching !== null && (
+        <MediaLightbox
+          items={videos.map((v) => ({ url: buildStreamUrl(v.path), type: 'video' as const, name: v.path.split('/').pop() ?? v.path }))}
+          index={watching}
+          onClose={() => setWatching(null)}
+          onNav={setWatching}
+        />
+      )}
+    </Section>
   )
 }
 
@@ -480,6 +676,9 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
               )}
             </Section>
           )}
+
+          <FootageSection key={displaySong.id} song={displaySong} />
+          <MusicVideoSection song={displaySong} onLeave={onClose} />
 
           <TextSection icon={Info} label="Additional Info" value={displaySong.additional_information} />
           <TextSection icon={StickyNote} label="Notes" value={notesDisplay} />
