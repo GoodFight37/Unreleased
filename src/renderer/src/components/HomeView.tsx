@@ -507,7 +507,7 @@ export default function HomeView(): JSX.Element {
   if (!developerMode) return <CoffreHome data={data} />
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto glass-scroll pb-player">
+    <div className="coffre-home flex-1 min-h-0 overflow-y-auto glass-scroll pb-player">
       <div className="h-full min-h-[600px] w-full px-6 py-5 flex flex-col gap-4">
         {/* Shared with the staff dashboards, so it stays put while the
             widgets swipe between them. */}

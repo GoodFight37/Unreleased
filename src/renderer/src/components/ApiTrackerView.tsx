@@ -41,6 +41,9 @@ import type { CompactGroup } from '../lib/compactGroups'
 import { useVirtualWindow, useVariableVirtualWindow } from '../hooks/useVirtualWindow'
 import { runLog } from '../lib/runLog'
 import { showAppToast } from '../lib/appToast'
+import { useSongAvailability } from '../hooks/useSongAvailability'
+import { hasDirectAudioPath, isPlayableSong } from '../lib/songVersions'
+import { isSessionEditPlaceholder } from '../lib/sessionEditLinksMirror'
 import { formatDuration, displayDate, dateSortValue, compareDates } from '../lib/format'
 import { parseSearchQuery, matchesFieldFilters, filterApiFields, textMatches } from '../lib/trackerSearch'
 import { displaySongName } from '../lib/songPrefs'
@@ -655,14 +658,14 @@ const SongRow = memo(function SongRow({
   const track = songToTrack(song)
   const title = pref?.name || song.name
   const altTitles = song.track_titles ?? []
-  const canPlay = !!song.path
+  const { canPlay, checkingAudio } = useSongAvailability(song)
   const longPress = useLongPress()
 
   return (
     <div
       className={`group flex items-center gap-3 px-3 py-2.5 md:py-2 hover:bg-surface-overlay active:bg-surface-overlay rounded-lg transition-colors cursor-default ${selected ? 'bg-accent/10' : ''}`}
       onClick={(e) => { if (longPress.consumeFired()) return; if (e.ctrlKey || e.metaKey || selectMode) onToggleSelect(song) }}
-      onDoubleClick={() => { if (!selectMode) onPlay(song) }}
+      onDoubleClick={() => { if (!selectMode && canPlay) onPlay(song) }}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(song, e) }}
       {...longPress.bind(() => onToggleSelect(song))}
     >
@@ -693,6 +696,7 @@ const SongRow = memo(function SongRow({
         <p className="text-text-primary text-sm font-medium truncate">
           {title}
           {versionLabel && <span className="text-text-muted font-normal"> ({versionLabel})</span>}
+          {!canPlay && <span className="text-text-muted text-xs font-normal"> · {checkingAudio ? 'Checking audio…' : 'Audio unavailable'}</span>}
         </p>
         <p className="md:hidden text-text-muted text-xs truncate mt-0.5">
           {song.credited_artists || 'Juice WRLD'}
@@ -827,14 +831,14 @@ const DetailedSongRow = memo(function DetailedSongRow({
   const detailFields = useStore((s) => s.trackerDetailFields)
   const track = songToTrack(song)
   const title = pref?.name || song.name
-  const canPlay = !!song.path
+  const { canPlay } = useSongAvailability(song)
   const longPress = useLongPress()
 
   return (
     <div
       className={`group flex gap-3 px-3 py-2 h-full overflow-hidden rounded-lg border border-[var(--border)] hover:bg-surface-overlay active:bg-surface-overlay transition-colors cursor-default ${selected ? 'bg-accent/10' : ''}`}
       onClick={(e) => { if (longPress.consumeFired()) return; if (e.ctrlKey || e.metaKey || selectMode) onToggleSelect(song) }}
-      onDoubleClick={() => { if (!selectMode) onPlay(song) }}
+      onDoubleClick={() => { if (!selectMode && canPlay) onPlay(song) }}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(song, e) }}
       {...longPress.bind(() => onToggleSelect(song))}
     >
@@ -1035,15 +1039,17 @@ function CompactGroupList({
         const top = (start + i) * stride
         if (row.kind === 'group') {
           const cat = groupCategory(row.group.members)
+          const playable = row.group.members.find((member) => hasDirectAudioPath(member.item))
           return (
             <div key={row.key} style={{ position: 'absolute', top, left: 0, right: 0, height: rowH }}>
               <CompactGroupRow
-                coverTrack={songToTrack(row.group.members[0].item)}
+                coverTrack={songToTrack(playable?.item ?? row.group.members[0].item)}
                 title={row.group.title}
                 count={row.group.members.length}
                 expanded={expanded.has(row.group.groupId)}
                 onToggle={() => onToggleGroup(row.group)}
                 onContextMenu={(e) => onGroupContextMenu(row.group, e)}
+                onPlay={playable ? () => onPlay(playable.item) : undefined}
                 categoryLabel={CATEGORY_LABELS[cat] ?? cat}
                 categoryClassName={CATEGORY_COLORS[cat]}
               />
@@ -1299,7 +1305,7 @@ const SongCard = memo(function SongCard({
   const fullEraNames = useStore((s) => s.fullEraNames)
   const track = songToTrack(song)
   const title = pref?.name || song.name
-  const canPlay = !!song.path
+  const { canPlay } = useSongAvailability(song)
   const longPress = useLongPress()
 
   const detailsRef = useRef<HTMLDivElement>(null)
@@ -1317,7 +1323,7 @@ const SongCard = memo(function SongCard({
     <div
       className={`group flex flex-col h-full overflow-hidden rounded-xl border bg-surface transition-colors ${selected ? 'border-accent bg-accent/10' : 'border-[var(--border)] hover:border-accent/40'}`}
       onClick={(e) => { if (longPress.consumeFired()) return; if (e.ctrlKey || e.metaKey || selectMode) onToggleSelect(song) }}
-      onDoubleClick={() => { if (!selectMode) onPlay(song) }}
+      onDoubleClick={() => { if (!selectMode && canPlay) onPlay(song) }}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(song, e) }}
       {...longPress.bind(() => onToggleSelect(song))}
     >
@@ -1678,7 +1684,7 @@ const LyricResultRow = memo(function LyricResultRow({
   const fullEraNames = useStore((s) => s.fullEraNames)
   const track = songToTrack(song)
   const title = pref?.name || song.name
-  const canPlay = !!song.path
+  const { canPlay } = useSongAvailability(song)
   const snippet = useMemo(() => getLyricSnippet(song.lyrics, query), [song.lyrics, query])
   const longPress = useLongPress()
 
@@ -1686,7 +1692,7 @@ const LyricResultRow = memo(function LyricResultRow({
     <div
       className={`group flex items-start gap-3 px-3 py-3 hover:bg-surface-overlay active:bg-surface-overlay rounded-lg transition-colors cursor-default ${selected ? 'bg-accent/10' : ''}`}
       onClick={(e) => { if (longPress.consumeFired()) return; if (e.ctrlKey || e.metaKey || selectMode) onToggleSelect(song) }}
-      onDoubleClick={() => { if (!selectMode) onPlay(song) }}
+      onDoubleClick={() => { if (!selectMode && canPlay) onPlay(song) }}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(song, e) }}
       {...longPress.bind(() => onToggleSelect(song))}
     >
@@ -2576,7 +2582,11 @@ export default function ApiTrackerView(): JSX.Element {
   // re-render every row on each selection toggle.
   const toggleSelect = useCallback((song: JWApiSong): void => toggleSongSelect(song.id, song), [toggleSongSelect])
 
-  const handlePlay = useCallback((song: JWApiSong) => {
+  const playRequest = useRef(0)
+  const handlePlay = useCallback(async (song: JWApiSong) => {
+    const request = ++playRequest.current
+    if (!await isPlayableSong(song)) { showAppToast('Audio unavailable for this version', { tone: 'error' }); return }
+    if (request !== playRequest.current) return
     const track = songToTrack(song)
     // Each surface queues what it lists, whole, so shuffle draws from all of
     // it and a lower row never drags unrelated rows into the history.
@@ -2599,7 +2609,10 @@ export default function ApiTrackerView(): JSX.Element {
       sourceSongs = filteredCompactGroups.flatMap((group) => group.members.map((member) => member.item))
     }
     const playable = [...new Map(
-      sourceSongs.filter((candidate) => !!candidate.path).map((candidate) => [candidate.id, candidate]),
+      sourceSongs.filter((candidate) => {
+        const source = songToTrack(candidate)
+        return !!source.path && !isSessionEditPlaceholder(source.path)
+      }).map((candidate) => [candidate.id, candidate]),
     ).values()]
     const context = playable.map(songToTrack)
     playTrack(track, context.length > 0 ? context : [track], null, 'tracker')
@@ -2623,16 +2636,12 @@ export default function ApiTrackerView(): JSX.Element {
     setContextMenu({ song, x: e.clientX, y: e.clientY })
   }, [selectMode])
 
-  // Right-clicking a compact-view group ("folder") acts on all its versions
-  // at once - selects every member and opens the bulk menu (Add to queue /
-  // playlist, Download ZIP, Link versions), the same menu you'd get from
-  // multi-selecting those songs by hand.
+  // Reveal the versions before choosing a song to act on.
   const handleGroupContextMenu = useCallback((group: CompactGroup<JWApiSong>, e: React.MouseEvent): void => {
     e.preventDefault()
-    setSelected(new Map(group.members.map(m => [m.item.id, m.item])))
-    setSelectMode(true)
-    setBulkContextMenu({ x: e.clientX, y: e.clientY, showPlaylists: false })
-  }, [])
+    e.stopPropagation()
+    if (!expandedGroups.has(group.groupId)) handleToggleGroup(group)
+  }, [expandedGroups, handleToggleGroup])
 
   const selectedSongs = useMemo(() => [...selected.values()], [selected])
   // Sessions/unsurfaced songs can't go in playlists or the queue - same rule
@@ -2795,7 +2804,7 @@ export default function ApiTrackerView(): JSX.Element {
   }, [activeChannel])
 
   return (
-    <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${developerMode ? '' : 'coffre-catalogue'}`}>
+    <div className="coffre-catalogue flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
       <div className="px-4 md:px-5 pt-4 md:pt-5 pb-3 shrink-0">
         <h1 className="text-text-primary text-xl font-bold mb-1 md:mb-6">{developerMode ? 'Tracker' : 'Catalogue'}</h1>

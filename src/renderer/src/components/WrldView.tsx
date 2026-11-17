@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallbac
 import { createPortal } from 'react-dom'
 import { Music, Radio, Search, X, ChevronDown, ChevronLeft, Play, Pause, SkipBack, SkipForward as SkipFwd, Shuffle, Repeat, Repeat1, Volume2, VolumeX, MoreHorizontal, Info, Heart, ListMusic, GripVertical, Trash2, Download, History, SlidersHorizontal, RefreshCw, TextQuote, Loader2, Settings2, Star, Ban } from 'lucide-react'
 import { useWrldExpandIn } from '../lib/wrldExpand'
+import { hasEscapeLayer } from '../hooks/useEscapeToClose'
 import { lazyOverlay } from '../lib/lazyView'
 import { ModalOverlay, LockToggle } from './Modal'
 import CoverEditor from './CoverEditor'
@@ -243,6 +244,20 @@ export default function WrldView(): JSX.Element {
     else if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
     setFullscreen(false)
   }
+  const closeListeningView = (): void => {
+    const state = useStore.getState()
+    state.setActiveView(state.previousView && state.previousView !== 'wrld' ? state.previousView : 'api-tracker')
+  }
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || hasEscapeLayer()) return
+      if (fullscreen) exitFullscreen()
+      else closeListeningView()
+      event.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen])
 
   // Keep React state in sync when fullscreen is entered/exited by something
   // other than our own button - F11 (Electron, see main.js), OS window-manager
@@ -265,25 +280,6 @@ export default function WrldView(): JSX.Element {
     document.addEventListener('fullscreenchange', onChange)
     return () => document.removeEventListener('fullscreenchange', onChange)
   }, [isElectronApp])
-
-  // The web Fullscreen API exits on Escape by itself (caught by the listener
-  // above). Electron's setFullScreen has no built-in Escape binding though,
-  // so handle it ourselves there.
-  useEffect(() => {
-    if (!fullscreen || !isElectronApp) return
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return
-      // Don't yank the whole view out from under an overlay that's stacked on
-      // top of it - Escape belongs to whatever is frontmost. Every overlay in
-      // the app lays down a full-screen backdrop, so "is something else on
-      // top" is just "what's painted at the centre of the screen".
-      const top = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)
-      if (top && fsOverlayRef.current && !fsOverlayRef.current.contains(top)) return
-      exitFullscreen()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, isElectronApp])
 
   // The terminal takes over fullscreen; other destinations leave it.
   useEffect(() => () => {
@@ -761,6 +757,7 @@ export default function WrldView(): JSX.Element {
               fm={{ active: radioFmActive, live: radioFmIsLive === true, label: fmLabel, disabled: fmDisabled, toggle: toggleFm, tab: fmTab, setTab: setFmTab }}
               onEnter={enterFullscreen}
               onExit={exitFullscreen}
+              onClose={closeListeningView}
               onPopOutMini={isElectronApp ? () => elFullscreen?.openFloatWindow?.('mini-player') : undefined}
             />
 
@@ -2216,7 +2213,7 @@ const LyricsPanel = memo(function LyricsPanel({
   txtPri, txtSec, txtTer, artUrl,
 }: LyricsPanelProps) {
   // Settings > Desktop > Lyric style: 'classic' is this list, anything else an iJWA style.
-  const lyricLook = useStore(s => s.desktop.lyrics.look)
+  const savedLyricLook = useStore(s => s.desktop.lyrics.look)
   const viewportRef = useRef<HTMLDivElement>(null)
   const linesRef    = useRef<HTMLDivElement>(null)
   const activeRef   = useRef<HTMLDivElement>(null)
@@ -2225,9 +2222,11 @@ const LyricsPanel = memo(function LyricsPanel({
     useStorePick('lyricsScale', 'lyricsAlign', 'lyricsBlur', 'lyricsBlurAmount', 'lyricsColorActive', 'lyricsColorInactive')
   const theme = useStore(s => s.theme)
   const isLightLyrics = txtSec.startsWith('rgba(0,0,0') || !getSkin(theme).dark
+  const developerMode = useStore((s) => s.developerMode)
+  const lyricLook = developerMode ? savedLyricLook : 'classic'
   // null = auto, i.e. the art-derived text colors this tab already picks.
-  const activeColor   = lyricsColorActive ?? txtPri
-  const inactiveColor = lyricsColorInactive ?? txtSec
+  const activeColor   = developerMode ? lyricsColorActive ?? txtPri : txtPri
+  const inactiveColor = developerMode ? lyricsColorInactive ?? txtSec : txtSec
 
   // Driven by requestAnimationFrame against the LIVE audio.currentTime rather
   // than the Zustand-stored value (which only updates on the native
@@ -2471,7 +2470,8 @@ const LyricsPanel = memo(function LyricsPanel({
                 // time, so that's where to land - seeking to the bare time
                 // left the previous line highlighted for `offset` seconds.
                 onClick={() => seekAudio(Math.max(0, line.time + lyricsOffset))}
-                className={`cursor-pointer select-none ${lyricsAlign === 'center' ? 'origin-center mx-auto text-center' : 'origin-left'}`}
+                aria-current={isActive ? 'true' : undefined}
+                className={`wrld-lyric-line cursor-pointer select-none ${lyricsAlign === 'center' ? 'origin-center mx-auto text-center' : 'origin-left'}`}
                 style={{
                   // The active line grows via `scale()`, anchored at its left
                   // edge (`origin-left`) so it doesn't jump around - but scale

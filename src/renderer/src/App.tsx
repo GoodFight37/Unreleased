@@ -11,6 +11,7 @@ import { preloadAllViews } from './lib/lazyViews'
 import { ViewType } from './types'
 import { ADMIN_PATH_TABS } from './hooks/useAdminQueue'
 import ViewFade from './components/ViewFade'
+import ViewSkeleton from './components/ViewSkeleton'
 import { captureLeaving, dashboardSwap, isWholePageSwap, reducedMotion } from './lib/dashboardSwap'
 import { useWrldExpandUnder } from './lib/wrldExpand'
 
@@ -564,7 +565,7 @@ export default function App(): JSX.Element {
                 : { paddingTop: 'var(--nav-pill-clearance, 0px)', paddingBottom: 'var(--player-dock, 0px)' }}
             >
             <ErrorBoundary>
-            <Suspense fallback={null}>
+            <Suspense fallback={<ViewSkeleton />}>
             {/* Holdable views live in their own keyed slots so toggling between
                 "shown" and "hidden under the terminal" never remounts them.
                 `contents` keeps the wrapper out of the flex layout. */}

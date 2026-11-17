@@ -1,13 +1,18 @@
 import { getOwnVersionMeta, getVersionGroup, type SongVersionMeta } from './versionsApi'
 import { getSongsByIds, type JWApiSong } from './juicewrldApi'
 import { hasPlayableSessionEdit } from './sessionEditsApi'
+import { isSessionEditPlaceholder } from './sessionEditLinksMirror'
+
+export function hasDirectAudioPath(song: Pick<JWApiSong, 'path'>): boolean {
+  return !!song.path && !isSessionEditPlaceholder(song.path)
+}
 
 /** Whether a song has something to actually play: its own `path`, or - for a
  *  recording session without one - a session edit (looked up once, like a
  *  play). Unsurfaced entries and pathless sessions with no edit fail, and
  *  switching to or starring one of those would break playback. */
 export async function isPlayableSong(song: Pick<JWApiSong, 'id' | 'path' | 'category'>): Promise<boolean> {
-  if (song.path) return true
+  if (hasDirectAudioPath(song)) return true
   return song.category === 'recording_session' && hasPlayableSessionEdit(song.id)
 }
 

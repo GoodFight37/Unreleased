@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid } from 'lucide-react'
+import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft } from 'lucide-react'
 import { Visualizer, VISUALIZERS, needsWebGL, type VizLayout } from '../lib/viz'
 import { getAnalysisTap, resumeEffectsContext } from '../lib/audioEffects'
 import { smallCoverUrl } from '../lib/juicewrldApi'
@@ -97,12 +97,13 @@ interface Props {
     tab: 'radio' | 'chat' | 'lyrics'; setTab: (t: 'radio' | 'chat' | 'lyrics') => void }
   onEnter: () => void
   onExit: () => void
+  onClose: () => void
   /** Desktop app only: pops the compact always-on-top mini player window. */
   onPopOutMini?: () => void
 }
 
 export default function WrldVisualizer({
-  rootRef, fullscreen, artUrl, trackKey, albumKey, hasLyrics, fm, onEnter, onExit, onPopOutMini,
+  rootRef, fullscreen, artUrl, trackKey, albumKey, hasLyrics, fm, onEnter, onExit, onClose, onPopOutMini,
 }: Props): JSX.Element {
   // 999 FM plays with isPlaying off; the visualizer stops listening when this is false.
   const isPlaying = useStore((s) => s.isPlaying || s.radioFmActive)
@@ -112,6 +113,7 @@ export default function WrldVisualizer({
   const randomOn = useStore((s) => s.radioMode && !s.radioFmActive)
   const randomDisabled = useStore((s) => !s.currentTrack && !s.radioMode)
   const setRandomMode = useStore((s) => s.setRandomMode)
+  const startRandomRadio = useStore((s) => s.startRandomRadio)
   // The screen light's look, while WRLD's Edge light is on.
   const vizEdgeOverlay = useWrldEdgeLook()
   const { activeMode, vizQuality, vizUseArtwork, vizBoost, covered } = useVizStore(useShallow((s) => ({
@@ -424,6 +426,10 @@ export default function WrldVisualizer({
         onMouseEnter={() => { overToolbar.current = true }}
         onMouseLeave={() => { overToolbar.current = false; wake() }}
       >
+        <button className="h-9 px-2 flex items-center gap-1 rounded-[10px] text-xs text-text-primary hover:bg-white/10"
+          onClick={onClose} title="Back to music (Esc)" aria-label="Close listening view">
+          <ChevronLeft size={17} /><span className="hidden sm:inline">Back</span>
+        </button>
         <button
           className={`h-9 px-2.5 flex items-center gap-1.5 rounded-[10px] text-[11px] font-bold tracking-[0.1em] uppercase transition-colors disabled:opacity-30 disabled:pointer-events-none ${fm.active ? (fm.live ? 'text-text-primary bg-red-500/15' : toolOn) : toolIdle}`}
           onClick={fm.toggle}
@@ -453,9 +459,9 @@ export default function WrldVisualizer({
         )}
         <button
           className={`h-9 px-2.5 flex items-center gap-1.5 rounded-[10px] text-[11px] font-bold tracking-[0.1em] uppercase transition-colors disabled:opacity-30 disabled:pointer-events-none ${randomOn ? toolOn : toolIdle}`}
-          onClick={() => setRandomMode(!randomOn)}
+          onClick={() => randomOn ? setRandomMode(false) : startRandomRadio()}
           disabled={randomDisabled}
-          title={randomOn ? 'Turn off Random' : 'Random: after this song, play random songs'}
+          title={randomOn ? 'Turn off Random' : 'Play a random song and keep discovering'}
           aria-label={randomOn ? 'Turn off Random' : 'Turn on Random'}
           aria-pressed={randomOn}
         >

@@ -60,7 +60,7 @@ import { HOTKEY_ACTIONS, effectiveBinding, effectiveGlobalBinding, defaultGlobal
 import { DEFAULT_NAV_ORDER, DEFAULT_NAV_VISIBILITY, DEFAULT_NAV_CONTROL_ORDER, DEFAULT_NAV_CONTROL_VISIBILITY } from '../lib/navItems'
 import { DEFAULT_HOME_SECTION_VISIBILITY } from '../lib/homeSections'
 import { getLastfmSession } from '../lib/lastfm'
-import { runWhenIdle } from '../lib/platform'
+import { IS_ELECTRON, runWhenIdle } from '../lib/platform'
 import { useSandboxStore } from '../components/Modal'
 import { showAppToast } from '../lib/appToast'
 import { isOfflineCopyUnreadable } from '../lib/offlineCopies'
@@ -254,6 +254,7 @@ interface AppState {
   // which would otherwise float over the immersive view.
   wrldFullscreen: boolean
   radioFmActive: boolean
+  radioFmPaused: boolean
   radioFmIsLive: boolean | null  // null = unknown (not yet checked)
   radioFmNowPlaying: import('../lib/radioLive').RadioTrack | null
   radioFmVote: import('../lib/radioLive').RadioVote | null
@@ -1516,7 +1517,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
   },
 
   // ── UI ────────────────────────────────────────────────────────────────────
-  activeView: 'home',
+  activeView: IS_ELECTRON ? 'api-tracker' : 'home',
   previousView: null,
   activeAdminTab: null,
   showNowPlaying: false,
@@ -1530,6 +1531,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
   infoSongId: null,
   wrldFullscreen: false,
   radioFmActive: false,
+  radioFmPaused: false,
   radioFmIsLive: null,
   radioFmNowPlaying: null,
   radioFmVote: null,

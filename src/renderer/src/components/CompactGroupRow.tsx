@@ -62,7 +62,7 @@ export const CompactGroupRow = memo(function CompactGroupRow({
   const coverBoxClass = isPlaylists ? 'w-10 h-10' : 'w-10 h-10 md:w-9 md:h-9'
   return (
     <div
-      {...clickable(onToggle)}
+      {...clickable(onPlay ?? onToggle)}
       onContextMenu={onContextMenu}
       className="group w-full flex items-center gap-3 px-3 py-2.5 md:py-2 active:bg-surface-overlay md:hover:bg-surface-overlay rounded-lg transition-colors text-left cursor-pointer"
     >
@@ -109,7 +109,10 @@ export const CompactGroupRow = memo(function CompactGroupRow({
       {/* Fixed width so the category badges (and the count itself) line up
           in a column regardless of how wide "N versions" renders. */}
       <span className="text-text-muted text-xs shrink-0 w-20 text-right">{count} version{count === 1 ? '' : 's'}</span>
-      {expanded ? <ChevronUp size={14} className="text-text-muted shrink-0" /> : <ChevronDown size={14} className="text-text-muted shrink-0" />}
+      <button onClick={(event) => { event.stopPropagation(); onToggle() }}
+        aria-label={`${expanded ? 'Hide' : 'Show'} versions of ${title}`} className="p-2 text-text-muted shrink-0">
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
     </div>
   )
 }, (prev, next) =>
@@ -118,14 +121,15 @@ export const CompactGroupRow = memo(function CompactGroupRow({
   // every group header re-rendered whenever anything in the parent changed
   // (e.g. toggling a selection), freezing large compact lists. The closures
   // capture only stable state setters + this group's own id, so ignoring their
-  // identity is safe.
+  // identity is safe for expansion. Playback must follow the current filtered queue.
   prev.coverTrack.id === next.coverTrack.id &&
   prev.title === next.title &&
   prev.count === next.count &&
   prev.expanded === next.expanded &&
   prev.index === next.index &&
   prev.categoryLabel === next.categoryLabel &&
-  prev.categoryClassName === next.categoryClassName
+  prev.categoryClassName === next.categoryClassName &&
+  prev.onPlay === next.onPlay
 )
 
 /** Empty-state icon for compact view - re-exported so callers don't need

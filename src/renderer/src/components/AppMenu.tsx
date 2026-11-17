@@ -528,7 +528,7 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
 
   // 'bar' and 'titlebar' share the compact-pill look.
   const isPill = variant === 'bar' || variant === 'titlebar'
-  const active = open ? 'bg-surface-raised text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-surface-raised'
+  const active = open ? 'bg-white/10 text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-white/10'
   const btnClass = isPill
     ? `flex items-center gap-1.5 h-7 pl-2 pr-2 rounded text-xs font-medium transition-colors ${active}`
     : variant === 'sidebar-icon'

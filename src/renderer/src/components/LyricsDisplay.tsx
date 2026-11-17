@@ -41,10 +41,11 @@ export default memo(function LyricsDisplay({ getTime, onSeek, compact, override 
     lyricsColorInactive: s.lyricsColorInactive,
   })))
   const isLight = !getSkin(theme).dark
+  const developerMode = useStore((s) => s.developerMode)
 
   // null = auto, i.e. the theme's own text colors.
-  const activeColor = lyricsColorActive ?? 'var(--text-primary)'
-  const inactiveColor = lyricsColorInactive ?? 'var(--text-muted)'
+  const activeColor = developerMode ? lyricsColorActive ?? 'var(--text-primary)' : 'var(--text-primary)'
+  const inactiveColor = developerMode ? lyricsColorInactive ?? 'var(--text-muted)' : 'var(--text-muted)'
 
   const containerRef = useRef<HTMLDivElement>(null)
   const activeRef = useRef<HTMLDivElement>(null)

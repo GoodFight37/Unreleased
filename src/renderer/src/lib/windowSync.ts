@@ -62,7 +62,7 @@ const SYNC_KEYS = [
   'currentTrack', 'currentTrackFull', 'isPlaying', 'progress', 'currentTime',
   'queue', 'queueIndex', 'shuffle', 'repeat', 'volume',
   'radioMode', 'radioNext', 'queueLoadingMore',
-  'radioFmActive', 'radioFmNowPlaying', 'radioFmMatchedSong', 'radioFmUpNext', 'radioFmQueuePreview',
+  'radioFmActive', 'radioFmPaused', 'radioFmNowPlaying', 'radioFmMatchedSong', 'radioFmUpNext', 'radioFmQueuePreview',
   // Without these a pop-out mini-player never sees a ballot at all, and its FM
   // badge can't tell "offline" from "not checked yet".
   'radioFmIsLive', 'radioFmVote', 'radioFmVoteDismissed',

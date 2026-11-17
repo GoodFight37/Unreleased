@@ -96,6 +96,7 @@ export default function RadioFmPlayer(): JSX.Element {
 
   useEffect(() => {
     const client = new RadioStreamClient({
+      onListening: (listening) => useStore.setState({ radioFmPaused: useStore.getState().radioFmActive && !listening }),
       onMeta: (data) => {
         setRadioFmIsLive(data.is_live)
         applyNowPlaying(data)

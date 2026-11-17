@@ -1,5 +1,5 @@
 import { effectsMotionMedia } from './effectsPreference'
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useStore, useStorePick } from '../store/useStore'
 import { buildImageUrl, smallCoverUrl } from './juicewrldApi'
 import { getFont } from './fonts'
@@ -291,8 +291,13 @@ export function useThemeEffects(): void {
   // Editing the active custom skin reruns the effect below with the same theme
   // id; those repaints snap so the editor preview follows the picker.
   const paintedTheme = useRef(theme)
+  const rememberPalette = (): void => {
+    const root = document.documentElement
+    const vars = { ...skin.vars, ...Object.fromEntries(['--accent', '--accent-rgb', '--accent-hover', '--accent-hover-rgb'].map((key) => [key, root.style.getPropertyValue(key)])) }
+    try { localStorage.setItem('unreleased:startupTheme', JSON.stringify({ id: theme, dark: skin.dark, vars })) } catch { /* storage may be full */ }
+  }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement
     const preset = GLASS_PRESETS[skin.dark ? 'dark' : 'light']
     for (const [key, value] of Object.entries(preset)) root.style.setProperty(`--glass-${key.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}`, String(value))
@@ -305,6 +310,7 @@ export function useThemeEffects(): void {
     const restoreFallback = (): void => {
       root.classList.toggle('dark', skin.dark)
       applyVars(skin.vars)
+      rememberPalette()
       if (songAccentActive) {
         songAccentActive = false
         applyAccentVars(useStore.getState().accentColor)
@@ -330,9 +336,9 @@ export function useThemeEffects(): void {
     return () => { cancelled = true }
   }, [theme, songArt, customSkins])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (songAccentActive || appliedAccent === accentColor) return
-    paintPalette(() => applyAccentVars(accentColor))
+    paintPalette(() => { applyAccentVars(accentColor); rememberPalette() }, appliedAccent !== null)
   }, [accentColor, theme])
 
   // App-wide text size. Tailwind's type scale (and rem-based spacing) keys

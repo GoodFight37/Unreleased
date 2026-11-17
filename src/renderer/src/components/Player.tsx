@@ -52,6 +52,7 @@ import PlaybackNotice from './PlaybackNotice'
 import { ensureDonorCover } from '../lib/donorCoverArt'
 import { showAppToast } from '../lib/appToast'
 import { expandToWrld as runWrldExpand, isExpandingToWrld } from '../lib/wrldExpand'
+import { getActiveRadioClient } from '../lib/radioSocketService'
 import { runLog } from '../lib/runLog'
 import { isOfflineCopyUnreadable, markOfflineCopyUnreadable } from '../lib/offlineCopies'
 import { CoverFade, LikePop, SwapIcon, TrackSwap } from './PlayerMotion'
@@ -424,6 +425,21 @@ export default function Player(): JSX.Element {
   const { radioFmActive, radioFmNowPlaying, radioFmMatchedSong } = useStorePick('radioFmActive', 'radioFmNowPlaying', 'radioFmMatchedSong')
   const { globalHotkeysEnabled, globalHotkeyBindings } = useStorePick('globalHotkeysEnabled', 'globalHotkeyBindings')
   const { mediaOverlayEnabled } = useStorePick('mediaOverlayEnabled')
+  const developerMode = useStore((s) => s.developerMode)
+  const radioFmPaused = useStore((s) => s.radioFmPaused)
+  const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
+  const setPlayback = useCallback((on: boolean): void => {
+    const state = useStore.getState()
+    if (state.radioFmActive) {
+      const client = getActiveRadioClient()
+      if (on) void client?.startListening().catch(() => showAppToast('Could not resume 999 FM', { tone: 'error' }))
+      else client?.stopListening()
+    } else if (state.currentTrack) state.setIsPlaying(on)
+  }, [])
+  const togglePlayback = useCallback((): void => {
+    const state = useStore.getState()
+    setPlayback(state.radioFmActive ? state.radioFmPaused : !state.isPlaying)
+  }, [setPlayback])
   const { eqEnabled, eqGains, eqBalance, eqMono, eqBoost, skipSilence } = useStorePick('eqEnabled', 'eqGains', 'eqBalance', 'eqMono', 'eqBoost', 'skipSilence')
   const { reverbEnabled, reverbMix, reverbDecay, pitchShift, audioFx } = useStorePick('reverbEnabled', 'reverbMix', 'reverbDecay', 'pitchShift', 'audioFx')
   const { abLoopStart, abLoopEnd, setAbLoopPoint, clearAbLoop } = useStorePick('abLoopStart', 'abLoopEnd', 'setAbLoopPoint', 'clearAbLoop')
@@ -1346,6 +1362,12 @@ export default function Player(): JSX.Element {
   const skipUnplayableTrack = (reason: string, detail: string): void => {
     const track = useStore.getState().currentTrack
     const label = track ? `"${track.title}" (${track.id})` : 'the current track'
+    if (useStore.getState().queueSource === 'tracker' && lastProgressTime.current === 0) {
+      runLog('playback', `unavailable catalogue choice ${label}: ${detail}`)
+      showAppToast(`Audio unavailable for ${track?.title ?? 'this version'} (${reason})`, { tone: 'error' })
+      setIsPlaying(false)
+      return
+    }
     if (consecutiveSkips.current >= MAX_CONSECUTIVE_SKIPS) {
       const count = consecutiveSkips.current + 1
       runLog('playback', `stopping after ${count} unplayable songs in a row, the last ${label}: ${detail}`)
@@ -1702,7 +1724,7 @@ export default function Player(): JSX.Element {
   // media-key presses. Mobile relies on Media Session staying alive to keep
   // the background/lock-screen session from being torn down, so the toggle
   // is a no-op there (and hidden in Settings).
-  const mediaSessionActive = mediaOverlayEnabled || !(window as any).electron
+  const mediaSessionActive = !developerMode || mediaOverlayEnabled || !(window as any).electron
 
   // Media Session API — lock screen / notification metadata
   useEffect(() => {
@@ -1745,15 +1767,15 @@ export default function Player(): JSX.Element {
   useEffect(() => {
     if (!('mediaSession' in navigator)) return
     if (!mediaSessionActive) return
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
-  }, [isPlaying, mediaSessionActive])
+    navigator.mediaSession.playbackState = playbackActive ? 'playing' : 'paused'
+  }, [playbackActive, mediaSessionActive])
 
   // Media Session action handlers — play/pause/skip
   useEffect(() => {
     if (!('mediaSession' in navigator)) return
     if (!mediaSessionActive) return
-    navigator.mediaSession.setActionHandler('play',  () => setIsPlaying(true))
-    navigator.mediaSession.setActionHandler('pause', () => setIsPlaying(false))
+    navigator.mediaSession.setActionHandler('play',  () => setPlayback(true))
+    navigator.mediaSession.setActionHandler('pause', () => setPlayback(false))
     navigator.mediaSession.setActionHandler('nexttrack',     () => runPlayerCommand('next'))
     navigator.mediaSession.setActionHandler('previoustrack', () => runPlayerCommand('previous'))
     return () => {
@@ -1762,7 +1784,7 @@ export default function Player(): JSX.Element {
       navigator.mediaSession.setActionHandler('nexttrack',     null)
       navigator.mediaSession.setActionHandler('previoustrack', null)
     }
-  }, [setIsPlaying, mediaSessionActive])
+  }, [setPlayback, mediaSessionActive])
 
   // Media Session position state — for lock screen seek bar. Lives in its own
   // component (rendered below) so the ~4x/sec currentTime updates re-render
@@ -2176,14 +2198,14 @@ export default function Player(): JSX.Element {
     const title  = radioFmActive ? (radioFmNowPlaying?.title  ?? '') : (currentTrack?.title  ?? '')
     const artist = radioFmActive ? (radioFmNowPlaying?.artist ?? '') : (currentTrack?.artist ?? '')
     el.setTrayPlayback({
-      hasTrack: !!currentTrack && !radioFmActive,
-      isPlaying,
+      hasTrack: !!currentTrack || radioFmActive,
+      isPlaying: playbackActive,
       title,
       artist,
       liked: !!currentTrack && likedTrackIds.includes(currentTrack.id),
     })
   }, [
-    isPlaying,
+    playbackActive,
     currentTrack?.id,
     currentTrack?.title,
     currentTrack?.artist,
@@ -2200,7 +2222,7 @@ export default function Player(): JSX.Element {
   // stable while always dispatching to fresh closures.
   const remoteCommandsRef = useRef<Record<string, (arg?: unknown) => void>>({})
   remoteCommandsRef.current = {
-    'play-pause':  () => { if (currentTrack && !radioFmActive) setIsPlaying(!isPlaying) },
+    'play-pause':  togglePlayback,
     'next':        () => { if (currentTrack && !radioFmActive) handleNext() },
     'previous':    () => { if (currentTrack && !radioFmActive) handlePrev() },
     'toggle-like': () => { if (currentTrack && !radioFmActive) toggleLike(currentTrack.id) },
@@ -2240,9 +2262,9 @@ export default function Player(): JSX.Element {
   // already handled) from "a global-only binding fired" (run it).
   const lastInAppFire = useRef<{ id: string; at: number } | null>(null)
   hotkeyActionsRef.current = {
-    'play-pause': () => { if (currentTrack && !radioFmActive) setIsPlaying(!isPlaying) },
-    'play':       () => { if (currentTrack && !radioFmActive) setIsPlaying(true) },
-    'pause':      () => { if (currentTrack && !radioFmActive) setIsPlaying(false) },
+    'play-pause': togglePlayback,
+    'play':       () => setPlayback(true),
+    'pause':      () => setPlayback(false),
     'next':       () => { if (currentTrack && !radioFmActive) handleNext() },
     'previous':   () => { if (currentTrack && !radioFmActive) handlePrev() },
     'seek-forward': () => {
@@ -2787,12 +2809,12 @@ export default function Player(): JSX.Element {
               <SkipBack size={18} fill="currentColor" />
             </button>
             <button
-              onClick={() => setIsPlaying(!isPlaying)}
-              disabled={!currentTrack || radioFmActive}
+              onClick={togglePlayback}
+              disabled={!currentTrack && !radioFmActive}
               className="w-9 h-9 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform disabled:opacity-30"
             >
-              <SwapIcon swapKey={isPlaying}>
-                {isPlaying
+              <SwapIcon swapKey={playbackActive}>
+                {playbackActive
                   ? <Pause size={16} fill="#000" className="text-black" />
                   : <Play  size={16} fill="#000" className="text-black ml-0.5" />}
               </SwapIcon>
@@ -2951,17 +2973,17 @@ export default function Player(): JSX.Element {
 
             <button
               ref={playBtnRef}
-              onClick={() => setIsPlaying(!isPlaying)}
-              aria-label={isPlaying ? 'Pause' : 'Play'}
+              onClick={togglePlayback}
+              aria-label={playbackActive ? 'Pause' : 'Play'}
               onPointerEnter={() => handlePlayBtnTarget(0.8)}
               onPointerDown={() => handlePlayBtnTarget(1)}
               onPointerUp={() => handlePlayBtnTarget(0.8)}
               onPointerLeave={() => handlePlayBtnTarget(0)}
-              disabled={!currentTrack || radioFmActive}
+              disabled={!currentTrack && !radioFmActive}
               className={`w-9 h-9 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-transform disabled:opacity-30 ${glassGpuReady && !reducedTransparency ? 'bg-white/15 text-text-primary ring-1 ring-white/25' : 'bg-white text-black'}`}
             >
-              <SwapIcon swapKey={isPlaying}>
-                {isPlaying
+              <SwapIcon swapKey={playbackActive}>
+                {playbackActive
                   ? <Pause size={18} fill="currentColor" />
                   : <Play  size={18} fill="currentColor" className="ml-0.5" />}
               </SwapIcon>
@@ -3035,9 +3057,15 @@ export default function Player(): JSX.Element {
             )}
           </button>}
 
-          {!radioFmActive && <button onClick={() => setShowNowPlaying(!showNowPlaying)}
-            className={`transition-colors ${showNowPlaying ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
-            title="Now Playing">
+          {!radioFmActive && <button onClick={() => {
+            setShowNowPlaying(false)
+            expandToWrld()
+            const el = (window as any).electron
+            if (el?.setFullscreen) void el.setFullscreen(true)
+            else document.documentElement.requestFullscreen?.().catch(() => {})
+          }}
+            className="text-text-secondary hover:text-text-primary transition-colors"
+            title="Fullscreen player" aria-label="Fullscreen player">
             <Maximize2 size={16} />
           </button>}
           </div>

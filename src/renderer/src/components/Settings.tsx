@@ -1104,6 +1104,31 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
               <AccountSettings page={accountPage} setPage={setAccountPage} openMainView={openMainView} />
             )}
 
+            {!settingsQueryTrimmed && tab === 'app' && !detailPage && (
+              <div data-settings-section="app">
+                <SettingsTitle>Advanced</SettingsTitle>
+                <SettingsGroup title="Everyday use">
+                  {isElectron && <Row icon={Monitor} iconColor="#64748b" label="Start with Windows"
+                    sub={appSettings.startupAvailable ? 'Open Unreleased when you sign in to Windows' : 'Available in the installed Windows app'}>
+                    <Toggle label="Start with Windows" on={appSettings.startWithWindows} locked={!appSettings.startupAvailable}
+                      lockedReason="Available in the installed Windows app" onClick={() => { void setSetting('startWithWindows', !appSettings.startWithWindows) }} />
+                  </Row>}
+                  {isElectron && <Row icon={Keyboard} iconColor="#64748b" label="Global shortcuts" sub="Control music while using another app">
+                    <Toggle label="Global shortcuts" on={globalHotkeysEnabled} onClick={() => setGlobalHotkeysEnabled(!globalHotkeysEnabled)} />
+                  </Row>}
+                </SettingsGroup>
+                <SettingsGroup flush>
+                  <SettingsLink icon={Keyboard} color="#64748b" label="Keyboard shortcuts" sub="View and change your key bindings" onClick={() => { setDetailPage('shortcuts'); setJumpSection('shortcuts') }} />
+                </SettingsGroup>
+                <SettingsGroup title="Developer">
+                  <Row icon={Wrench} iconColor="#64748b" label="Developer options" sub="Show technical tools and detailed preferences">
+                    <Toggle label="Developer options" on={developerMode} onClick={() => setDeveloperMode(!developerMode)} />
+                  </Row>
+                </SettingsGroup>
+                <button className="settings-detail-back" onClick={() => { setDetailPage('about'); setJumpSection('about') }}>Help &amp; about <ArrowRight size={14} /></button>
+              </div>
+            )}
+
             {/* ── General ── */}
             {!settingsQueryTrimmed && shows('general') && <span data-settings-section="general" aria-hidden />}{!settingsQueryTrimmed && shows('general') && (
               <div>
@@ -2437,30 +2462,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
 
             {/* ── App ── */}
 
-            {!settingsQueryTrimmed && shows('app') && !developerMode && (
-              <div data-settings-section="app">
-                <SettingsTitle>Advanced</SettingsTitle>
-                <SettingsGroup title="Everyday use">
-                  {isElectron && <Row icon={Monitor} iconColor="#64748b" label="Start with Windows"
-                    sub={appSettings.startupAvailable ? 'Open Unreleased when you sign in to Windows' : 'Available in the installed Windows app'}>
-                    <Toggle label="Start with Windows" on={appSettings.startWithWindows} locked={!appSettings.startupAvailable}
-                      lockedReason="Available in the installed Windows app" onClick={() => { void setSetting('startWithWindows', !appSettings.startWithWindows) }} />
-                  </Row>}
-                  {isElectron && <Row icon={Keyboard} iconColor="#64748b" label="Global shortcuts" sub="Control music while using another app">
-                    <Toggle label="Global shortcuts" on={globalHotkeysEnabled} onClick={() => setGlobalHotkeysEnabled(!globalHotkeysEnabled)} />
-                  </Row>}
-                </SettingsGroup>
-                <SettingsGroup flush>
-                  <SettingsLink icon={Keyboard} color="#64748b" label="Keyboard shortcuts" sub="View and change your key bindings" onClick={() => { setDetailPage('shortcuts'); setJumpSection('shortcuts') }} />
-                </SettingsGroup>
-                <SettingsGroup title="Developer">
-                  <Row icon={Wrench} iconColor="#64748b" label="Developer options" sub="Show technical tools and detailed preferences">
-                    <Toggle label="Developer options" on={developerMode} onClick={() => setDeveloperMode(!developerMode)} />
-                  </Row>
-                </SettingsGroup>
-                <button className="settings-detail-back" onClick={() => { setDetailPage('about'); setJumpSection('about') }}>Help &amp; about <ArrowRight size={14} /></button>
-              </div>
-            )}
             {!settingsQueryTrimmed && shows('app') && <span data-settings-section="app" aria-hidden />}{!settingsQueryTrimmed && shows('app') && isElectron && developerMode && (
               <div>
                 <SettingsTitle>App</SettingsTitle>
@@ -2588,11 +2589,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     sub="Hide the main window and other pop-outs while the mini player is open — restored when it closes"
                   >
                     <Toggle on={appSettings.miniPlayerHidesWindows} onClick={() => setSetting('miniPlayerHidesWindows', !appSettings.miniPlayerHidesWindows)} />
-                  </Row>
-                </SettingsGroup>
-                <SettingsGroup title="Advanced">
-                  <Row icon={Wrench} iconColor="#6b7280" label="Developer options" sub="Shows developer tools: Glass Lab, diagnostics, logs, cache and API servers">
-                    <Toggle on={developerMode} onClick={() => setDeveloperMode(!developerMode)} />
                   </Row>
                 </SettingsGroup>
               </div>

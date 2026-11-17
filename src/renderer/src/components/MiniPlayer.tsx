@@ -295,6 +295,8 @@ export default function MiniPlayer(): JSX.Element {
   } = useStorePick('currentTrack', 'currentTrackFull', 'isPlaying', 'shuffle', 'repeat', 'likedTrackIds', 'volume', 'playbackSpeed', 'radioFmActive', 'radioFmNowPlaying', 'radioFmMatchedSong', 'toggleLike', 'setVolume')
 
   const fm = radioFmActive
+  const radioFmPaused = useStore((s) => s.radioFmPaused)
+  const playbackActive = fm ? !radioFmPaused : isPlaying
   // Wayland compositors intentionally reject application-driven window
   // resizing. main.js opens the mini player at a stable panel height there
   // and marks the URL so this view always keeps useful content below the bar.
@@ -525,11 +527,12 @@ export default function MiniPlayer(): JSX.Element {
               </button>
               <button
                 onClick={() => sendPlayerCommand('play-pause')}
-                disabled={controlsDisabled}
+                disabled={!currentTrack && !fm}
+                aria-label={playbackActive ? 'Pause' : 'Play'}
                 className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform disabled:opacity-30"
               >
-                <SwapIcon swapKey={isPlaying}>
-                  {isPlaying
+                <SwapIcon swapKey={playbackActive}>
+                  {playbackActive
                     ? <Pause size={14} fill="#000" className="text-black" />
                     : <Play size={14} fill="#000" className="text-black ml-0.5" />}
                 </SwapIcon>

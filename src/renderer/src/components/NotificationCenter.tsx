@@ -146,7 +146,7 @@ export default function NotificationCenter(): JSX.Element {
       }}
       // Frosted straight on the panel: it holds no position:fixed popover of
       // its own, and the direct blur keeps working through its fade-in.
-      className="animate-menu-pop fixed right-3 z-[9990] w-[360px] max-w-[calc(100vw-1.5rem)] flex flex-col rounded-2xl glass-thick glass-specular overflow-hidden"
+      className="notification-glass animate-menu-pop fixed right-3 z-[9990] w-[360px] max-w-[calc(100vw-1.5rem)] flex flex-col rounded-2xl glass-thick glass-specular overflow-hidden"
     >
       <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--fill)] border-b border-[var(--separator)] shrink-0">
         <Bell size={13} className="text-[var(--accent)] shrink-0" />
