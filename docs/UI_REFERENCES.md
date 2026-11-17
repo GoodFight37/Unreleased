@@ -20,7 +20,7 @@ Guide partagé (Antigravity + Codex) pour élever la finition visuelle, les micr
 ## 2. Discover : consigne de Malik du 17 novembre 2026
 
 - Aucun personnage pixel, portrait, corps, chibi, mascotte ou compagnon, dans la carte ou dans un coin de fenêtre. Les anciens composants `JuicePixelBadge` et `JuiceHeroPixel` sont supprimés. Les références pixel ci-dessus ne constituent pas une autorisation d'en réintroduire.
-- La zone droite de la carte hero reste vide. Le Liquid Mesh existant reprend la palette de la cover, lentement derrière l'interface, fixe en mode Jeu ou réduction des animations.
+- La zone droite de la carte hero reste vide. Le fond suit le thème choisi, comme Catalogue et Collection ; il suit la cover seulement lorsque les couleurs adaptatives sont activées. Le mesh existant reste lent, derrière l'interface, fixe en mode Jeu ou réduction des animations.
 - Conserver la navigation, les covers, le lecteur et la structure hero. Afficher la note catalogue réelle du morceau, ou aucune phrase si elle est absente.
 
 ## 3. Garde-fous techniques stricts

@@ -22,7 +22,6 @@ import {
   SlidersHorizontal,
   Palette,
 } from 'lucide-react'
-import { getSkin } from '../lib/skins'
 import { useStore, useStorePick } from '../store/useStore'
 import { useVizStore } from '../store/vizStore'
 import { registerPlayerCommandHandler, runPlayerCommand } from '../lib/windowSync'
@@ -3155,15 +3154,13 @@ export default function Player(): JSX.Element {
           </button>}
 
           {(() => {
-            const albumLocked = Boolean(getSkin(theme).art)
-            const active = adaptiveColors && !albumLocked
+            const active = adaptiveColors
             return (
               <button
-                onClick={() => { if (!albumLocked) setAdaptiveColors(!adaptiveColors) }}
-                disabled={albumLocked}
+                onClick={() => setAdaptiveColors(!adaptiveColors)}
                 aria-label="Cover colors"
                 aria-pressed={active}
-                title={albumLocked ? 'Cover colors follow the active album theme' : active ? 'Cover colors: on' : 'Cover colors: off'}
+                title={active ? 'Cover colors: on' : 'Cover colors: off'}
                 className={`transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${active ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
               >
                 <Palette size={16} />

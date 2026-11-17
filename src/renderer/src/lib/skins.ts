@@ -277,6 +277,11 @@ export function getSkin(id: string | null | undefined): Skin {
   return SKINS.find((s) => s.id === (light ? 'glass-light' : DEFAULT_SKIN_ID)) ?? SKINS[0]
 }
 
+/** Theme artwork is the default; cover colors explicitly opt into the playing song. */
+export function backdropArt(theme: string, adaptiveColors: boolean, playingArt?: string | null): string | null {
+  return (adaptiveColors && playingArt) || getSkin(theme).art || null
+}
+
 // ── Custom-skin authoring / import-export ─────────────────────────────────────
 
 const SKIN_FILE_FORMAT = 'unreleased-skin'

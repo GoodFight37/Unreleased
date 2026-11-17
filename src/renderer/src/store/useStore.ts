@@ -1831,7 +1831,14 @@ export const useStore = create<AppStore>((set, get, store) => ({
     set({ infoSongId })
   },
   setWrldFullscreen: (wrldFullscreen) => set({ wrldFullscreen }),
-  setTheme: (theme) => { set({ theme }); ls.set('theme', theme); get()._scheduleProfilePush(['userSettings']) },
+  setTheme: (theme) => {
+    const accent = getSkin(theme).accent
+    set({ theme, adaptiveColors: false, adaptiveManualHold: false, ...(accent ? { accentColor: accent } : {}) })
+    ls.set('theme', theme)
+    ls.set('adaptiveColors', false)
+    if (accent) ls.set('accentColor', accent)
+    get()._scheduleProfilePush(['userSettings'])
+  },
   saveCustomSkin: (skin) => {
     const list = get().customSkins
     const idx = list.findIndex((s) => s.id === skin.id)

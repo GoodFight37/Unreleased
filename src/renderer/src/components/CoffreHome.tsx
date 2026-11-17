@@ -8,7 +8,7 @@ import { ERA_LOOK, eraStart } from '../lib/eraLook'
 import { saveTrackerSearch } from '../lib/apiTrackerShared'
 import { eraLabel, loadEraFullNames } from '../lib/eras'
 import { trackIdToSongId } from '../lib/userApi'
-import { getSkin } from '../lib/skins'
+import { backdropArt, getSkin } from '../lib/skins'
 import { useEffectsState } from '../lib/effectsPreference'
 import { ERA_TIME_FRAMES, resolveWrldEra } from '../lib/wrldAtmospheres'
 import { lazyOverlay } from '../lib/lazyView'
@@ -27,10 +27,10 @@ const cleanMeta = (v: string | null | undefined): string | null => {
 
 export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeData> }): JSX.Element {
   const {
-    theme, currentTrack, currentTrackFull, isPlaying, setIsPlaying, playTrack, playNext,
+    theme, adaptiveColors, currentTrack, currentTrackFull, isPlaying, setIsPlaying, playTrack, playNext,
     setActiveView, setApiTrackerCategory, setApiTrackerEra, setApiTrackerTab,
   } = useStorePick(
-    'theme', 'currentTrack', 'currentTrackFull', 'isPlaying', 'setIsPlaying', 'playTrack', 'playNext',
+    'theme', 'adaptiveColors', 'currentTrack', 'currentTrackFull', 'isPlaying', 'setIsPlaying', 'playTrack', 'playNext',
     'setActiveView', 'setApiTrackerCategory', 'setApiTrackerEra', 'setApiTrackerTab',
   )
   const [context, setContext] = useState<SongContextMenuState | null>(null)
@@ -63,8 +63,9 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
   const heroArtwork = (isHeroCurrent ? currentTrackFull?.albumArt : null) ?? hero?.imageUrl ?? buildImageUrl(heroSong?.image_url) ?? null
   const heroEraName = heroSong?.era?.name ?? hero?.era ?? ''
   const heroEraLook = ERA_LOOK[heroEraName]
+  const roomArt = buildImageUrl(backdropArt(theme ?? 'glass-dark', adaptiveColors, heroArtwork)) || null
   const heroEraMeta = typeof resolveWrldEra === 'function'
-    ? resolveWrldEra(hero?.imageUrl ?? heroEraLook?.art ?? null, heroEraName || null)
+    ? resolveWrldEra(roomArt, getSkin(theme).art ? getSkin(theme).name : heroEraName || null)
     : { eraLabel: null, eraAsset: heroEraLook?.art ?? null, atmosphere: undefined }
   const roomAtmosphere = useMemo(() => ({
     ...heroEraMeta.atmosphere,
@@ -128,9 +129,9 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
   }
 
   return <div className="coffre-home glass-scroll pb-player">
-    <div className="coffre-stage-backdrop" aria-hidden="true">
+    {roomArt && <div className="coffre-stage-backdrop" aria-hidden="true">
       <LiquidMeshBackdrop
-        artUrl={heroArtwork}
+        artUrl={roomArt}
         eraAsset={heroEraMeta.eraAsset}
         atmosphere={roomAtmosphere}
         isDark={isDarkTheme}
@@ -139,7 +140,7 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
         animated={!still}
       />
       <div className={`coffre-stage-vignette ${isDarkTheme ? 'is-dark' : 'is-light'}`} />
-    </div>
+    </div>}
     <div className="coffre-home-inner">
       <header className="coffre-hero-head coffre-reveal">
         <div className="coffre-hero-titles">

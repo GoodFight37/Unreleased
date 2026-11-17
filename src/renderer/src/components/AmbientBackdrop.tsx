@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStorePick } from '../store/useStore'
 import { smallCoverUrl, fullCoverUrl, buildImageUrl } from '../lib/juicewrldApi'
-import { getSkin } from '../lib/skins'
+import { backdropArt } from '../lib/skins'
 import { useEffectsState } from '../lib/effectsPreference'
 import { listenToMeter } from '../desktop/meter'
 import { FallbackImg } from './ProgressiveCover'
@@ -21,16 +21,16 @@ type Layer = { id: number; src: string; shown: boolean }
 // are dropped when that fade ends. Blurred this far, the small cover is all
 // it needs.
 export default function AmbientBackdrop(): JSX.Element {
-  const { theme, currentTrack, currentTrackFull, radioFmActive, radioFmPaused, radioFmMatchedSong, isPlaying } =
-    useStorePick('theme', 'currentTrack', 'currentTrackFull', 'radioFmActive', 'radioFmPaused', 'radioFmMatchedSong', 'isPlaying')
+  const { theme, adaptiveColors, currentTrack, currentTrackFull, radioFmActive, radioFmPaused, radioFmMatchedSong, isPlaying } =
+    useStorePick('theme', 'adaptiveColors', 'currentTrack', 'currentTrackFull', 'radioFmActive', 'radioFmPaused', 'radioFmMatchedSong', 'isPlaying')
   const { reducedMotion, gameMode } = useEffectsState()
   const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
   const rootRef = useRef<HTMLDivElement>(null)
   const glowRef = useRef<HTMLDivElement>(null)
-  // An album theme is a fixed backdrop of its own cover; Dark and Light follow the song.
-  const art = buildImageUrl(getSkin(theme).art) || (radioFmActive
+  const playingArt = radioFmActive
     ? radioFmMatchedSong?.imageUrl
-    : (currentTrackFull?.albumArt ?? currentTrack?.imageUrl)) || null
+    : (currentTrackFull?.albumArt ?? currentTrack?.imageUrl)
+  const art = buildImageUrl(backdropArt(theme, adaptiveColors, buildImageUrl(playingArt))) || null
 
   const [layers, setLayers] = useState<Layer[]>([])
   const nextId = useRef(0)

@@ -2064,7 +2064,7 @@ export default function ApiTrackerView(): JSX.Element {
     return stored === 'detail' || stored === 'grid' ? stored : 'list'
   })
   const [fanVisual, setFanVisual] = useState(true)
-  const viewMode = developerMode ? developerViewMode : fanVisual ? 'grid' : 'list'
+  const viewMode = developerMode ? developerViewMode : fanVisual ? 'grid' : 'detail'
   const [showFilterMenu, setShowFilterMenu] = useState(false)
 
   const setViewMode = (v: ViewMode): void => { setViewModeState(v); localStorage.setItem(LS_TRACKER_VIEW, v) }

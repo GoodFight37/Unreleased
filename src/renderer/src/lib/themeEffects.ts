@@ -275,9 +275,8 @@ export function useThemeEffects(): void {
 
 /**
  * Reversible additive cover-color override ("Couleurs de la pochette").
- * Active by default on non-album skins (Dark, Light, 999, custom); fixed album
- * themes keep their own baked art/accent, and picking a manual accent pauses
- * the override until the next track or re-enabling the toggle.
+ * Available on every theme. Picking a theme restores its own colors; enabling
+ * the toggle opts into the song. A manual accent pauses the color override.
  */
 export function useAdaptiveAccent(): void {
   const {
@@ -307,7 +306,6 @@ export function useAdaptiveAccent(): void {
   )
 
   const skin = getSkin(theme)
-  const isAlbumTheme = Boolean(skin.art)
   const rawArt = radioFmActive
     ? (radioFmMatchedSong?.imageUrl ?? radioFmNowPlaying?.image_url ?? null)
     : (currentTrackFull?.albumArt ?? currentTrack?.imageUrl ?? (currentTrack ? libraryArt[currentTrack.id] : null) ?? null)
@@ -334,7 +332,7 @@ export function useAdaptiveAccent(): void {
       }
     }
 
-    if (!adaptiveColors || isAlbumTheme || adaptiveManualHold || !artUrl) {
+    if (!adaptiveColors || adaptiveManualHold || !artUrl) {
       if (songAccentActive) paintPalette(restore, fadeReady)
       else clearSecondaryAccentVars()
       return
@@ -356,5 +354,5 @@ export function useAdaptiveAccent(): void {
     })
 
     return () => { cancelled = true }
-  }, [theme, customSkins, accentColor, adaptiveColors, adaptiveManualHold, isAlbumTheme, artUrl, trackKey, skin.dark])
+  }, [theme, customSkins, accentColor, adaptiveColors, adaptiveManualHold, artUrl, trackKey, skin.dark])
 }

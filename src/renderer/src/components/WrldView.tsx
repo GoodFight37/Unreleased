@@ -869,11 +869,6 @@ export default function WrldView(): JSX.Element {
           {wrldWidgets && <WrldWidgets />}
           {wrldWidgets && <WrldFmWidget />}
 
-          {wrldWidgets && <div className="absolute left-8 top-10 z-20 hidden md:flex items-center gap-3 select-none pointer-events-none" style={{ color: txtTer }} data-viz-fade>
-            <span className="text-lg font-black tracking-[-0.08em]">999</span>
-            <span className="text-[10px] font-semibold tracking-[0.24em]">JUICE WRLD</span>
-          </div>}
-
           {/* Mobile layout */}
           <div className="md:hidden relative z-20 flex flex-col h-full min-h-0" style={hideForViz}>
 
@@ -1102,16 +1097,6 @@ export default function WrldView(): JSX.Element {
                 the panel fading out beside it rather than under its lyrics. */}
             <div ref={splitColRef} className="relative z-[1] flex flex-col items-center justify-center shrink-0 px-8 xl:px-12 gap-5 overflow-y-auto overflow-x-hidden"
               style={{ width: showLyricsColumn ? '40%' : '100%', minWidth: 320 }}>
-
-              <div className="w-full max-w-[var(--wrld-player-width)] flex items-center gap-3 select-none" style={{ color: txtTer }}>
-                <span className="text-lg font-black tracking-[-0.08em]">999</span>
-                <span className="text-[10px] font-semibold tracking-[0.24em]">JUICE WRLD</span>
-                {stageEra.eraLabel && !useThemeBackground && (
-                  <span className="ml-auto text-[10px] font-semibold tracking-[0.16em] opacity-80 truncate">
-                    {stageEra.eraLabel}
-                  </span>
-                )}
-              </div>
 
               {/* Album art */}
               <div className="relative w-full max-w-[var(--wrld-player-width)]">

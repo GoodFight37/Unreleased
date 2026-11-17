@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft, Sparkles, Eye, EyeOff, Palette, Clapperboard } from 'lucide-react'
-import { getSkin } from '../lib/skins'
 import { Visualizer, VISUALIZERS, needsWebGL, type VizLayout } from '../lib/viz'
 import { WRLD_BACKDROPS, WRLD_CURATED_LYRICS, WRLD_FAN_LYRICS, resolveWrldEra } from '../lib/wrldAtmospheres'
 import { useEffectsState } from '../lib/effectsPreference'
@@ -115,10 +114,8 @@ export default function WrldVisualizer({
   const isPlaying = useStore((s) => s.isPlaying || (s.radioFmActive && !s.radioFmPaused))
   const developerMode = useStore((s) => s.developerMode)
   const lyricsOverride = useStore((s) => s.lyricsOverride)
-  const theme = useStore((s) => s.theme)
   const adaptiveColors = useStore((s) => s.adaptiveColors)
   const setAdaptiveColors = useStore((s) => s.setAdaptiveColors)
-  const isAlbumTheme = Boolean(getSkin(theme).art)
   // Random: the queue's own radio (random songs after this one), not 999 FM.
   const randomOn = useStore((s) => s.radioMode && !s.radioFmActive)
   const randomDisabled = useStore((s) => !s.currentTrack && !s.radioMode)
@@ -580,17 +577,15 @@ export default function WrldVisualizer({
           <span className="hidden lg:inline">999 Stage</span>
         </button>
         <button
-          className={`${tool} ${adaptiveColors && !isAlbumTheme ? toolOn : toolIdle} disabled:opacity-35 disabled:pointer-events-none`}
+          className={`${tool} ${adaptiveColors ? toolOn : toolIdle}`}
           onClick={() => {
-            if (isAlbumTheme) return
             const next = !adaptiveColors
             setAdaptiveColors(next)
             announce(next ? 'Cover colors on' : 'Cover colors off')
           }}
-          disabled={isAlbumTheme}
-          title={isAlbumTheme ? 'Cover colors follow the active album theme' : adaptiveColors ? 'Cover colors: on' : 'Cover colors: off'}
+          title={adaptiveColors ? 'Cover colors: on' : 'Cover colors: off'}
           aria-label="Cover colors"
-          aria-pressed={adaptiveColors && !isAlbumTheme}
+          aria-pressed={adaptiveColors}
         >
           <Palette size={16} />
         </button>

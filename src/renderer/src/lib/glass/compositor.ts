@@ -2,7 +2,7 @@ import { createElement, useEffect, useSyncExternalStore, type RefObject } from '
 import { createPortal } from 'react-dom'
 import { createGlassCompositor, type CompositorSurface } from './engine'
 import { getGlassPreset, getGlassLook, useGlassLookKey } from './presets'
-import { getSkin } from '../skins'
+import { backdropArt, getSkin } from '../skins'
 import { buildImageUrl } from '../juicewrldApi'
 import { extractCoverPalette, fetchCoverBitmap } from '../adaptivePalette'
 import { useEffectsState } from '../effectsPreference'
@@ -458,9 +458,9 @@ export function GlassCompositorLayer(): JSX.Element | null {
   const libraryArt = useStore((s) => s.libraryArt)
   const glassLookKey = useGlassLookKey()
 
-  // An album theme keeps its own cover behind the glass, whatever is playing.
   const themeArt = buildImageUrl(getSkin(theme).art)
-  const effectiveArt = themeArt || (radioFmActive ? radioFmMatchedSong?.imageUrl : undefined) || currentTrackFull?.albumArt || currentTrack?.imageUrl || currentTrack?.apiImageUrl || (currentTrack ? libraryArt[currentTrack.id] : undefined)
+  const playingArt = radioFmActive ? radioFmMatchedSong?.imageUrl : currentTrackFull?.albumArt || currentTrack?.imageUrl || currentTrack?.apiImageUrl || (currentTrack ? libraryArt[currentTrack.id] : undefined)
+  const effectiveArt = buildImageUrl(backdropArt(theme, adaptiveColors, buildImageUrl(playingArt)))
 
   useEffect(() => {
     if (reducedTransparency) {
@@ -822,7 +822,7 @@ export function GlassCompositorLayer(): JSX.Element | null {
     return () => {
       cancelled = true
     }
-  }, [effectiveArt, themeArt, reducedTransparency])
+  }, [effectiveArt, themeArt, adaptiveColors, adaptiveManualHold, reducedTransparency])
 
   // Keep touch of getGlassLook so bundle keeps presets tree-shaken cleanly
   void getGlassLook

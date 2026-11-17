@@ -1223,7 +1223,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                             <button
                               onClick={() => {
                                 setTheme(skin.id)
-                                if (skin.accent) { setAccentColor(skin.accent, { keepAdaptive: true }); setCustomAccent(skin.accent) }
+                                if (skin.accent) setCustomAccent(skin.accent)
                               }}
                               className="w-full text-left"
                               title={skin.name}
@@ -1265,12 +1265,10 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     icon={Palette}
                     iconColor="#ec4899"
                     label="Adaptive cover colors"
-                    sub="Tint UI and glass from the playing cover without altering your theme"
+                    sub="Use the playing cover's colors; turn off to restore the selected theme"
                   >
                     <Toggle
-                      on={adaptiveColors && !getSkin(theme).art}
-                      locked={Boolean(getSkin(theme).art)}
-                      lockedReason="Fixed album themes keep their own colors"
+                      on={adaptiveColors}
                       onClick={() => setAdaptiveColors(!adaptiveColors)}
                       label="Adaptive cover colors"
                     />

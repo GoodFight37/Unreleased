@@ -9,10 +9,10 @@ const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/ren
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
 }).outputText
 
-function render({ catalogue = [], catalogueState = 'ready', recent = [], currentTrack = null, effects = { reducedMotion: false, gameMode: false } } = {}) {
+function render({ catalogue = [], catalogueState = 'ready', recent = [], currentTrack = null, theme = 'glass-dark', adaptiveColors = false, effects = { reducedMotion: false, gameMode: false } } = {}) {
   const calls = []
   const action = (name) => (...args) => calls.push({ name, args })
-  const state = { currentTrack, playTrack: action('play'), playNext: action('next'), setActiveView: action('view'), setInfoSongId: action('info'), setApiTrackerCategory: action('category'), setApiTrackerEra: action('era'), setApiTrackerTab: action('tab') }
+  const state = { theme, adaptiveColors, currentTrack, playTrack: action('play'), playNext: action('next'), setActiveView: action('view'), setInfoSongId: action('info'), setApiTrackerCategory: action('category'), setApiTrackerEra: action('era'), setApiTrackerTab: action('tab') }
   const jsx = (type, props) => ({ type, props })
   const exports = {}
   vm.runInNewContext(code, {
@@ -27,7 +27,7 @@ function render({ catalogue = [], catalogueState = 'ready', recent = [], current
       if (name.endsWith('/apiTrackerShared')) return { saveTrackerSearch: () => {} }
       if (name.endsWith('/eras')) return { eraLabel: (name) => name }
       if (name.endsWith('/userApi')) return { trackIdToSongId: (id) => /^jw-\d+$/.test(id) ? Number(id.slice(3)) : null }
-      if (name.endsWith('/skins')) return { getSkin: () => ({ dark: true }) }
+      if (name.endsWith('/skins')) return require('../src/renderer/src/lib/skins.ts')
       if (name.endsWith('/effectsPreference')) return { useEffectsState: () => effects }
       if (name.endsWith('/wrldAtmospheres')) return require('../src/renderer/src/lib/wrldAtmospheres.ts')
       if (name.endsWith('/lazyView')) return { lazyOverlay: () => () => null }
@@ -47,6 +47,20 @@ function render({ catalogue = [], catalogueState = 'ready', recent = [], current
 }
 
 const song = (id, category, file, era = 'DRFL') => ({ id, name: `Song ${id}`, category, path: file, era: { name: era }, image_url: `cover-${id}` })
+
+test('Discover shows theme artwork until cover colors are explicitly enabled, including in reduced motion', () => {
+  const { SKINS } = require('../src/renderer/src/lib/skins.ts')
+  for (const skin of SKINS) {
+    const options = { theme: skin.id, catalogue: [song(1, 'unreleased', 'one.mp3')] }
+    assert.equal(render(options).find('coffre-stage-backdrop').length, skin.art ? 1 : 0, skin.id)
+    for (const effects of [{ reducedMotion: true, gameMode: false }, { reducedMotion: false, gameMode: true }]) {
+      const result = render({ ...options, adaptiveColors: true, effects })
+      const mesh = result.nodes.find(n => n.props.audioReactive === false)
+      assert.equal(mesh.props.artUrl, 'cover-1', skin.id)
+      assert.equal(mesh.props.animated, false, skin.id)
+    }
+  }
+})
 
 test('vault discovery includes playable unreleased tracks and sorts eras chronologically', () => {
   const result = render({ catalogue: [song(1, 'unreleased', 'one.mp3'), song(2, 'unreleased', ''), song(3, 'released', 'three.mp3'), song(4, 'recording_session', 'four.mp3'), song(5, 'unreleased', 'five.mp3', 'GB&GR')] })
