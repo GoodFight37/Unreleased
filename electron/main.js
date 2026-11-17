@@ -139,6 +139,11 @@ let appSettings = {
   // confirmation dialog isn't repeated on every Listen. Cancel is never stored.
   recognitionMicGranted: false,
 }
+// A full disk is the one failure the user can fix themselves, so say so instead of showing the raw errno text.
+function downloadFailureMessage(e) {
+  if (e && (e.code === 'ENOSPC' || e.code === 'EDQUOT')) return 'Download failed: not enough free disk space. Free some space and try again.'
+  return 'Download failed: ' + (e && e.message)
+}
 function writeJsonAtomic(filePath, data, pretty = false) {
   const tmp = `${filePath}.${process.pid}.tmp`
   const json = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data)
@@ -2033,6 +2038,9 @@ const EXECUTABLE_EXTENSIONS = new Set([
   '.hta', '.cpl', '.msc', '.chm', '.inf', '.ins', '.isp', '.pif', '.sct', '.shb',
   '.sys', '.vb', '.vxd', '.wsc', '.ps1xml', '.ps2', '.ps2xml', '.psc1', '.psc2',
   '.msh', '.msh1', '.msh2', '.mshxml', '.py', '.pyw', '.rb', '.pl',
+  // Shortcuts and handlers that launch another program or open a remote target.
+  '.url', '.website', '.appref-ms', '.application', '.scf', '.settingcontent-ms',
+  '.library-ms', '.diagcab', '.xll', '.xbap', '.glk',
 ])
 ipcMain.handle('open-path', (_, p) => {
   if (typeof p !== 'string' || !p.trim()) return 'Refused: invalid path'
@@ -2045,6 +2053,7 @@ ipcMain.handle('open-path', (_, p) => {
 // The safe alternative above's callers actually want: reveals the item in
 // the OS file manager without ever executing it.
 ipcMain.handle('show-item-in-folder', (_, p) => {
+  if (typeof p !== 'string' || !p.trim()) return
   shell.showItemInFolder(p)
 })
 
@@ -2821,7 +2830,7 @@ async function downloadOfflineTrack({ id, url, ext: rawExt, path: songPath, meta
     }, undefined, signal)
   } catch (e) {
     if (signal?.aborted) return { error: 'Cancelled', cancelled: true }
-    return { error: 'Download failed: ' + e.message }
+    return { error: downloadFailureMessage(e) }
   }
 
   const cover = await snapshotOfflineCover(id, meta?.imageUrl, existing)
@@ -3338,7 +3347,7 @@ ipcMain.handle('download-to-library', async (_, { url, songName, artist, songPat
   try {
     await downloadFile(url, savePath)
   } catch (e) {
-    return { error: 'Download failed: ' + e.message }
+    return { error: downloadFailureMessage(e) }
   }
 
   // Parse metadata
@@ -4075,7 +4084,7 @@ ipcMain.handle('url-import', async (event, { id, url, format, bitrate }) => {
         emit(Math.max(1, Math.min(99, percent)), 'download')
       })
     } catch (e) {
-      return { error: 'Download failed: ' + e.message }
+      return { error: downloadFailureMessage(e) }
     }
   } else {
     // ── Site link: hand off to yt-dlp ─────────────────────────────────────
@@ -4150,7 +4159,7 @@ ipcMain.handle('url-import', async (event, { id, url, format, bitrate }) => {
           needsUpdate: true,
         }
       }
-      return { error: 'Download failed: ' + e.message }
+      return { error: downloadFailureMessage(e) }
     }
 
     // Locate the produced audio file (prefer the target extension; fall back

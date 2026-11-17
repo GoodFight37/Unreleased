@@ -119,3 +119,18 @@ retry after a failed import; they do not migrate a real personal profile.
 
 The repository's default branch remains `app`. Changes and these notes are on
 [`liquid-glass`](https://github.com/GoodFight37/Unreleased/tree/liquid-glass).
+
+## Known risks (security review, 2026-11)
+
+- The sign-in token is kept in `localStorage` (`unreleased:authToken`). Encrypting it with
+  `safeStorage` would only protect the file on disk: a compromised renderer could still ask for it.
+  A real fix keeps the token in the main process, which attaches it to requests. Not done yet.
+- The Last.fm key and secret are baked into the renderer by CI and can be extracted. Only a
+  server-side signature would fix that, which needs the backend.
+- The CSP allows two public CORS relays (`api.allorigins.win`, `corsproxy.io`). They see the
+  requests sent through them.
+- `VITE_AUTH_TOKEN` is development-only and must never be set when building an installer.
+- The interface is mostly English with no translation system. Adding French needs a plan, not a
+  partial translation.
+- Catalogue rights are not checked here and need a human legal review.
+- Playback after network loss, sleep/wake, audio device change and a full disk has not been audited.

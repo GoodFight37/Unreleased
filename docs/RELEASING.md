@@ -10,6 +10,11 @@ installers and its gated beta channel cannot update this fork.
 4. Publish that GitHub release. **Build Windows release** builds the tag and
    attaches `Unreleased Glass-Setup-<version>.exe`, its `.blockmap`, and
    `latest.yml`. Its manual run can rebuild an existing release tag.
+   **Build macOS release** and **Build Linux release** also run on publish. All three
+   validate the tag, the lockfile, the fork feed and the app identity, and stay
+   on `GoodFight37/Unreleased`. There is no automatic release: the old
+   `auto-release.yml` was removed because it bumped `package.json` without the
+   lockfile and published an empty public release.
 5. Confirm the workflow succeeded and those three assets are present before
    sharing the download. A push to `app` alone does not publish a release.
 
@@ -18,6 +23,11 @@ the background, respecting the existing automatic download preference. Each
 new version must be higher than the installed one. Keep `latest.yml` and the
 installer together: the manifest supplies the version, filename and checksum.
 macOS keeps the existing manual DMG replacement; Linux uses AppImage updates.
+
+Testing a real install and update (not run in CI): install the previous
+Glass release, publish the next one, start the installed app and confirm it
+downloads and installs the new version, keeps its settings and keeps the same
+Start-menu identity. Do this on a clean Windows profile before sharing.
 
 Local package: `npm run electron:build -- --win --publish never`. Output is in
 `release/`; `win-unpacked/Unreleased Glass.exe` runs with its adjacent files.

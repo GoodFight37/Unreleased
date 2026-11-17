@@ -147,3 +147,13 @@ test('compiled and packaged launches isolate before locking; UI verification kee
     if (args.includes('--ui-verify')) assert.equal(calls[0][1], 'temporary-profile')
   }
 })
+
+test('staging folders left by an interrupted import are removed before the next attempt', (t) => {
+  const { app, target } = fixture(t)
+  const orphan = path.join(target, '.profile-import-crashed')
+  fs.mkdirSync(orphan, { recursive: true })
+  fs.writeFileSync(path.join(orphan, 'partial.json'), '{')
+  assert.equal(configureForkProfile(app), true)
+  assert.equal(fs.existsSync(orphan), false)
+  assert.ok(fs.existsSync(path.join(target, '.profile-import-v2')))
+})

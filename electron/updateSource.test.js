@@ -27,9 +27,12 @@ test('upstream beta marker and network checks remain disabled', async () => {
   vm.runInNewContext(`${source('readBetaCode', '// Stable releases')} globalThis.code = readBetaCode()`, context)
   assert.equal(context.code, null)
   const start = main.indexOf('async function checkBetaUpdate(')
+  assert.notEqual(start, -1, 'checkBetaUpdate was renamed or removed in main.js')
   const end = main.indexOf('\nasync function ', start + 10)
+  assert.notEqual(end, -1, 'could not find the end of checkBetaUpdate in main.js')
   const body = main.slice(start, end)
   const checked = { UPSTREAM_BETA_DISABLED: true }
   vm.runInNewContext(`${body}; globalThis.check = checkBetaUpdate`, checked)
+  assert.equal(typeof checked.check, 'function', 'checkBetaUpdate did not evaluate as a function')
   assert.equal(await checked.check(), false)
 })

@@ -494,7 +494,8 @@ export function startDebugRecording(opts: { anonymous?: boolean } = {}): void {
 function knownSecrets(): Set<string> {
   const out = new Set(seenSecrets)
   try { const t = localStorage.getItem(TOKEN_KEY); if (t) out.add(t) } catch { /* ignore */ }
-  const devToken = (import.meta.env.VITE_AUTH_TOKEN as string | undefined)?.trim()
+  // DEV only: Vite inlines VITE_* values, so an ungated read would ship the token in the bundle.
+  const devToken = import.meta.env.DEV ? (import.meta.env.VITE_AUTH_TOKEN as string | undefined)?.trim() : undefined
   if (devToken) out.add(devToken)
   for (const s of out) if (s.length < 8) out.delete(s)
   return out

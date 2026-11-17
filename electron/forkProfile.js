@@ -77,6 +77,10 @@ function configureForkProfile(app) {
   const marker = path.join(target, '.profile-import-v2')
   if (fs.existsSync(marker)) return true
   if (path.resolve(source).toLowerCase() === path.resolve(target).toLowerCase()) return true
+  // A hard kill mid-import leaves its staging folder behind; the lock above makes this the only importer.
+  for (const entry of fs.readdirSync(target)) {
+    if (entry.startsWith('.profile-import-')) fs.rmSync(path.join(target, entry), { recursive: true, force: true })
+  }
   const stage = fs.mkdtempSync(path.join(target, '.profile-import-'))
   try {
     const browserDirs = ['Local Storage', 'IndexedDB']

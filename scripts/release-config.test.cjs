@@ -17,3 +17,15 @@ test('Glass releases match the version, fork feed and installed identity', () =>
   assert.throws(() => validateRelease(pkg, { ...lock, version: '0.0.0' }, `v${pkg.version}`), /lock/)
   assert.throws(() => validateRelease({ ...pkg, build: { ...pkg.build, publish: { provider: 'github', owner: 'Juice-WRLD-API', repo: 'Unreleased' } } }, lock, `v${pkg.version}`), /GoodFight37/)
 })
+test('releases follow one validated path: no auto-release, every release-triggered build checks identity', () => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  const dir = path.join(__dirname, '..', '.github', 'workflows')
+  assert.equal(fs.existsSync(path.join(dir, 'auto-release.yml')), false)
+  for (const name of fs.readdirSync(dir).filter(n => n.endsWith('.yml'))) {
+    const text = fs.readFileSync(path.join(dir, name), 'utf8')
+    if (!/^\s*release:\s*$/m.test(text)) continue
+    assert.match(text, /scripts\/check-release\.cjs/, `${name} must validate the release`)
+    assert.match(text, /github\.repository == 'GoodFight37\/Unreleased'/, `${name} must stay on the fork`)
+  }
+})
