@@ -12,7 +12,7 @@ independent 2.6.50 version. The existing WebGPU compositor remains primary;
 SVG refraction is a fallback. WRLD music videos default to Off.
 
 - Renderer build and Electron type checking pass.
-- Script tests: 150 passed. Electron tests: 132 passed.
+- Script tests: 151 passed. Electron tests: 132 passed.
 - UI verification: no page errors or blocking failures. Motion audit: exit 0,
   539 observations; existing long/loading transitions are still reported.
 - The Traveling check uses its actual catalogue note, hides an absent note
@@ -20,6 +20,9 @@ SVG refraction is a fallback. WRLD music videos default to Off.
   and their styles/assets are absent from the source tree.
 - Release identity checks validate this fork's GitHub feed, stable app id,
   matching package/lock versions and release tag. Workflow YAML parses.
+  The first local packaging attempt failed schema validation on a misplaced
+  `linux.desktopName`. That field is removed, and a regression test validates
+  the complete configuration against the installed electron-builder schema.
 - Terminal coverage remains at its pre-integration baseline: 496/522 request
   functions reachable, with 26 existing gaps. New commands add no gaps.
 - A Windows installer and an installed-app update round trip are separate

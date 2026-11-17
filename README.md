@@ -1,41 +1,74 @@
 # Unreleased Glass
 
-Desktop client for the Juice WRLD catalogue ([Juice WRLD API](https://juicewrldapi.com)), forked from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased) with a WebGPU Liquid Glass shell and a WebGL2 era backdrop engine.
+A desktop music player for exploring Juice WRLD's released and unreleased catalogue, organizing your music and listening with fullscreen lyrics.
 
-## Engine & Fan Experience
+Built from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased), with a cover-led interface, glass controls and a simpler everyday layout.
 
-- **Navigation (fan path).** Three top-level destinations: **Discover**, **Catalogue**, and **Collection** (playlists, liked songs, albums, and local files). Technical tools, tracker tables, diagnostics, and Glass Lab stay behind **Settings → Advanced → Developer options**.
-- **WebGPU Liquid Glass compositor.** Floating controls (navigation pill, player bar, segmented toggles, sliders, menus, and dialogs) render over a half-resolution separable blur pass (`ceil(w/2) × ceil(h/2)`, DPR capped at `1.5`), with SDF pill merging (`smin`), pointer-tracked specular highlights, interactive slider loupe, and `onSubmittedWorkDone()` frame backpressure. Readability is maintained by adaptive luminance clamping in `glass.wgsl` rather than opaque dark boxes.
-- **WebGL2 Liquid Mesh & era atmospheres.** 64×64 bicubic tensor-product mesh fed by a GPU AMLL hue-preserving tone map and Dual Kawase pyramid (`128→64→32→64→128`). Four era atmosphere profiles (**999**, **GB&GR**, **DRFL**, **LND**) adjust drift speed, subtle grain, color warmth, and audio energy displacement (`u_energy`), with inherited tuning for later eras and 2–3 slow SVG butterflies reserved strictly for *Legends Never Die*.
-- **Adaptive cover palette.** Extracts dominant, complementary, and tertiary hues from the playing cover via Electron/CORS-safe blob loading (`fetchImageBlob`), driving UI accents and mesh gradients across Dark, Light, and album themes with one-click toggle and restoration.
-- **Kinetic lyrics & Stage.** WRLD pairs the era mesh with a 40/60 stage layout, automatic dark/light contrast calibration across the three fan lyric presentations (*Classic*, *Cinema*, *999*), Clean stage mode (`C`), and **Game & economy mode** / `prefers-reduced-motion`, which halts continuous loops while keeping a static era frame on screen.
-- **Catalogue & Footage.** Catalogue opens on a chronological cover showcase (`eraStart`) with 1-click era playback and an optional *Details* table toggle. Song info and context menus surface strict-matched `Footage/`, `Snippets/`, and `Studio Sessions/` video clips (`preload="none"`). No pixel mascot is displayed.
+![Discover — Light theme](docs/screenshots/home.png)
 
-![Discover](docs/screenshots/home.png)
+## What you can do
 
-![WRLD 999 Stage](docs/screenshots/wrld.png)
+- **Discover more music.** Explore Juice WRLD's eras, unreleased tracks, studio recordings and alternate versions through their cover art.
+- **Find the version you want.** Search the catalogue, compare versions and open a song's credits, notes and related footage.
+- **Keep your music together.** Use playlists, liked songs, albums and local files, with offline downloads for listening without a connection.
+- **Listen with lyrics.** Open WRLD for fullscreen artwork and synchronized lyrics. Choose a lyric presentation or hide the controls for a cleaner listening screen.
+- **Tune in to 999 FM.** Listen to the live station and join its chat. Resuming the radio brings you back to the live broadcast.
+- **Choose your look.** Switch between Light, Dark and album themes. You can also let the app's colors follow the playing cover, or use Game & economy mode for a calmer background.
 
-![Catalogue](docs/screenshots/tracker-dark.png)
+Catalogue information and available audio come from the [Juice WRLD API](https://juicewrldapi.com). Some catalogue entries have information but no playable audio.
 
-![Catalogue Album Theme](docs/screenshots/tracker-album-theme.png)
+## What's different in Glass?
 
-![Settings](docs/screenshots/settings.png)
+Discover, Catalogue and Collection put everyday listening first: larger covers, eras in chronological order, direct playback and fewer technical controls on screen. The original app's advanced tools remain available through Developer options.
 
-## Windows & Build
+The interface adds translucent glass controls and cover-inspired backgrounds. WRLD brings artwork and lyrics into one listening view, with clear ways to return to your music or change the atmosphere.
 
-Requires Node.js 22 and npm.
+## Windows installation
+
+Get the Windows installer from [Releases](https://github.com/GoodFight37/Unreleased/releases). Download `Unreleased Glass-Setup-<version>.exe`, run it and open **Unreleased Glass** from the Start menu. A release without an attached `.exe` is not ready to install yet.
+
+Installed versions check this repository for updates. Glass uses its own profile and keeps the original Unreleased installation separate. Before the first launch, close the original player so Glass can import its preferences. Imported offline files are copied, which can require extra disk space.
+
+## Screenshots
+
+Captured from the running desktop app with live catalogue data and real cover art. The first view uses the saved Light theme; the Dark view uses the app's built-in theme.
+
+**Catalogue**
+
+![Catalogue — Light theme](docs/screenshots/catalogue.png)
+
+**WRLD fullscreen listening**
+
+![WRLD with real catalogue artwork and lyrics](docs/screenshots/wrld.png)
+
+**Dark theme**
+
+![Discover — Dark theme](docs/screenshots/home-dark.png)
+
+## For developers
+
+The active branch is `app`. This is an Electron + React desktop fork; the API is maintained by the original project.
+
+The custom WebGPU glass renderer and WebGL2 background remain in place. Upstream changes through v2.6.51 are adapted to this interface, including Windows taskbar playback controls, lyrics-job notifications and optional synchronized music videos. The upstream SVG glass effect is a fallback when WebGPU glass is unavailable. Music videos default to Off.
+
+With Node.js 22 and npm:
 
 ```bash
-npm install
+npm ci
 npm run build
+npm run electron:dev
 ```
 
-Windows installer downloads belong in [Unreleased Glass releases](https://github.com/GoodFight37/Unreleased/releases). Local packaging: `npm run electron:build -- --win --publish never` creates `release/Unreleased Glass-Setup-2.6.50.exe` and `release/win-unpacked/Unreleased Glass.exe`. Installed builds update only from this fork's releases. See [release instructions](docs/RELEASING.md). Verification commands: `npm run typecheck:electron`, `npm run test:scripts`, `npm run test:electron`, `npm run ui:verify`, `npm run ui:motion`, `npm run terminal:check-coverage`.
+For a local Windows installer:
 
-Glass uses a separate profile. On the first launch, close the original player so Glass can import its preferences safely. Offline files are copied into Glass storage; the original profile and media stay intact. No installer release is published by a push to `app` alone.
+```bash
+npm run electron:build -- --win --publish never
+```
 
-See [docs/VALIDATION.md](docs/VALIDATION.md) for the baseline validation notes and [docs/UI_REFERENCES.md](docs/UI_REFERENCES.md) for the UI/motion guidelines.
+Build output goes to `release/`. Releases are deliberate; a push to `app` does not publish an installer.
 
-## License
+See [release instructions](docs/RELEASING.md), [validation results and known limits](docs/VALIDATION.md) and [the agent guide](AGENTS.md) for architecture and checks. The [WRLD sharing proposal](docs/WRLD-STORIES.md) describes future work and is not a shipped feature.
 
-The original player, API and catalogue are the work of the Unreleased team. This fork keeps the MIT license and copyright leanwrldd (see [LICENSE](LICENSE)) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+## Credits and license
+
+The original player, API and catalogue are the work of the Unreleased team. This fork keeps the [MIT license](LICENSE), copyright leanwrldd. Bundled third-party licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

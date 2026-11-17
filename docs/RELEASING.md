@@ -28,4 +28,4 @@ token, development auth token or user profile belongs in an installer.
 Version 2.6.50 of this fork imports the original app's changes through commit
 `fbfecbb8` (upstream v2.6.51), adapted to Glass. Official videos are opt-in in
 Settings → Lyrics & WRLD; SVG refraction is a fallback when the WebGPU
-compositor is unavailable. No pixel mascot is included.
+compositor is unavailable.

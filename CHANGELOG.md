@@ -9,7 +9,7 @@ All notable changes to this project are documented here.
 ## [2.6.50] — 2026-11-17 — Unreleased Glass
 
 - Preserve the Glass renderer and fan navigation while adding a visual catalogue, chronological eras and matched footage in song details.
-- Remove the rejected pixel characters. Discover keeps the existing cover-colored mesh and shows only the song's actual catalogue note.
+- Discover keeps the existing cover-colored mesh and shows the song's actual catalogue note when one is available.
 - Port upstream changes through v2.6.51: Windows taskbar playback buttons, finished lyrics-job notifications, audio coordination, video synchronization and cover-editor badges. WRLD videos start off and can be enabled explicitly.
 - Use upstream SVG refraction only as a fallback when the WebGPU Glass compositor is unavailable, respecting reduced effects and Game mode.
 - Prepare deliberate Windows releases and stable updates from GoodFight37/Unreleased. Keep the original app's beta feed disabled and preserve this fork's application identity.

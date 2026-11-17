@@ -1,6 +1,6 @@
 # Agent guide: Unreleased Glass & Juice WRLD API
 
-**Version 1.85** · updated 2026-11-17. Bump the version and date whenever you
+**Version 1.86** · updated 2026-11-17. Bump the version and date whenever you
 change this file (minor for fixes and additions, major for rewrites).
 
 **Keep this file current.** If you find something in the docs or this file that
@@ -559,6 +559,16 @@ Node 22.
 
 Newest first. One entry each: date, what went wrong, what to do instead. Delete
 entries that stop being true.
+
+- 2026-11-17: README screenshots copied from `ui:verify` showed its invented
+  "999 GLASS" artwork, tracks and purple palette. Public screenshots must use
+  live catalogue data, real covers and the app's actual themes, with no fixtures
+  or image retouching. Keep the README user-focused; put developer details last.
+
+- 2026-11-17: Windows packaging failed before creating `release/` because
+  `build.linux.desktopName` is not a valid electron-builder option. The desktop
+  name belongs at the package root. Every platform block is validated even for
+  a Windows-only build; run the schema check in `scripts/release-config.test.cjs`.
 
 - 2026-11-17: Floating cover controls vanished with WebGPU enabled: the GPU
   `.glass-field` rule forces `position: relative`, overriding their absolute

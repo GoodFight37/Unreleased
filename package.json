@@ -1,7 +1,7 @@
 {
   "name": "unreleased",
   "version": "2.6.50",
-  "description": "A music player for Juice WRLD",
+  "description": "Desktop player for the Juice WRLD catalogue, with playlists, synced lyrics and cover-inspired themes.",
   "desktopName": "com.juicewrldapi.player.desktop",
   "main": "electron/main.js",
   "scripts": {
@@ -174,7 +174,6 @@
     "linux": {
       "icon": "resources/icon-512.png",
       "category": "Audio",
-      "desktopName": "com.goodfight37.unreleased.glasslab.desktop",
       "syncDesktopName": true,
       "target": [
         "AppImage"
