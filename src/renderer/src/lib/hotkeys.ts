@@ -17,6 +17,9 @@
  * active keyboard layout) while punctuation maps to its US-key symbol.
  */
 
+import { viewLabel } from './viewLabels'
+import type { ViewType } from '../types'
+
 export type HotkeyCategory = 'Playback' | 'Volume' | 'Navigation' | 'App'
 
 export interface HotkeyAction {
@@ -27,9 +30,9 @@ export interface HotkeyAction {
   defaultBinding: string
   /** Only meaningful in the desktop (Electron) build — hidden on web. */
   electronOnly?: boolean
-  /** Still active with its default binding for everyone, but only listed (and
-   *  therefore rebindable) in Settings when Developer mode is on - keeps the
-   *  shortcut list from bloating with power-user-only entries. */
+  /** Reserved for Developer mode: hidden in Settings/Command Palette and
+   *  blocked from execution (in-app and global) when Developer mode is off,
+   *  while preserving any persisted binding until Developer mode is re-enabled. */
   devModeOnly?: boolean
 }
 
@@ -99,16 +102,67 @@ export const HOTKEY_ACTIONS: readonly HotkeyAction[] = [
   { id: 'next-light',           label: 'Next light',                  category: 'App', defaultBinding: '', electronOnly: true },
   { id: 'next-lyric-style',     label: 'Next lyric style',            category: 'App', defaultBinding: '', electronOnly: true },
   { id: 'wrld-widgets',         label: 'WRLD widgets layout',         category: 'App', defaultBinding: '' },
-  { id: 'open-terminal',    label: 'Open terminal', category: 'Navigation', defaultBinding: 'Ctrl+`' },
+  { id: 'open-terminal',    label: 'Open terminal', category: 'Navigation', defaultBinding: 'Ctrl+`', devModeOnly: true },
 ] as const
 
 export const HOTKEY_CATEGORIES: readonly HotkeyCategory[] = ['Playback', 'Volume', 'Navigation', 'App']
+
+export function hotkeyActionLabel(action: HotkeyAction, developerMode: boolean): string {
+  const views: Partial<Record<string, ViewType>> = { 'view-tracker': 'api-tracker', 'view-playlists': 'playlists', 'view-library': 'library' }
+  const view = views[action.id]
+  return view ? `Go to ${viewLabel(view, action.label.replace(/^Go to /, ''), developerMode)}` : action.label
+}
 
 // actionId → action, for O(1) lookups from both the dispatcher and the UI.
 const ACTIONS_BY_ID = new Map(HOTKEY_ACTIONS.map((a) => [a.id, a]))
 
 export function getAction(id: string): HotkeyAction | undefined {
   return ACTIONS_BY_ID.get(id)
+}
+
+/** Whether `id` may run under the current runtime flags. Persisted bindings
+ *  remain intact while disabled so toggling Developer mode never drops them. */
+export function isHotkeyActionAllowed(id: string, developerMode: boolean, hasElectron = true): boolean {
+  const action = ACTIONS_BY_ID.get(id)
+  if (!action) return false
+  if (action.electronOnly && !hasElectron) return false
+  if (action.devModeOnly && !developerMode) return false
+  return true
+}
+
+export interface InAppHotkeyDecisionInput {
+  combo: string | null
+  overrides: Record<string, string>
+  developerMode: boolean
+  hasElectron: boolean
+  typing: boolean
+  clickable: boolean
+  repeat: boolean
+  repeatableIds: ReadonlySet<string>
+}
+
+/** Pure decision for an in-app keydown event: returns the action id to run,
+ *  and whether the caller should call `preventDefault()` (e.g. a non-repeatable
+ *  action still swallows its held-key repeat without re-running). */
+export function resolveInAppHotkey(input: InAppHotkeyDecisionInput): { id: string | null; preventDefault: boolean; run: boolean } {
+  const { combo, overrides, developerMode, hasElectron, typing, clickable, repeat, repeatableIds } = input
+  if (!combo) return { id: null, preventDefault: false, run: false }
+  const id = resolveAction(combo, overrides)
+  if (!id || !isHotkeyActionAllowed(id, developerMode, hasElectron)) {
+    return { id: null, preventDefault: false, run: false }
+  }
+  const isFKey = /^F([1-9]|1[0-9]|2[0-4])$/.test(combo.split('+').pop() ?? '')
+  // The terminal's own input has focus while it is open, so its hotkey has to
+  // get through typing too — but only when Developer mode allows the terminal.
+  if (typing && !combo.startsWith('Media') && !isFKey && !(developerMode && id === 'open-terminal')) {
+    return { id: null, preventDefault: false, run: false }
+  }
+  // Leave Space/Enter alone when a button/link/select is focused so native
+  // keyboard activation still works instead of toggling play.
+  if (clickable && (combo === 'Space' || combo === 'Enter')) {
+    return { id: null, preventDefault: false, run: false }
+  }
+  return { id, preventDefault: true, run: !repeat || repeatableIds.has(id) }
 }
 
 /** The combo currently bound to `id`: the user override if one exists (an

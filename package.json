@@ -21,6 +21,7 @@
     "electron:build": "npm run build && electron-builder",
     "electron:smoke": "electron . --smoke-test",
     "ui:verify": "node scripts/ui-verify.mjs",
+    "ui:discover": "node scripts/ui-discover.cjs",
     "ui:motion": "node scripts/motion-audit.mjs",
     "terminal:check-coverage": "node scripts/check-terminal-coverage.mjs"
   },
@@ -78,7 +79,7 @@
   },
   "build": {
     "appId": "com.goodfight37.unreleased.glasslab",
-    "productName": "Unreleased Glass Lab",
+    "productName": "Unreleased Glass",
     "icon": "electron/icon.ico",
     "compression": "maximum",
     "electronLanguages": [
@@ -87,6 +88,16 @@
     "directories": {
       "output": "release"
     },
+    "extraResources": [
+      {
+        "from": "THIRD-PARTY-NOTICES.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
+      }
+    ],
     "files": [
       "**/*",
       "!src/**/*",

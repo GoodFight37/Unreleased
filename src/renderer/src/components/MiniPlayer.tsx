@@ -131,8 +131,8 @@ function SectionLabel({ children }: { children: ReactNode }): JSX.Element {
 function MiniQueue(): JSX.Element {
   const {
     queue, queueIndex, currentTrack, isPlaying, radioMode, radioNext, queueLoadingMore,
-    radioFmActive, radioFmNowPlaying, radioFmUpNext, radioFmQueuePreview,
-  } = useStorePick('queue', 'queueIndex', 'currentTrack', 'isPlaying', 'radioMode', 'radioNext', 'queueLoadingMore', 'radioFmActive', 'radioFmNowPlaying', 'radioFmUpNext', 'radioFmQueuePreview')
+    radioFmActive, radioFmPaused, radioFmNowPlaying, radioFmUpNext, radioFmQueuePreview,
+  } = useStorePick('queue', 'queueIndex', 'currentTrack', 'isPlaying', 'radioMode', 'radioNext', 'queueLoadingMore', 'radioFmActive', 'radioFmPaused', 'radioFmNowPlaying', 'radioFmUpNext', 'radioFmQueuePreview')
   const [visibleCount, setVisibleCount] = useState(MAX_QUEUE_SHOWN)
 
   if (radioFmActive) {
@@ -141,7 +141,7 @@ function MiniQueue(): JSX.Element {
         <SectionLabel>
           <Radio size={9} className="text-red-400" />
           <span className="text-red-400">999 FM</span>
-          <span className="opacity-60">· On air</span>
+          <span className="opacity-60">· {radioFmPaused ? 'Paused' : 'On air'}</span>
         </SectionLabel>
         {radioFmNowPlaying && (
           <div className="px-1.5 py-1">
@@ -353,19 +353,24 @@ export default function MiniPlayer(): JSX.Element {
     }
     fmBaseRef.current = { elapsed: fmElapsed, at: Date.now() }
     setFmElapsedMs(fmElapsed)
+    if (radioFmPaused) {
+      if (fmTickRef.current) { clearInterval(fmTickRef.current); fmTickRef.current = null }
+      return
+    }
     if (!fmTickRef.current) {
       fmTickRef.current = setInterval(() => {
         const { elapsed, at } = fmBaseRef.current
         setFmElapsedMs(elapsed + (Date.now() - at))
       }, 500)
     }
-  }, [radioFmActive, fmElapsed])
+  }, [radioFmActive, fmElapsed, radioFmPaused])
   useEffect(() => () => { if (fmTickRef.current) clearInterval(fmTickRef.current) }, [])
   const fmDurationMs = radioFmNowPlaying?.duration_ms ?? 0
   const fmProgress = fmDurationMs > 0 ? Math.min(fmElapsedMs / fmDurationMs, 1) : 0
   const getFmTime = useCallback((): number => {
     const { elapsed, at } = fmBaseRef.current
     if (!at) return 0
+    if (useStore.getState().radioFmPaused) return elapsed / 1000
     return (elapsed + (Date.now() - at)) / 1000
   }, [])
 

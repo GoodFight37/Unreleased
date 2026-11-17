@@ -350,6 +350,7 @@ export async function runDesktopCommand(cmd: string, arg: unknown): Promise<void
       break
     }
     case 'seek': {
+      if (s.radioFmActive) break
       const fraction = Number(arg)
       const duration = getAudioDuration()
       if (Number.isFinite(fraction) && duration > 0) seekAudio(Math.min(Math.max(fraction, 0), 1) * duration)
@@ -357,6 +358,7 @@ export async function runDesktopCommand(cmd: string, arg: unknown): Promise<void
     }
     // A line of the lyrics picked: the song from where it's sung, in seconds.
     case 'seek-to': {
+      if (s.radioFmActive) break
       const seconds = Number(arg)
       if (Number.isFinite(seconds)) seekAudio(Math.max(seconds, 0))
       break
@@ -370,6 +372,10 @@ export async function runDesktopCommand(cmd: string, arg: unknown): Promise<void
     case 'jump': {
       const index = Number(arg)
       if (!Number.isInteger(index)) break
+      if (s.radioFmActive) {
+        if (index === 0) runHotkeyAction('play-pause')
+        break
+      }
       if (index === s.queueIndex || (!s.queue.length && index === 0)) { runHotkeyAction('play-pause'); break }
       const track = s.queue[index]
       if (track) s.jumpToTrack(track, index)
@@ -587,7 +593,7 @@ export function watchDesktopState(send: (patch: Record<string, unknown>) => void
     const track = nowTrack(s)
     sentLength = track?.duration ?? 0
     push({
-      playing: s.radioFmActive ? true : s.isPlaying,
+      playing: s.radioFmActive ? !s.radioFmPaused : s.isPlaying,
       track,
       liked: !!s.currentTrack && !s.radioFmActive && s.likedTrackIds.includes(s.currentTrack.id),
       canLike: !!s.currentTrack && !s.radioFmActive,
@@ -640,7 +646,7 @@ export function watchDesktopState(send: (patch: Record<string, unknown>) => void
   const unsubscribe = useStore.subscribe((s, p) => {
     if (s.songPrefs !== p.songPrefs || s.currentTrack !== p.currentTrack || s.currentTrackFull !== p.currentTrackFull || s.isPlaying !== p.isPlaying || s.queue !== p.queue
       || s.queueIndex !== p.queueIndex || s.likedTrackIds !== p.likedTrackIds || s.volume !== p.volume || s.repeat !== p.repeat
-      || s.shuffle !== p.shuffle || s.lyricsOffset !== p.lyricsOffset || s.radioFmActive !== p.radioFmActive || s.radioFmNowPlaying !== p.radioFmNowPlaying
+      || s.shuffle !== p.shuffle || s.lyricsOffset !== p.lyricsOffset || s.radioFmActive !== p.radioFmActive || s.radioFmPaused !== p.radioFmPaused || s.radioFmNowPlaying !== p.radioFmNowPlaying
       || s.radioFmMatchedSong !== p.radioFmMatchedSong || s.playlists !== p.playlists || s.playHistory !== p.playHistory || s.radioFmIsLive !== p.radioFmIsLive
       || s.eqEnabled !== p.eqEnabled || s.playbackSpeed !== p.playbackSpeed || s.eqBalance !== p.eqBalance || s.eqMono !== p.eqMono
       || s.eqBoost !== p.eqBoost || s.skipSilence !== p.skipSilence || s.reverbEnabled !== p.reverbEnabled || s.audioFx !== p.audioFx

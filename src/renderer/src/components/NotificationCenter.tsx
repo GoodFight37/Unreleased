@@ -64,7 +64,7 @@ function timeLabel(at: number, now: number, today: number): string {
 }
 
 export default function NotificationCenter(): JSX.Element {
-  const { setShowNotifications } = useStorePick('setShowNotifications')
+  const { setShowNotifications, setActiveView } = useStorePick('setShowNotifications', 'setActiveView')
   const entries = useNotificationHistory()
   const close = useCallback(() => setShowNotifications(false), [setShowNotifications])
   useBackToClose(close)
@@ -146,7 +146,7 @@ export default function NotificationCenter(): JSX.Element {
       }}
       // Frosted straight on the panel: it holds no position:fixed popover of
       // its own, and the direct blur keeps working through its fade-in.
-      className="notification-glass animate-menu-pop fixed right-3 z-[9990] w-[360px] max-w-[calc(100vw-1.5rem)] flex flex-col rounded-2xl glass-thick glass-specular overflow-hidden"
+      className="notification-glass floating-panel-glass animate-menu-pop fixed right-3 z-[9990] w-[360px] max-w-[calc(100vw-1.5rem)] flex flex-col rounded-2xl glass-thick glass-specular overflow-hidden"
     >
       <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--fill)] border-b border-[var(--separator)] shrink-0">
         <Bell size={13} className="text-[var(--accent)] shrink-0" />
@@ -165,6 +165,13 @@ export default function NotificationCenter(): JSX.Element {
         )}
         <button onClick={close} aria-label="Close" className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
           <X size={13} />
+        </button>
+      </div>
+      <div className="flex items-center gap-3 px-3 py-2.5 border-b border-[var(--border)] shrink-0">
+        <p className="flex-1 text-xs text-text-muted">Your alerts stay here. All articles are in News.</p>
+        <button type="button" onClick={() => { close(); setActiveView('news') }}
+          className="flex items-center gap-1.5 shrink-0 px-2 py-1.5 rounded-lg text-xs text-text-primary hover:bg-[var(--fill)] focus-visible:ring-2 focus-visible:ring-accent">
+          <Newspaper size={14} aria-hidden /> Browse news
         </button>
       </div>
       {kinds.length > 1 && (

@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore'
 import { fisherYates } from '../../store/queueSlice'
 import { EQ_PRESETS, type AudioFx } from '../audioEffects'
 import { runHotkeyAction } from '../hotkeys'
+import { runPlayerCommand } from '../windowSync'
 import { getSongById, getSongsByIds, loadAllSongs, loadAllSongsWithLyricsAbortable, normalizeSongTitle, resolveTitleToSong, searchSongs, songToTrack, type JWApiSong } from '../juicewrldApi'
 import { displaySongName, renamedSongs } from '../songPrefs'
 import { parseSearchQuery, matchesFieldFilters, songsById, textMatches } from '../trackerSearch'
@@ -105,7 +106,7 @@ export const PLAYER_COMMANDS: TermCommand[] = [
     complete: completeSongs,
     run: async (args, ctx) => {
       const arg = args.trim()
-      if (!arg) { currentTrack(); runHotkeyAction('play'); ctx.print('▶ playing', 'ok'); return }
+      if (!arg) { if (!st().radioFmActive) currentTrack(); runPlayerCommand('play'); ctx.print('▶ playing', 'ok'); return }
       const song = await songFromArg(arg)
       st().playTrack(songToTrack(song))
       ctx.print(`▶ ${displaySongName(song)}`, 'ok')
@@ -113,15 +114,16 @@ export const PLAYER_COMMANDS: TermCommand[] = [
   },
   {
     name: 'pause', group: 'Player', usage: 'pause', description: 'Pause playback',
-    run: (_a, ctx) => { currentTrack(); runHotkeyAction('pause'); ctx.print('⏸ paused', 'ok') },
+    run: (_a, ctx) => { if (!st().radioFmActive) currentTrack(); runPlayerCommand('pause'); ctx.print('⏸ paused', 'ok') },
   },
   {
     name: 'toggle', aliases: ['playpause'], group: 'Player', usage: 'toggle', description: 'Play or pause',
-    run: (_a, ctx) => { currentTrack(); runHotkeyAction('play-pause'); ctx.print(st().isPlaying ? '▶ playing' : '⏸ paused', 'ok') },
+    run: (_a, ctx) => { if (!st().radioFmActive) currentTrack(); runPlayerCommand('play-pause'); const s = st(); ctx.print((s.radioFmActive ? !s.radioFmPaused : s.isPlaying) ? '▶ playing' : '⏸ paused', 'ok') },
   },
   {
     name: 'next', aliases: ['skip'], group: 'Player', usage: 'next', description: 'Skip to the next track',
     run: (_a, ctx) => {
+      if (st().radioFmActive) fail('999 FM is live; tracks cannot be skipped')
       currentTrack()
       const before = st().queueIndex
       runHotkeyAction('next')
@@ -132,12 +134,13 @@ export const PLAYER_COMMANDS: TermCommand[] = [
   },
   {
     name: 'prev', aliases: ['previous', 'back'], group: 'Player', usage: 'prev', description: 'Go to the previous track (or the start of this one)',
-    run: (_a, ctx) => { currentTrack(); runHotkeyAction('previous'); ctx.print('⏮ previous', 'ok') },
+    run: (_a, ctx) => { if (st().radioFmActive) fail('999 FM is live; tracks cannot be skipped'); currentTrack(); runHotkeyAction('previous'); ctx.print('⏮ previous', 'ok') },
   },
   {
     name: 'seek', group: 'Player', usage: 'seek <+10 | -10 | 1:30 | 90 | 50%>',
     description: 'Jump within the current track: relative seconds, a clock time, absolute seconds or a percentage',
     run: (args, ctx) => {
+      if (st().radioFmActive) fail('999 FM is live; seeking is unavailable')
       currentTrack()
       const duration = getAudioDuration() || st().currentTrack?.duration || 0
       const target = parseSeek(args.trim(), getAudioCurrentTime(), duration)
@@ -240,10 +243,10 @@ export const PLAYER_COMMANDS: TermCommand[] = [
     name: 'stop', group: 'Player', usage: 'stop', description: 'Stop playback and empty the queue (pause only pauses)',
     run: (_a, ctx) => {
       const s = st()
-      if (!s.currentTrack && s.queue.length === 0) fail('nothing is playing')
-      runHotkeyAction('pause')
+      if (!s.currentTrack && !s.radioFmActive && s.queue.length === 0) fail('nothing is playing')
+      runPlayerCommand('pause')
       useStore.setState({
-        isPlaying: false, currentTrack: null, currentTrackFull: null, queue: [], queueIndex: -1, progress: 0, currentTime: 0,
+        isPlaying: false, radioFmActive: false, radioFmPaused: false, currentTrack: null, currentTrackFull: null, queue: [], queueIndex: -1, progress: 0, currentTime: 0,
         queueOriginal: null, queueFilter: null, queueSource: null, queueSongPool: null, radioMode: false, radioNext: null, radioFilter: null, _radioWaiting: false,
       })
       ctx.print('⏹ stopped', 'ok')

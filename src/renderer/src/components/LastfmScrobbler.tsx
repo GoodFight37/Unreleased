@@ -36,12 +36,13 @@ interface Candidate {
 export default function LastfmScrobbler(): JSX.Element | null {
   const {
     currentTrack, isPlaying,
-    radioFmActive, radioFmNowPlaying,
+    radioFmActive, radioFmPaused, radioFmNowPlaying,
     lastfmUser, lastfmEnabled,
   } = useStore(useShallow((s) => ({
     currentTrack: s.currentTrack,
     isPlaying: s.isPlaying,
     radioFmActive: s.radioFmActive,
+    radioFmPaused: s.radioFmPaused,
     radioFmNowPlaying: s.radioFmNowPlaying,
     lastfmUser: s.lastfmUser,
     lastfmEnabled: s.lastfmEnabled,
@@ -74,8 +75,8 @@ export default function LastfmScrobbler(): JSX.Element | null {
     void lastfmFlushQueue()
   }
 
-  // What's audible right now, normalized across the two sources. Radio has no
-  // pause state - while the tuner is active and reporting a track, it plays.
+  // What's audible right now, normalized across the two sources. While the live
+  // tuner is voluntarily paused (`radioFmPaused`), stop counting listen time.
   let item: { key: string; info: LastfmTrackInfo } | null = null
   let playing = false
   if (radioFmActive) {
@@ -89,7 +90,7 @@ export default function LastfmScrobbler(): JSX.Element | null {
           duration: (radioFmNowPlaying.duration_ms ?? 0) / 1000 || undefined,
         },
       }
-      playing = true
+      playing = !radioFmPaused
     }
   } else if (currentTrack?.title && currentTrack.artist) {
     // Raw file-browser tracks (unreleased sessions/leaks with no proper song

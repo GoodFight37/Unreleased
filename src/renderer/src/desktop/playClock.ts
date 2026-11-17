@@ -12,21 +12,29 @@ const CHECK_MS = 250
 
 /** 999 FM's position: the station's elapsed time at its last update, run on from there. */
 let fmBase: { elapsed: number; at: number } | null = null
+let fmPausedAt: number | null = null
 
 /** Where 999 FM's song is now, in seconds. `elapsed_ms` is already the heard position (RadioFmPlayer
  *  corrects it for the stream's lag), so it only runs on from when it last changed. */
 export function radioFmSeconds(): number {
-  const elapsed = useStore.getState().radioFmNowPlaying?.elapsed_ms ?? 0
+  const s = useStore.getState()
+  const elapsed = s.radioFmNowPlaying?.elapsed_ms ?? 0
   // No position (the DJ is talking, or nothing's known yet): the song hasn't started.
   if (!elapsed) return 0
-  if (!fmBase || fmBase.elapsed !== elapsed) fmBase = { elapsed, at: Date.now() }
-  return (elapsed + Date.now() - fmBase.at) / 1000
+  if (!fmBase || fmBase.elapsed !== elapsed) {
+    fmBase = { elapsed, at: Date.now() }
+    fmPausedAt = s.radioFmPaused ? Date.now() : null
+  }
+  return (elapsed + (s.radioFmPaused ? fmPausedAt ?? Date.now() : Date.now()) - fmBase.at) / 1000
 }
 // Stamped when the position lands, not when something first reads it: a reader that starts later
 // would otherwise run on from its own start and lag by the difference.
 useStore.subscribe((s, p) => {
   const elapsed = s.radioFmNowPlaying?.elapsed_ms ?? 0
-  if (elapsed !== (p.radioFmNowPlaying?.elapsed_ms ?? 0)) fmBase = { elapsed, at: Date.now() }
+  if (s.radioFmActive !== p.radioFmActive || s.radioFmNowPlaying !== p.radioFmNowPlaying || (p.radioFmPaused && !s.radioFmPaused)) {
+    fmBase = { elapsed, at: Date.now() }
+    fmPausedAt = s.radioFmPaused ? Date.now() : null
+  } else if (s.radioFmPaused && !p.radioFmPaused) fmPausedAt = Date.now()
 })
 
 /** The playing position: 999 FM's while it's on, otherwise the audio's. */
@@ -37,7 +45,7 @@ export function playingSeconds(): number {
 function read(): StageClock {
   const s = useStore.getState()
   if (s.radioFmActive) {
-    return { seconds: radioFmSeconds(), at: epochNow(), running: !!s.radioFmNowPlaying?.elapsed_ms, rate: 1 }
+    return { seconds: radioFmSeconds(), at: epochNow(), running: !s.radioFmPaused && !!s.radioFmNowPlaying?.elapsed_ms, rate: 1 }
   }
   return { seconds: getAudioCurrentTime(), at: epochNow(), running: s.isPlaying, rate: s.playbackSpeed || 1 }
 }
@@ -58,7 +66,7 @@ export function watchPlayClock(onChange: (clock: StageClock) => void): () => voi
   const timer = window.setInterval(check, CHECK_MS)
   // The audio's own time updates (a few a second, never held back like a hidden page's timers) catch a seek too.
   const unsubscribe = useStore.subscribe((s, p) => {
-    if (s.radioFmActive !== p.radioFmActive || s.radioFmNowPlaying !== p.radioFmNowPlaying
+    if (s.radioFmActive !== p.radioFmActive || s.radioFmPaused !== p.radioFmPaused || s.radioFmNowPlaying !== p.radioFmNowPlaying
       || s.isPlaying !== p.isPlaying || s.currentTrack !== p.currentTrack || s.playbackSpeed !== p.playbackSpeed || s.currentTime !== p.currentTime) check()
   })
   return () => { window.clearInterval(timer); unsubscribe() }

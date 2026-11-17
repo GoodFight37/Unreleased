@@ -2,8 +2,6 @@ name: Windows test build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [arena/9e8c9299-unreleased]
 
 permissions:
   contents: read

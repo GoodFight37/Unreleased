@@ -1517,7 +1517,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
   },
 
   // ── UI ────────────────────────────────────────────────────────────────────
-  activeView: IS_ELECTRON ? 'api-tracker' : 'home',
+  activeView: IS_ELECTRON && ls.get<boolean>('developerMode') ? 'api-tracker' : 'home',
   previousView: null,
   activeAdminTab: null,
   showNowPlaying: false,

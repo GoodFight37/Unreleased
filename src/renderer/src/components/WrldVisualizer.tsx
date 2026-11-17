@@ -106,7 +106,7 @@ export default function WrldVisualizer({
   rootRef, fullscreen, artUrl, trackKey, albumKey, hasLyrics, fm, onEnter, onExit, onClose, onPopOutMini,
 }: Props): JSX.Element {
   // 999 FM plays with isPlaying off; the visualizer stops listening when this is false.
-  const isPlaying = useStore((s) => s.isPlaying || s.radioFmActive)
+  const isPlaying = useStore((s) => s.isPlaying || (s.radioFmActive && !s.radioFmPaused))
   const developerMode = useStore((s) => s.developerMode)
   const lyricsOverride = useStore((s) => s.lyricsOverride)
   // Random: the queue's own radio (random songs after this one), not 999 FM.

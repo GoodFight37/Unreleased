@@ -8,6 +8,7 @@ import { IS_ELECTRON } from '../lib/platform'
 import { hasChatAccess } from '../lib/chatAccess'
 import {
   HOTKEY_ACTIONS,
+  hotkeyActionLabel,
   comboTokens,
   effectiveBinding,
   runHotkeyAction,
@@ -15,6 +16,7 @@ import {
 import { GLASS_LOOKS, setGlassLook, type GlassLookId } from '../lib/glass/presets'
 import type { ViewType } from '../types'
 import { SKINS } from '../lib/skins'
+import { viewLabel } from '../lib/viewLabels'
 
 interface PaletteItem {
   id: string
@@ -28,7 +30,7 @@ interface PaletteItem {
 const VIEW_ENTRIES: { view: ViewType; label: string; keywords?: string; electronOnly?: boolean; staffOnly?: boolean; devOnly?: boolean }[] = [
   { view: 'home', label: 'Home', keywords: 'dashboard overview' },
   { view: 'api-tracker', label: 'Tracker', keywords: 'songs catalog search leaks' },
-  { view: 'api-files', label: 'Files', keywords: 'browser folders audio' },
+  { view: 'api-files', label: 'Files', keywords: 'browser folders audio', devOnly: true },
   { view: 'library', label: 'Library', keywords: 'local music folders', electronOnly: true },
   { view: 'playlists', label: 'Playlists', keywords: 'collections' },
   { view: 'wrld', label: 'WRLD', keywords: 'player lyrics 999 fm visualizer' },
@@ -77,9 +79,9 @@ export default function CommandPalette({ onClose }: { onClose: () => void }): JS
       if (v.devOnly && !developerMode) continue
       out.push({
         id: `view:${v.view}`,
-        label: `Go to ${v.label}`,
+        label: `Go to ${viewLabel(v.view, v.label, developerMode)}`,
         category: 'View',
-        keywords: v.keywords,
+        keywords: `${v.label} ${v.keywords ?? ''}`,
         run: () => setActiveView(v.view),
       })
     }
@@ -149,7 +151,7 @@ export default function CommandPalette({ onClose }: { onClose: () => void }): JS
       const combo = effectiveBinding(action.id, hotkeyBindings)
       out.push({
         id: `hk:${action.id}`,
-        label: action.label,
+        label: hotkeyActionLabel(action, developerMode),
         category: action.category,
         keywords: action.id,
         tokens: comboTokens(combo),
@@ -237,7 +239,7 @@ export default function CommandPalette({ onClose }: { onClose: () => void }): JS
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search views, actions, Glass looks, shortcuts…"
+              placeholder="Search pages, music controls and shortcuts…"
               aria-label="Command palette search"
               className="flex-1 min-w-0 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
             />

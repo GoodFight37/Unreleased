@@ -17,6 +17,7 @@ const { resolveTypedPath } = require('./localPaths')
 const { isAlacContainerExt } = require('./alac')
 const { createAlacPlayback, liveBody } = require('./alacPlayback')
 const { createShareVideoManager } = require('./shareVideo')
+const { configureForkProfile } = require('./forkProfile')
 
 // One playback cache for the process. A plain play uses ffmpeg if it is
 // already installed; prepare-playback downloads it the first time a file
@@ -44,35 +45,18 @@ const isVerifyDist = process.argv.includes('--load-dist')
 const isUiVerify = process.argv.includes('--ui-verify')
 const isDev = !app.isPackaged && !isSmokeTest && !isVerifyDist && !isUiVerify
 const winPowerShellPath = () => path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+let gotSingleInstanceLock
 
 if (isUiVerify && process.env.UNRELEASED_UI_VERIFY_DIR) {
   app.setPath('userData', process.env.UNRELEASED_UI_VERIFY_DIR)
-} else if (app.isPackaged) {
-  // Packaged fork builds use their own userData directory and single-instance
-  // lock, copying initial user settings/library from the official install once
-  // (read-only on the official directory). Dev mode continues sharing.
-  const officialUserData = app.getPath('userData')
-  const forkUserData = path.join(app.getPath('appData'), 'unreleased-glass')
+  app.setPath('sessionData', process.env.UNRELEASED_UI_VERIFY_DIR)
+} else if (app.isPackaged || isVerifyDist) {
   try {
-    const migratedMarker = path.join(forkUserData, '.migrated-from-official')
-    if (!fs.existsSync(migratedMarker)) {
-      fs.mkdirSync(forkUserData, { recursive: true })
-      for (const file of ['app-settings.json', 'library-data.json', 'local-playlists.json', 'offline-library.json']) {
-        const src = path.join(officialUserData, file)
-        const dst = path.join(forkUserData, file)
-        if (fs.existsSync(src) && !fs.existsSync(dst)) {
-          try { fs.copyFileSync(src, dst) } catch {}
-        }
-      }
-      const srcCovers = path.join(officialUserData, 'offline-covers')
-      const dstCovers = path.join(forkUserData, 'offline-covers')
-      if (fs.existsSync(srcCovers) && !fs.existsSync(dstCovers)) {
-        try { fs.cpSync(srcCovers, dstCovers, { recursive: true }) } catch {}
-      }
-      try { fs.writeFileSync(migratedMarker, new Date().toISOString(), 'utf-8') } catch {}
-    }
-    app.setPath('userData', forkUserData)
-  } catch {}
+    gotSingleInstanceLock = configureForkProfile(app)
+  } catch (error) {
+    dialog.showErrorBox('Unreleased Glass: profile import stopped', error.message)
+    app.exit(1)
+  }
 }
 
 // Must run before ready: Chromium reads Ozone/GPU switches while booting.
@@ -96,7 +80,7 @@ Menu.setApplicationMenu(null)
 // Only one instance may run at a time — launching a second copy (e.g. double-
 // clicking the exe again, or a shortcut) just focuses the existing window
 // instead of spinning up a competing process against the same userData files.
-const gotSingleInstanceLock = app.requestSingleInstanceLock()
+gotSingleInstanceLock ??= app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
   app.quit()
 }
@@ -1030,17 +1014,15 @@ function broadcastToWindows(channel, payload) {
 // Playback state mirrored from the renderer (via 'tray-playback-state') so the
 // tray menu can show now-playing info and offer media controls. The renderer
 // owns the actual audio element; tray buttons just send commands back to it.
-let trayPlayback = { hasTrack: false, isPlaying: false, title: '', artist: '', liked: false }
+let trayPlayback = { hasTrack: false, isPlaying: false, title: '', artist: '', liked: false, radioFmActive: false }
 
 function sendTrayCommand(cmd) {
   mainWindow?.webContents.send('tray-command', cmd)
 }
 
 function buildTrayMenu() {
-  // `hasTrack` gates the controls (false during FM radio, matching the in-app
-  // buttons), but the now-playing label follows `title` so FM still shows
-  // what's on air.
-  const { hasTrack, isPlaying, title, artist, liked } = trayPlayback
+  const { hasTrack, isPlaying, title, artist, liked, radioFmActive } = trayPlayback
+  const canSkip = hasTrack && !radioFmActive
   const nowPlaying = title
     ? `${title}${artist ? ` — ${artist}` : ''}`
     : 'Nothing playing'
@@ -1048,11 +1030,11 @@ function buildTrayMenu() {
     { label: nowPlaying.length > 60 ? nowPlaying.slice(0, 57) + '…' : nowPlaying, enabled: false },
     { type: 'separator' },
     { label: isPlaying ? 'Pause' : 'Play', enabled: hasTrack, click: () => sendTrayCommand('play-pause') },
-    { label: 'Next track', enabled: hasTrack, click: () => sendTrayCommand('next') },
-    { label: 'Previous track', enabled: hasTrack, click: () => sendTrayCommand('previous') },
-    { label: liked ? 'Unlike song' : 'Like song', enabled: hasTrack, click: () => sendTrayCommand('toggle-like') },
+    { label: 'Next track', enabled: canSkip, click: () => sendTrayCommand('next') },
+    { label: 'Previous track', enabled: canSkip, click: () => sendTrayCommand('previous') },
+    { label: liked ? 'Unlike song' : 'Like song', enabled: canSkip, click: () => sendTrayCommand('toggle-like') },
     { type: 'separator' },
-    { label: 'Open Unreleased', click: () => showMainWindow() },
+    { label: 'Open Unreleased Glass', click: () => showMainWindow() },
     { label: 'Open mini player', click: () => createFloatWindow('mini-player') },
     ...desktopTrayItems(),
     { label: 'Quit', click: () => { isQuitting = true; app.quit() } },
@@ -1166,6 +1148,7 @@ ipcMain.on('tray-playback-state', (_, state) => {
     title: typeof state.title === 'string' ? state.title : '',
     artist: typeof state.artist === 'string' ? state.artist : '',
     liked: !!state.liked,
+    radioFmActive: !!state.radioFmActive,
   }
   updateTray()
   updateMainWindowTitle()
@@ -3462,18 +3445,14 @@ const TOOL_SPECS = {
     sha256: () => FFMPEG_SHA256[`${process.platform}-${process.arch}`] || null,
   },
   ytdlp: {
-    // Always the latest release: yt-dlp's site extractors rot quickly, so a
-    // fresh copy beats anything pinned. Re-downloading (force:true) is also the
-    // fix when a site link fails with an "outdated downloader" error. Since the
-    // binary itself can't be pinned, its checksum is instead fetched fresh from
-    // the same release's own SHA2-256SUMS asset and verified after download.
-    url: () => {
+    // Resolve latest once per download so the binary and checksum share a tag.
+    url: (tag) => {
       const name = process.platform === 'win32' ? 'yt-dlp.exe'
         : process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp'
-      return `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${name}`
+      return `https://github.com/yt-dlp/yt-dlp/releases/download/${encodeURIComponent(tag)}/${name}`
     },
     checksumFileName: () => (process.platform === 'win32' ? 'yt-dlp.exe' : process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp'),
-    checksumsUrl: () => 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS',
+    checksumsUrl: (tag) => `https://github.com/yt-dlp/yt-dlp/releases/download/${encodeURIComponent(tag)}/SHA2-256SUMS`,
     gunzip: false,
     file: process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp',
   },
@@ -3490,32 +3469,31 @@ function sha256File(filePath) {
   })
 }
 
-// Fetches yt-dlp's own SHA2-256SUMS text asset (small, plain HTTPS GET — not
-// worth downloadAnyUrl's redirect/gunzip machinery) and returns the hex digest
-// for `fileName`, or null if the sums file doesn't mention it.
-function fetchYtDlpChecksum(fileName) {
-  return new Promise((resolve) => {
-    https.get(TOOL_SPECS.ytdlp.checksumsUrl(), { headers: { 'User-Agent': 'Unreleased-App' } }, (res) => {
-      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-        res.resume()
-        https.get(res.headers.location, { headers: { 'User-Agent': 'Unreleased-App' } }, (res2) => {
-          let body = ''
-          res2.on('data', (c) => { body += c })
-          res2.on('end', () => resolve(body))
-          res2.on('error', () => resolve(''))
-        }).on('error', () => resolve(''))
-        return
-      }
-      let body = ''
-      res.on('data', (c) => { body += c })
-      res.on('end', () => resolve(body))
-      res.on('error', () => resolve(''))
-    }).on('error', () => resolve(''))
-  }).then((body) => {
-    const line = body.split('\n').find((l) => l.trim().endsWith(fileName))
-    const match = line && /^([0-9a-f]{64})\s/.exec(line.trim())
-    return match ? match[1] : null
+async function latestYtDlpReleaseTag() {
+  const response = await fetch('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest', {
+    headers: { 'User-Agent': 'Unreleased-Glass', Accept: 'application/vnd.github+json' },
+    signal: AbortSignal.timeout(15_000),
   })
+  if (!response.ok) throw new Error(`Could not resolve yt-dlp release (HTTP ${response.status})`)
+  const tag = (await response.json())?.tag_name
+  if (typeof tag !== 'string' || !/^\d{4}\.\d{2}\.\d{2}(?:\.\d+)?$/.test(tag)) {
+    throw new Error('Invalid yt-dlp release tag')
+  }
+  return tag
+}
+
+// Only the exact asset name from the resolved release may supply its checksum.
+async function fetchYtDlpChecksum(fileName, tag) {
+  try {
+    const response = await fetch(TOOL_SPECS.ytdlp.checksumsUrl(tag), {
+      headers: { 'User-Agent': 'Unreleased-Glass' }, signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) return null
+    const body = await response.text()
+    const match = body.split('\n').map((line) => /^([0-9a-f]{64})\s+\*?(.+)$/.exec(line.trim()))
+      .find((line) => line?.[2] === fileName)
+    return match?.[1] ?? null
+  } catch { return null }
 }
 
 function toolsDir() {
@@ -3593,9 +3571,10 @@ function downloadTool(tool, onProgress) {
       }
     } else {
       const part = dest + '.part'
-      await downloadAnyUrl(spec.url(), part, onProgress, 0, false, true)
-      const expected = await fetchYtDlpChecksum(spec.checksumFileName())
-      if (!expected) { try { fs.unlinkSync(part) } catch {}; throw new Error('Could not fetch yt-dlp release checksum — refusing to trust an unverified binary') }
+      const tag = await latestYtDlpReleaseTag()
+      const expected = await fetchYtDlpChecksum(spec.checksumFileName(), tag)
+      if (!expected) throw new Error('Could not fetch yt-dlp release checksum — refusing to trust an unverified binary')
+      await downloadAnyUrl(spec.url(tag), part, onProgress, 0, false, true)
       const actual = await sha256File(part)
       if (actual !== expected) {
         try { fs.unlinkSync(part) } catch {}

@@ -7,6 +7,7 @@ import { showStaffProfile, getToken } from '../lib/userApi'
 import AppMenu from './AppMenu'
 import { NAV_ITEMS, orderedNavItems, isNavItemVisible, orderedNavControls, isNavControlVisible, navTabFor, tabEntryView, type NavControlId } from '../lib/navItems'
 import { preloadView } from '../lib/lazyViews'
+import { viewLabel } from '../lib/viewLabels'
 import { hasChatAccess } from '../lib/chatAccess'
 import type { PlaylistContextMenuState } from './PlaylistContextMenu'
 import { lazyOverlay } from '../lib/lazyView'
@@ -136,13 +137,13 @@ export default function Sidebar(): JSX.Element {
   // web-only tabs on web and anything the user has toggled off.
   const items = developerMode
     ? orderedNavItems(navOrder, hasChatAccess(account), showStaffProfile(account)).filter((i) => isNavItemVisible(i, navVisibility, isElectron))
-    : (['home', 'api-tracker', isElectron ? 'library' : 'playlists'] as ViewType[]).map((view, index) => ({
-        ...NAV_ITEMS.find((item) => item.view === view)!, label: ['Discover', 'Catalogue', 'Collection'][index],
+    : (['home', 'api-tracker', 'playlists'] as ViewType[]).map((view) => ({
+        ...NAV_ITEMS.find((item) => item.view === view)!, label: viewLabel(view, '', false),
       }))
   // Which tab reads as current - not always activeView, since some views are
   // sub-views of a tab (the games inside Games). See navTabFor.
   const activeTab = !developerMode && ['library', 'liked', 'playlists', 'albums', 'shared-playlist'].includes(activeView)
-    ? (isElectron ? 'library' : 'playlists') : navTabFor(activeView)
+    ? 'playlists' : navTabFor(activeView)
   // The active tab's highlight slides from tab to tab rather than jumping -
   // one indicator behind the items, in whichever layout below is rendered.
   const navLayout = navStyle === 'pill' ? 'pill' : sidebarPosition === 'top' || sidebarPosition === 'bottom' ? 'bar' : 'side'
@@ -318,7 +319,6 @@ export default function Sidebar(): JSX.Element {
             <div className={`shrink-0 bg-[var(--border)] ${horizontal ? 'w-px h-6 mx-1' : 'h-px w-6 my-1'}`} />
           </>
         )}
-        {!developerMode && horizontal && <span className="coffre-brand" aria-label="Unreleased, Juice WRLD"><span>999</span> UNRELEASED</span>}
         {items.map(({ icon, label, view }) => (
           <button
             key={view}

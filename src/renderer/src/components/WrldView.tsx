@@ -94,7 +94,7 @@ function WrldPanelLayer({ visible = true, exiting, animateIn, className, childre
 export default function WrldView(): JSX.Element {
   const {
     currentTrack, currentTrackFull, account, theme,
-    radioFmActive, setRadioFmActive, radioFmIsLive, radioFmNowPlaying,
+    radioFmActive, radioFmPaused, setRadioFmActive, radioFmIsLive, radioFmNowPlaying,
     radioFmMatchedSong,
     playlists,
     playTrack,
@@ -112,6 +112,7 @@ export default function WrldView(): JSX.Element {
     account: s.account,
     theme: s.theme,
     radioFmActive: s.radioFmActive,
+    radioFmPaused: s.radioFmPaused,
     setRadioFmActive: s.setRadioFmActive,
     radioFmIsLive: s.radioFmIsLive,
     radioFmNowPlaying: s.radioFmNowPlaying,
@@ -375,7 +376,7 @@ export default function WrldView(): JSX.Element {
   const wrldPlayRef = useRef<HTMLButtonElement>(null)
   const glassGpuReady = useGlassCompositorReady() && !fullscreen
   useGlassSurface(songVersionBtnRef, { kind: 'pill', layer: 1, radius: 18 }, !radioFmActive && !fullscreen && songVersions.length > 0)
-  useGlassSurface(wrldPlayRef, { kind: 'pill', layer: 1, radius: 28 }, !radioFmActive && !fullscreen)
+  useGlassSurface(wrldPlayRef, { kind: 'pill', layer: 1, radius: 28 }, !fullscreen)
   const songVersionMenuRef = useRef<HTMLDivElement>(null)
   const [songVersionMenuPos, setSongVersionMenuPos] = useState({ top: 0, right: 0 })
 
@@ -517,6 +518,7 @@ export default function WrldView(): JSX.Element {
   const { displayTitle, displayArtist, displayAlbum, fmDisabled, noTrack, toggleFm } = useWrldNowPlaying(
     radioFmActive, radioFmIsLive, radioFmNowPlaying, currentTrack,
   )
+  const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
 
   // ArtBox / FmRadioPanel / AlbumsGrid / AlbumDetail are rendered via plain
   // function calls, NOT <JSX/> element syntax: they're (re)defined on every
@@ -852,65 +854,66 @@ export default function WrldView(): JSX.Element {
 
             {/* Mobile playback bar - the bottom Player bar is hidden on this
                 page, and the mobile layout never had its own controls, so
-                this is the only way to control playback here. FM has no
-                local play/pause/seek, so that mode is volume-only. */}
+                this is the only way to control playback here. */}
             <div className="shrink-0 px-4 pt-2" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
-              {radioFmActive && <FmProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />}
-              {!radioFmActive && (
-                <>
-                  <ProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />
-                  <div className={`flex items-center justify-between mt-2 mb-1 transition-opacity ${noTrack ? 'opacity-35 pointer-events-none' : ''}`}>
-                    <button
-                      onClick={toggleShuffle}
-                      disabled={noTrack}
-                      title={shuffle ? 'Shuffle on' : 'Shuffle off'}
-                      className="p-2 rounded-full transition-colors"
-                      style={{ color: shuffle ? txtPri : txtTer, opacity: shuffle ? 1 : 0.6 }}
-                    >
-                      <Shuffle size={16} />
-                    </button>
-                    <button
-                      onClick={() => runHotkeyAction('previous')}
-                      disabled={noTrack}
-                      className="p-2 rounded-full transition-opacity hover:opacity-70"
-                      style={{ color: txtPri }}
-                      title="Previous"
-                    >
-                      <SkipBack size={24} fill="currentColor" />
-                    </button>
-                    <button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      disabled={noTrack}
-                      className="w-12 h-12 rounded-full flex items-center justify-center shadow-xl transition-opacity hover:opacity-80 active:scale-95"
-                      style={{ background: txtPri, color: textIsDark ? 'white' : 'black' }}
-                    >
-                      <SwapIcon swapKey={isPlaying}>
-                        {isPlaying
-                          ? <Pause size={20} fill="currentColor" />
-                          : <Play  size={20} fill="currentColor" className="ml-0.5" />}
-                      </SwapIcon>
-                    </button>
-                    <button
-                      onClick={() => runHotkeyAction('next')}
-                      disabled={noTrack}
-                      className="p-2 rounded-full transition-opacity hover:opacity-70"
-                      style={{ color: txtPri }}
-                      title="Next"
-                    >
-                      <SkipFwd size={24} fill="currentColor" />
-                    </button>
-                    <button
-                      onClick={toggleRepeat}
-                      disabled={noTrack}
-                      title={repeat === 'none' ? 'No repeat' : repeat === 'all' ? 'Repeat all' : 'Repeat one'}
-                      className="p-2 rounded-full transition-colors"
-                      style={{ color: repeat !== 'none' ? txtPri : txtTer, opacity: repeat !== 'none' ? 1 : 0.6 }}
-                    >
-                      {repeat === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
-                    </button>
-                  </div>
-                </>
-              )}
+              {radioFmActive
+                ? <FmProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />
+                : <ProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />}
+              <div className={`flex items-center justify-between mt-2 mb-1 transition-opacity ${noTrack ? 'opacity-35 pointer-events-none' : ''}`}>
+                {!radioFmActive ? (
+                  <button
+                    onClick={toggleShuffle}
+                    disabled={noTrack}
+                    title={shuffle ? 'Shuffle on' : 'Shuffle off'}
+                    className="p-2 rounded-full transition-colors"
+                    style={{ color: shuffle ? txtPri : txtTer, opacity: shuffle ? 1 : 0.6 }}
+                  >
+                    <Shuffle size={16} />
+                  </button>
+                ) : <span className="w-8" aria-hidden="true" />}
+                <button
+                  onClick={() => runHotkeyAction('previous')}
+                  disabled={noTrack || radioFmActive}
+                  className="p-2 rounded-full transition-opacity hover:opacity-70 disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ color: txtPri }}
+                  title="Previous"
+                >
+                  <SkipBack size={24} fill="currentColor" />
+                </button>
+                <button
+                  onClick={() => (radioFmActive ? runHotkeyAction('play-pause') : setIsPlaying(!isPlaying))}
+                  disabled={noTrack}
+                  aria-label={playbackActive ? 'Pause' : 'Play'}
+                  className="w-12 h-12 rounded-full flex items-center justify-center shadow-xl transition-opacity hover:opacity-80 active:scale-95"
+                  style={{ background: txtPri, color: textIsDark ? 'white' : 'black' }}
+                >
+                  <SwapIcon swapKey={playbackActive}>
+                    {playbackActive
+                      ? <Pause size={20} fill="currentColor" />
+                      : <Play  size={20} fill="currentColor" className="ml-0.5" />}
+                  </SwapIcon>
+                </button>
+                <button
+                  onClick={() => runHotkeyAction('next')}
+                  disabled={noTrack || radioFmActive}
+                  className="p-2 rounded-full transition-opacity hover:opacity-70 disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ color: txtPri }}
+                  title="Next"
+                >
+                  <SkipFwd size={24} fill="currentColor" />
+                </button>
+                {!radioFmActive ? (
+                  <button
+                    onClick={toggleRepeat}
+                    disabled={noTrack}
+                    title={repeat === 'none' ? 'No repeat' : repeat === 'all' ? 'Repeat all' : 'Repeat one'}
+                    className="p-2 rounded-full transition-colors"
+                    style={{ color: repeat !== 'none' ? txtPri : txtTer, opacity: repeat !== 'none' ? 1 : 0.6 }}
+                  >
+                    {repeat === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
+                  </button>
+                ) : <span className="w-8" aria-hidden="true" />}
+              </div>
               <div className="flex items-center gap-2.5">
                 {EFFECTS_SUPPORTED && (
                   <button
@@ -1069,27 +1072,27 @@ export default function WrldView(): JSX.Element {
 
               {/* Playback controls */}
               <div className="w-full max-w-[var(--wrld-player-width)] flex flex-col gap-4" data-viz="meta">
-                {/* Main controls row - hidden during 999FM; it's a live stream,
-                    nothing here to locally play/pause/seek. Voting to skip
-                    lives in the FM panel itself instead of a repurposed button. */}
-                {!radioFmActive && (
+                {/* Main controls row — during 999 FM, Play/Pause stops or rejoins
+                    the live stream while Shuffle/Repeat/Previous/Next stay unavailable. */}
                 <div className={`flex items-center justify-between transition-opacity ${noTrack ? 'opacity-35 pointer-events-none' : ''}`}>
                   {/* Shuffle */}
-                  <button
-                    onClick={toggleShuffle}
-                    disabled={noTrack}
-                    title={shuffle ? 'Shuffle on' : 'Shuffle off'}
-                    className="p-2 rounded-full transition-colors"
-                    style={{ color: shuffle ? txtPri : txtTer, opacity: shuffle ? 1 : 0.6 }}
-                  >
-                    <Shuffle size={16} />
-                  </button>
+                  {!radioFmActive ? (
+                    <button
+                      onClick={toggleShuffle}
+                      disabled={noTrack}
+                      title={shuffle ? 'Shuffle on' : 'Shuffle off'}
+                      className="p-2 rounded-full transition-colors"
+                      style={{ color: shuffle ? txtPri : txtTer, opacity: shuffle ? 1 : 0.6 }}
+                    >
+                      <Shuffle size={16} />
+                    </button>
+                  ) : <span className="w-8" aria-hidden="true" />}
 
                   {/* Prev */}
                   <button
                     onClick={() => runHotkeyAction('previous')}
-                    disabled={noTrack}
-                    className="p-2 rounded-full transition-opacity hover:opacity-70"
+                    disabled={noTrack || radioFmActive}
+                    className="p-2 rounded-full transition-opacity hover:opacity-70 disabled:opacity-30 disabled:cursor-not-allowed"
                     style={{ color: txtPri }}
                     title="Previous"
                   >
@@ -1099,15 +1102,16 @@ export default function WrldView(): JSX.Element {
                   {/* Play / Pause */}
                   <button
                     ref={wrldPlayRef}
-                    onClick={() => setIsPlaying(!isPlaying)}
+                    onClick={() => (radioFmActive ? runHotkeyAction('play-pause') : setIsPlaying(!isPlaying))}
                     disabled={noTrack}
+                    aria-label={playbackActive ? 'Pause' : 'Play'}
                     className={`w-14 h-14 rounded-full flex items-center justify-center transition-opacity hover:opacity-80 active:scale-95 ${glassGpuReady ? 'glass-gpu' : 'shadow-xl'}`}
                     style={glassGpuReady
                       ? { background: 'transparent', color: !isDarkSkin ? '#10121a' : '#ffffff' }
                       : { background: txtPri, color: textIsDark ? 'white' : 'black' }}
                   >
-                    <SwapIcon swapKey={isPlaying}>
-                      {isPlaying
+                    <SwapIcon swapKey={playbackActive}>
+                      {playbackActive
                         ? <Pause size={24} fill="currentColor" />
                         : <Play  size={24} fill="currentColor" className="ml-0.5" />}
                     </SwapIcon>
@@ -1116,8 +1120,8 @@ export default function WrldView(): JSX.Element {
                   {/* Next */}
                   <button
                     onClick={() => runHotkeyAction('next')}
-                    disabled={noTrack}
-                    className="p-2 rounded-full transition-opacity hover:opacity-70"
+                    disabled={noTrack || radioFmActive}
+                    className="p-2 rounded-full transition-opacity hover:opacity-70 disabled:opacity-30 disabled:cursor-not-allowed"
                     style={{ color: txtPri }}
                     title="Next"
                   >
@@ -1125,17 +1129,18 @@ export default function WrldView(): JSX.Element {
                   </button>
 
                   {/* Repeat */}
-                  <button
-                    onClick={toggleRepeat}
-                    disabled={noTrack}
-                    title={repeat === 'none' ? 'No repeat' : repeat === 'all' ? 'Repeat all' : 'Repeat one'}
-                    className="p-2 rounded-full transition-colors"
-                    style={{ color: repeat !== 'none' ? txtPri : txtTer, opacity: repeat !== 'none' ? 1 : 0.6 }}
-                  >
-                    {repeat === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
-                  </button>
+                  {!radioFmActive ? (
+                    <button
+                      onClick={toggleRepeat}
+                      disabled={noTrack}
+                      title={repeat === 'none' ? 'No repeat' : repeat === 'all' ? 'Repeat all' : 'Repeat one'}
+                      className="p-2 rounded-full transition-colors"
+                      style={{ color: repeat !== 'none' ? txtPri : txtTer, opacity: repeat !== 'none' ? 1 : 0.6 }}
+                    >
+                      {repeat === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
+                    </button>
+                  ) : <span className="w-8" aria-hidden="true" />}
                 </div>
-                )}
 
                 {/* Volume row */}
                 <div className="flex items-center gap-2.5">
@@ -1981,6 +1986,7 @@ function WrldQueueRow({ track, isActive, isPlaying, showDrag, onPlay, onRemove }
 // locally between updates the same way the bottom Player bar does.
 const FmProgressBar = memo(function FmProgressBar({ txtPri, txtTer, trackBg }: { txtPri: string; txtTer: string; trackBg: string }) {
   const radioFmNowPlaying = useStore(s => s.radioFmNowPlaying)
+  const radioFmPaused = useStore(s => s.radioFmPaused)
   const [elapsedMs, setElapsedMs] = useState(0)
   const baseRef = useRef<{ elapsed: number; at: number }>({ elapsed: 0, at: 0 })
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -1997,13 +2003,17 @@ const FmProgressBar = memo(function FmProgressBar({ txtPri, txtTer, trackBg }: {
     }
     baseRef.current = { elapsed, at: Date.now() }
     setElapsedMs(elapsed)
+    if (radioFmPaused) {
+      if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+      return
+    }
     if (!tickRef.current) {
       tickRef.current = setInterval(() => {
         const base = baseRef.current
         setElapsedMs(base.elapsed + (Date.now() - base.at))
       }, 500)
     }
-  }, [elapsed])
+  }, [elapsed, radioFmPaused])
   useEffect(() => () => { if (tickRef.current) clearInterval(tickRef.current) }, [])
 
   const durationMs = radioFmNowPlaying?.duration_ms ?? 0
@@ -2223,10 +2233,27 @@ const LyricsPanel = memo(function LyricsPanel({
   const theme = useStore(s => s.theme)
   const isLightLyrics = txtSec.startsWith('rgba(0,0,0') || !getSkin(theme).dark
   const developerMode = useStore((s) => s.developerMode)
+  const radioFmPaused = useStore((s) => s.radioFmPaused)
+  const lyricsPaused = radioFmActive && radioFmPaused
   const lyricLook = developerMode ? savedLyricLook : 'classic'
   // null = auto, i.e. the art-derived text colors this tab already picks.
   const activeColor   = developerMode ? lyricsColorActive ?? txtPri : txtPri
   const inactiveColor = developerMode ? lyricsColorInactive ?? txtSec : txtSec
+  const pausedSecRef = useRef<{ raw: string | null; sec: number } | null>(null)
+  if (lyricsPaused) {
+    if (pausedSecRef.current === null || pausedSecRef.current.raw !== rawLyrics) {
+      pausedSecRef.current = {
+        raw: rawLyrics,
+        sec: (useStore.getState().radioFmNowPlaying?.elapsed_ms ?? 0) / 1000,
+      }
+    }
+  } else {
+    pausedSecRef.current = null
+  }
+  const getLyricTime = useCallback((): number => {
+    if (pausedSecRef.current !== null) return pausedSecRef.current.sec
+    return playingSeconds()
+  }, [])
 
   // Driven by requestAnimationFrame against the LIVE audio.currentTime rather
   // than the Zustand-stored value (which only updates on the native
@@ -2240,7 +2267,7 @@ const LyricsPanel = memo(function LyricsPanel({
   // the top, then glide back down" flash on every fullscreen toggle.
   const [currentLineIdx, setCurrentLineIdx] = useState(() =>
     isSynced && syncedLines.length > 0
-      ? getCurrentLineIndex(syncedLines, playingSeconds() - lyricsOffset)
+      ? getCurrentLineIndex(syncedLines, getLyricTime() - lyricsOffset)
       : -1
   )
   const lineIdxRef = useRef(currentLineIdx)
@@ -2257,11 +2284,11 @@ const LyricsPanel = memo(function LyricsPanel({
       lineIdxRef.current = -1
       return
     }
-    if (!inSight) return
+    if (!inSight || lyricsPaused) return
     let raf = 0
     const tick = (): void => {
       if (document.hidden) { raf = 0; return }
-      const idx = getCurrentLineIndex(syncedLines, playingSeconds() - lyricsOffset)
+      const idx = getCurrentLineIndex(syncedLines, getLyricTime() - lyricsOffset)
       if (idx !== lineIdxRef.current) {
         lineIdxRef.current = idx
         setCurrentLineIdx(idx)
@@ -2278,7 +2305,7 @@ const LyricsPanel = memo(function LyricsPanel({
       document.removeEventListener('visibilitychange', onVis)
       cancelAnimationFrame(raf)
     }
-  }, [isSynced, syncedLines, lyricsOffset, inSight])
+  }, [isSynced, syncedLines, lyricsOffset, inSight, lyricsPaused, getLyricTime])
 
   // Center the active line by translating the whole lyric column rather than
   // using native `scrollIntoView({behavior:'smooth'})`. Native smooth-scroll
@@ -2469,9 +2496,9 @@ const LyricsPanel = memo(function LyricsPanel({
                 // A line is active once currentTime - lyricsOffset reaches its
                 // time, so that's where to land - seeking to the bare time
                 // left the previous line highlighted for `offset` seconds.
-                onClick={() => seekAudio(Math.max(0, line.time + lyricsOffset))}
+                onClick={() => { if (!radioFmActive) seekAudio(Math.max(0, line.time + lyricsOffset)) }}
                 aria-current={isActive ? 'true' : undefined}
-                className={`wrld-lyric-line cursor-pointer select-none ${lyricsAlign === 'center' ? 'origin-center mx-auto text-center' : 'origin-left'}`}
+                className={`wrld-lyric-line ${radioFmActive ? 'cursor-default' : 'cursor-pointer'} select-none ${lyricsAlign === 'center' ? 'origin-center mx-auto text-center' : 'origin-left'}`}
                 style={{
                   // The active line grows via `scale()`, anchored at its left
                   // edge (`origin-left`) so it doesn't jump around - but scale
@@ -2507,7 +2534,7 @@ const LyricsPanel = memo(function LyricsPanel({
                 }}
               >
                 {line.words ? (
-                  <WordLyricLine words={line.words} active={isActive} getTime={playingSeconds} offset={lyricsOffset} />
+                  <WordLyricLine words={line.words} active={isActive} getTime={getLyricTime} offset={lyricsOffset} />
                 ) : splitAdLibs(line.text).map((seg, si) => (
                   <span key={si} style={seg.adLib ? { opacity: ADLIB_OPACITY } : undefined}>
                     {splitColorWords(seg.text).map((cseg, ci) => (

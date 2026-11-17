@@ -250,7 +250,7 @@ export default function AlbumsView(): JSX.Element {
 
   const back = (): void => {
     if (album) setSelectedId(null)
-    else setActiveView(previousView && previousView !== 'albums' ? previousView : 'home')
+    else setActiveView(!useStore.getState().developerMode ? 'playlists' : previousView && previousView !== 'albums' ? previousView : 'home')
   }
 
   // ── grid ───────────────────────────────────────────────────────────────────

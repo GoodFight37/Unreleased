@@ -30,6 +30,7 @@ import { groupPlaylistBySong, pickSongVersions } from '../lib/compactGroups'
 import type { SongUnit } from '../lib/compactGroups'
 import { ls } from '../lib/persist'
 import { hasPlayableSessionEdit } from '../lib/sessionEditsApi'
+import { isSessionEditPlaceholder } from '../lib/sessionEditLinksMirror'
 import { trackIdToSongId } from '../lib/userApi'
 import { resolveQueueContext } from './queueContext'
 import { clearQueueSession, loadQueueSession, watchQueueSession } from './queuePersistence'
@@ -979,7 +980,7 @@ export const createQueueSlice: StateCreator<any, [], [], QueueSlice> = (set, get
         if (!qf) { set({ queueLoadingMore: false }); return }
         const existingIds = new Set([...q, ...(qo ?? [])].map((t: Track) => t.id))
         const newTracks = data.results
-          .filter((s) => !!s.path)
+          .filter((s) => !!s.path && !isSessionEditPlaceholder(s.path))
           .map(songToTrack)
           .filter((t) => !existingIds.has(t.id))
 
@@ -1061,7 +1062,7 @@ export const createQueueSlice: StateCreator<any, [], [], QueueSlice> = (set, get
       }, ctrl.signal)
         .then((data) => {
           if (!live()) return
-          const playable = data.results.filter((s: JWApiSong) => !!s.path)
+          const playable = data.results.filter((s: JWApiSong) => !!s.path && !isSessionEditPlaceholder(s.path))
           if (playable.length === 0) { handleError(); return }
           void handleTrack(songToTrack(playable[Math.floor(Math.random() * playable.length)]))
         })

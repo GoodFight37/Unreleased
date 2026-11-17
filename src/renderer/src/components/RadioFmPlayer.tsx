@@ -96,7 +96,13 @@ export default function RadioFmPlayer(): JSX.Element {
 
   useEffect(() => {
     const client = new RadioStreamClient({
-      onListening: (listening) => useStore.setState({ radioFmPaused: useStore.getState().radioFmActive && !listening }),
+      onListening: (listening) => {
+        if (!listening && pendingRef.current) {
+          clearTimeout(pendingRef.current.timer)
+          pendingRef.current = null
+        }
+        useStore.setState({ radioFmPaused: useStore.getState().radioFmActive && !listening })
+      },
       onMeta: (data) => {
         setRadioFmIsLive(data.is_live)
         applyNowPlaying(data)
@@ -215,8 +221,14 @@ export default function RadioFmPlayer(): JSX.Element {
       // headers - both keep the Web Audio chain un-tainted.
       crossOrigin="anonymous"
       style={{ display: 'none' }}
-      onError={() => {
-        if (useStore.getState().radioFmActive) setRadioFmActive(false)
+      onError={(e) => {
+        const audio = e.currentTarget
+        const abortedCode = typeof MediaError !== 'undefined' ? MediaError.MEDIA_ERR_ABORTED : 1
+        if (audio.error?.code === abortedCode) return
+        if (!audio.getAttribute('src') && !audio.currentSrc) return
+        const s = useStore.getState()
+        if (!s.radioFmActive || s.radioFmPaused || !clientRef.current?.isListening()) return
+        setRadioFmActive(false)
       }}
     />
   )

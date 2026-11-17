@@ -342,9 +342,8 @@ export default function App(): JSX.Element {
 
   // Sync view from URL on mount + handle back/forward
   useEffect(() => {
-    // In Electron (file:// protocol) skip URL routing — always start on tracker
+    // The desktop store already chooses its initial view before React mounts.
     if (window.location.protocol === 'file:') {
-      useStore.setState({ activeView: 'api-tracker' })
       return
     }
     const syncFromPath = (): void => {

@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-**unreleased** is distributed with third-party software. The project's own
+**Unreleased Glass** uses third-party software. The project's own
 source code is licensed under the MIT License (see [LICENSE](LICENSE)). The
 components listed below retain their own licenses, which are reproduced or
 linked here to satisfy their attribution and distribution terms.
@@ -12,27 +12,28 @@ FFmpeg notice in particular) with the distribution.
 
 ## FFmpeg — GNU General Public License v3.0 (IMPORTANT)
 
-Desktop builds bundle a prebuilt **FFmpeg** binary (via the
-[`ffmpeg-static`](https://www.npmjs.com/package/ffmpeg-static) npm package) to
-power local audio format conversion. This FFmpeg binary is licensed under the
+Desktop builds obtain a prebuilt **FFmpeg** binary on first use for local
+audio format conversion. Development builds can reuse the copy installed by
+[`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static). The current
+installer configuration does not bundle these optional tool binaries. This
+FFmpeg binary is licensed under the
 **GNU General Public License, version 3.0 or later (GPL-3.0-or-later)**.
 
-The application invokes FFmpeg as a **separate command-line subprocess**. Under
-the GPL this is treated as mere aggregation, so bundling FFmpeg does **not**
-place this project's own MIT-licensed source code under the GPL. The FFmpeg
-binary, however, remains governed by the GPL, and the following obligations
-apply to any distribution that includes it:
+The application invokes FFmpeg as a **separate command-line subprocess**.
+The FFmpeg binary retains its own license. Any distribution that includes
+that binary must comply with the applicable GPL terms, including:
 
 - **License text.** FFmpeg is Copyright (c) the FFmpeg developers and
   contributors. The full text of the GNU General Public License v3.0 is
   available at <https://www.gnu.org/licenses/gpl-3.0.txt> and is included with
   the FFmpeg distribution.
-- **Written offer of source.** The complete corresponding source code for the
-  bundled FFmpeg build is available from the FFmpeg project at
-  <https://ffmpeg.org/download.html> and <https://git.ffmpeg.org/ffmpeg.git>.
-  Anyone who receives this application may obtain that source there, or by
-  contacting us through the channels in the [README](README.md) / project
-  Discord to request a copy of the source corresponding to the bundled version.
+- **Corresponding source.** Redistributors must provide the corresponding source
+  for the exact binary they distribute, using a method permitted by its license.
+  The current download comes from the
+  [ffmpeg-static b6.1.1 release](https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1).
+  General upstream references are <https://ffmpeg.org/download.html> and
+  <https://git.ffmpeg.org/ffmpeg.git>; these links alone are not an offer of
+  corresponding source for an arbitrary binary.
 - **No warranty.** FFmpeg is distributed WITHOUT ANY WARRANTY; see the GPL for
   details.
 
@@ -41,10 +42,35 @@ More information: <https://ffmpeg.org>.
 
 ---
 
+## Optional yt-dlp downloader
+
+The URL-import tool downloads **yt-dlp** when requested and reuses an existing
+installed copy. Its binary and SHA-256 checksum are fetched from the same
+resolved release tag. A user-requested downloader update resolves a new tag;
+this does not automatically replace an already installed copy.
+
+Upstream distinguishes the licenses of its own source and its release bundles:
+
+- yt-dlp's own repository and Python package code use the **Unlicense**.
+- The Windows `yt-dlp.exe` and macOS `yt-dlp_macos` standalone executables bundle
+  other projects through PyInstaller; upstream licenses the combined work under
+  **GPL-3.0-or-later**, rather than the Unlicense alone.
+- The Unix `yt-dlp` zipimport executable also includes third-party JavaScript
+  components under the **ISC** and **MIT** licenses.
+
+See the official [release-file licensing notes](https://github.com/yt-dlp/yt-dlp#licensing),
+[yt-dlp license](https://github.com/yt-dlp/yt-dlp/blob/master/LICENSE) and
+[bundled component notices](https://github.com/yt-dlp/yt-dlp/blob/master/THIRD_PARTY_LICENSES.txt).
+When redistributing a downloaded tool, use the licenses, notices and source
+requirements corresponding to that tool's release tag, including those of its
+bundled components. The application's MIT license does not replace them.
+
+---
+
 ## Bundled runtime dependencies
 
-The application ships with the following notable runtime components. Except for
-FFmpeg (above), all are under permissive licenses that require only that their
+The application ships with the following notable runtime components. These
+components use permissive licenses that require their
 copyright and permission notices be preserved — which this file does.
 
 | Component | License | Project |
@@ -58,7 +84,6 @@ copyright and permission notices be preserved — which this file does.
 | node-id3 | MIT | <https://github.com/Zazama/node-id3> |
 | @xhayper/discord-rpc | ISC | <https://github.com/xhayper/discord-rpc> |
 | electron-updater | MIT | <https://github.com/electron-userland/electron-builder> |
-| ffmpeg-static | GPL-3.0-or-later (binary) | <https://github.com/eugeneware/ffmpeg-static> |
 
 Electron itself bundles **Chromium** (BSD-3-Clause and numerous other permissive
 licenses) and **Node.js** (MIT). The complete license texts for those components

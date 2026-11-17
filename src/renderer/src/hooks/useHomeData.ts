@@ -22,10 +22,10 @@ export const HOME_ALBUMS_SHOWN: boolean = true
 const HOME_PLAYLIST_LIMIT = 30
 
 // Home unmounts whenever another view opens. Keeping the last album list and
-// its song index here means coming back paints Albums at once instead of
+// its catalogue here means coming back paints Albums at once instead of
 // waiting on the network again; the fetch on mount still refreshes both.
 let albumsMemo: Album[] | null = null
-let albumIndexMemo: Map<string, JWApiSong> | null = null
+let catalogueMemo: JWApiSong[] | null = null
 const newestFirst = (list: Album[]): Album[] =>
   [...list].sort((a, b) => (b.release_date ?? '').localeCompare(a.release_date ?? ''))
 
@@ -126,7 +126,9 @@ export function useHomeData() {
     const cached = albumsApi.peekAlbums()
     return cached ? newestFirst(cached) : []
   })
-  const [albumSongIndex, setAlbumSongIndex] = useState<Map<string, JWApiSong>>(() => albumIndexMemo ?? new Map())
+  const [catalogue, setCatalogue] = useState<JWApiSong[]>(() => catalogueMemo ?? [])
+  const [catalogueState, setCatalogueState] = useState<'loading' | 'ready' | 'error'>(() => catalogueMemo ? 'ready' : 'loading')
+  const albumSongIndex = useMemo(() => albumsApi.indexSongsByPath(catalogue), [catalogue])
   // True until the first fetch settles when there was nothing to paint, so
   // Home can hold the Albums slot instead of reshuffling the bento later.
   const [albumsPending, setAlbumsPending] = useState(() => HOME_ALBUMS_SHOWN && albums.length === 0)
@@ -140,9 +142,10 @@ export function useHomeData() {
       .catch(() => undefined)
       .finally(() => setAlbumsPending(false))
     loadAllSongs().then((all) => {
-      albumIndexMemo = albumsApi.indexSongsByPath(all)
-      setAlbumSongIndex(albumIndexMemo)
-    }).catch(() => undefined)
+      catalogueMemo = all
+      setCatalogue(all)
+      setCatalogueState('ready')
+    }).catch(() => setCatalogueState('error'))
   }, [])
 
   const albumRow: HomeAlbumCard[] = useMemo(() => albums.map((album) => {
@@ -265,7 +268,7 @@ export function useHomeData() {
     setActiveView,
     showSection,
     recent, newsItems, games, playlistRow, albumRow, albumsPending,
-    catalogue: [...albumSongIndex.values()],
+    catalogue, catalogueState,
     openTrack, openNewsItem, openRadioFm,
   }
 }

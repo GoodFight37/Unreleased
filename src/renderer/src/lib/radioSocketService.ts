@@ -248,48 +248,15 @@ export class RadioStreamClient {
     }
   }
 
-  async startListening(): Promise<void> {
-    if (!this.audioEl) return
-    if (this.listening) {
-      resumeEffectsContext()
-      await this.audioEl.play().catch(() => {})
-      return
-    }
-    this.listening = true
-    this.onListening(true)
-    this.sendListening(true)
-    if (!this.supportsMse) {
-      this.audioEl.src = `${this.httpStreamUrl}?_=${Date.now()}`
-      resumeEffectsContext()
-      await this.audioEl.play()
-      return
-    }
-    this.queue = []
-    this.mediaSource = new window.MediaSource()
-    this.objectUrl = URL.createObjectURL(this.mediaSource)
-    this.audioEl.src = this.objectUrl
-    this.mediaSource.addEventListener(
-      'sourceopen',
-      () => {
-        try {
-          this.sourceBuffer = this.mediaSource!.addSourceBuffer('audio/mpeg')
-          this.sourceBuffer.mode = 'sequence'
-          this.sourceBuffer.addEventListener('updateend', () => this.afterAppend())
-          this.pump()
-        } catch {}
-      },
-      { once: true }
-    )
-  }
-
-  stopListening(): void {
-    this.sendListening(false)
-    this.listening = false
-    this.onListening(false)
+  private cleanupMedia(): void {
     this.queue = []
     if (this.audioEl) {
       try {
         this.audioEl.pause()
+      } catch {}
+      try {
+        this.audioEl.removeAttribute('src')
+        this.audioEl.load()
       } catch {}
     }
     if (this.mediaSource && this.mediaSource.readyState === 'open') {
@@ -303,12 +270,58 @@ export class RadioStreamClient {
       URL.revokeObjectURL(this.objectUrl)
       this.objectUrl = null
     }
-    if (this.audioEl) {
-      try {
-        this.audioEl.removeAttribute('src')
-        this.audioEl.load()
-      } catch {}
+  }
+
+  async startListening(): Promise<void> {
+    if (!this.audioEl) return
+    if (this.listening) {
+      resumeEffectsContext()
+      await this.audioEl.play().catch(() => {})
+      return
     }
+    this.cleanupMedia()
+    this.listening = true
+    this.onListening(true)
+    this.sendListening(true)
+    if (!this.supportsMse) {
+      this.audioEl.src = `${this.httpStreamUrl}?_=${Date.now()}`
+      resumeEffectsContext()
+      try {
+        await this.audioEl.play()
+      } catch (err) {
+        this.stopListening()
+        throw err
+      }
+      return
+    }
+    resumeEffectsContext()
+    const ms = new window.MediaSource()
+    this.mediaSource = ms
+    this.objectUrl = URL.createObjectURL(ms)
+    this.audioEl.src = this.objectUrl
+    ms.addEventListener(
+      'sourceopen',
+      () => {
+        if (this.mediaSource !== ms || !this.listening) return
+        try {
+          const sb = ms.addSourceBuffer('audio/mpeg')
+          sb.mode = 'sequence'
+          this.sourceBuffer = sb
+          sb.addEventListener('updateend', () => {
+            if (this.sourceBuffer === sb) this.afterAppend()
+          })
+          this.pump()
+        } catch {}
+      },
+      { once: true }
+    )
+  }
+
+  stopListening(): void {
+    if (this.listening) this.sendListening(false)
+    this.listening = false
+    this.onListening(false)
+    this.cleanupMedia()
   }
 
   private enqueue(arrayBuffer: ArrayBuffer): void {

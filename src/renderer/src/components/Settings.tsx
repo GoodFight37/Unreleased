@@ -11,7 +11,7 @@ import { showAppToast } from '../lib/appToast'
 import { useVizStore } from '../store/vizStore'
 import AccountSettings, { type AccountPage } from './AccountSettings'
 import { useStore, useStorePick, type AppMenuPosition, type PopoutWindowKind } from '../store/useStore'
-import { HOTKEY_ACTIONS, HOTKEY_CATEGORIES, effectiveBinding, effectiveGlobalBinding, comboTokens, eventToCombo, isGloballyRegistrable } from '../lib/hotkeys'
+import { HOTKEY_ACTIONS, HOTKEY_CATEGORIES, hotkeyActionLabel, effectiveBinding, effectiveGlobalBinding, comboTokens, eventToCombo, isGloballyRegistrable } from '../lib/hotkeys'
 import { SKINS, getSkin } from '../lib/skins'
 import { allFonts, addFontFile, addInstalledFont, FONT_ACCEPT } from '../lib/fonts'
 import { deleteFont } from '../lib/fontActions'
@@ -2263,7 +2263,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                           const isRecordingGlobal = recording?.id === action.id && recording.column === 'global'
                           return (
                             <div key={action.id} className="flex items-center gap-2 px-4 py-2">
-                              <span className="flex-1 min-w-0 text-text-secondary text-sm truncate">{action.label}</span>
+                              <span className="flex-1 min-w-0 text-text-secondary text-sm truncate">{hotkeyActionLabel(action, developerMode)}</span>
                               {/* Each column is a fixed width (button + reserved clear-button slot,
                                   present or not) so the two columns line up with their headers and
                                   with each other row-to-row regardless of combo length. */}

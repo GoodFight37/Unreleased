@@ -21,11 +21,12 @@ const DRIFT_CHECK_MS = 3000
 export default function DiscordRpcSync(): JSX.Element | null {
   const {
     currentTrack, isPlaying,
-    radioFmActive, radioFmNowPlaying, radioFmMatchedSong,
+    radioFmActive, radioFmPaused, radioFmNowPlaying, radioFmMatchedSong,
   } = useStore(useShallow(s => ({
     currentTrack: s.currentTrack,
     isPlaying: s.isPlaying,
     radioFmActive: s.radioFmActive,
+    radioFmPaused: s.radioFmPaused,
     radioFmNowPlaying: s.radioFmNowPlaying,
     radioFmMatchedSong: s.radioFmMatchedSong,
   })))
@@ -117,7 +118,7 @@ export default function DiscordRpcSync(): JSX.Element | null {
     if (!el?.discordRpcSetActivity) return
 
     if (radioFmActive) {
-      if (!radioFmNowPlaying) {
+      if (!radioFmNowPlaying || radioFmPaused) {
         if (lastSentKeyRef.current !== null) {
           el.discordRpcClearActivity?.()
           lastSentKeyRef.current = null
@@ -195,7 +196,7 @@ export default function DiscordRpcSync(): JSX.Element | null {
       coverUrl: trackCoverUrl,
       linkUrl: trackLinkUrl,
     })
-  }, [el, currentTrack?.id, currentTrack?.title, currentTrack?.artist, currentTrack?.duration, trackCoverUrl, trackEra, trackLinkUrl, isPlaying, radioFmActive, radioFmNowPlaying?.title, radioFmNowPlaying?.artist, radioFmNowPlaying?.album, radioFmNowPlaying?.duration_ms, radioFmMatchedSong?.imageUrl, radioFmMatchedSong?.path, radioFmMatchedSong?.era, erasReady, rpcEpoch])
+  }, [el, currentTrack?.id, currentTrack?.title, currentTrack?.artist, currentTrack?.duration, trackCoverUrl, trackEra, trackLinkUrl, isPlaying, radioFmActive, radioFmPaused, radioFmNowPlaying?.title, radioFmNowPlaying?.artist, radioFmNowPlaying?.album, radioFmNowPlaying?.duration_ms, radioFmMatchedSong?.imageUrl, radioFmMatchedSong?.path, radioFmMatchedSong?.era, erasReady, rpcEpoch])
 
   // Seek detection: periodically compare where Discord thinks playback is
   // (extrapolated from the last update) against the real live position, and

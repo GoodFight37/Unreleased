@@ -110,8 +110,8 @@ export default function DownloadManager(): JSX.Element | null {
   return (
     // The glass sits on the PopLayer itself, the element that fades in, so
     // its blur holds through the entrance (a fading ancestor would cut it).
-    <PopLayer ref={panelRef} className="fixed z-[9990] animate-menu-pop rounded-2xl glass-thick glass-specular" style={panelPos}>
-      <div className="w-[320px] rounded-2xl overflow-hidden">
+    <PopLayer ref={panelRef} role="dialog" aria-label="Downloads" className="floating-panel-glass fixed z-[9990] animate-menu-pop rounded-2xl glass-thick glass-specular max-w-[calc(100vw-1.5rem)]" style={panelPos}>
+      <div className="w-[320px] max-w-full rounded-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--fill)] border-b border-[var(--separator)]">
           <Download size={13} className="text-[var(--accent)] shrink-0" />
@@ -133,7 +133,7 @@ export default function DownloadManager(): JSX.Element | null {
                 Cancel All
                 </button>
             )}
-          <button onClick={() => setShowDownloadManager(false)} className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+          <button onClick={() => setShowDownloadManager(false)} aria-label="Close downloads" className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
             <X size={13} />
           </button>
         </div>

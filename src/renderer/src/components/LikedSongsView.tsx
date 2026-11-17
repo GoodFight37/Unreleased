@@ -13,7 +13,7 @@ import { formatDuration } from '../lib/format'
 import { clickable } from '../lib/a11y'
 
 export default function LikedSongsView(): JSX.Element {
-  const { account, playTrack, playCollection, toggleLike, setShowUserAuth, setActiveView, previousView, libraryTracks, likedTrackIds } = useStorePick('account', 'playTrack', 'playCollection', 'toggleLike', 'setShowUserAuth', 'setActiveView', 'previousView', 'libraryTracks', 'likedTrackIds')
+  const { account, playTrack, playCollection, toggleLike, setShowUserAuth, setActiveView, previousView, developerMode, libraryTracks, likedTrackIds } = useStorePick('account', 'playTrack', 'playCollection', 'toggleLike', 'setShowUserAuth', 'setActiveView', 'previousView', 'developerMode', 'libraryTracks', 'likedTrackIds')
   const canEdit = useCanEdit()
   const [apiTracks, setApiTracks] = useState<Track[]>([])
   const [loading, setLoading] = useState(true)
@@ -92,7 +92,7 @@ export default function LikedSongsView(): JSX.Element {
     <div className="flex-1 flex flex-col min-h-0 overflow-y-auto pb-player">
       <div className="px-5 pt-5 pb-8">
         <button
-          onClick={() => setActiveView(previousView && previousView !== 'liked' ? previousView : 'wrld')}
+          onClick={() => setActiveView(!developerMode ? 'playlists' : previousView && previousView !== 'liked' ? previousView : 'wrld')}
           title="Back"
           aria-label="Back"
           className="p-1 -ml-1 mb-3 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors"

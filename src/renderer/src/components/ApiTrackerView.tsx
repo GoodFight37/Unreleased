@@ -1039,17 +1039,18 @@ function CompactGroupList({
         const top = (start + i) * stride
         if (row.kind === 'group') {
           const cat = groupCategory(row.group.members)
-          const playable = row.group.members.find((member) => hasDirectAudioPath(member.item))
+          const lead = row.group.members[0].item
+          const canPlayLead = hasDirectAudioPath(lead)
           return (
             <div key={row.key} style={{ position: 'absolute', top, left: 0, right: 0, height: rowH }}>
               <CompactGroupRow
-                coverTrack={songToTrack(playable?.item ?? row.group.members[0].item)}
+                coverTrack={songToTrack(lead)}
                 title={row.group.title}
                 count={row.group.members.length}
                 expanded={expanded.has(row.group.groupId)}
                 onToggle={() => onToggleGroup(row.group)}
                 onContextMenu={(e) => onGroupContextMenu(row.group, e)}
-                onPlay={playable ? () => onPlay(playable.item) : undefined}
+                onPlay={canPlayLead ? () => onPlay(lead) : undefined}
                 categoryLabel={CATEGORY_LABELS[cat] ?? cat}
                 categoryClassName={CATEGORY_COLORS[cat]}
               />
@@ -2610,11 +2611,12 @@ export default function ApiTrackerView(): JSX.Element {
     }
     const playable = [...new Map(
       sourceSongs.filter((candidate) => {
+        if (candidate.id === song.id) return true
         const source = songToTrack(candidate)
         return !!source.path && !isSessionEditPlaceholder(source.path)
       }).map((candidate) => [candidate.id, candidate]),
     ).values()]
-    const context = playable.map(songToTrack)
+    const context = playable.map((candidate) => (candidate.id === song.id ? track : songToTrack(candidate)))
     playTrack(track, context.length > 0 ? context : [track], null, 'tracker')
   }, [
     playTrack, trackerTab, sortedSongs, lyricsAll, selectedStudio, selectedDateKey, calendarByStudio,
@@ -2650,13 +2652,13 @@ export default function ApiTrackerView(): JSX.Element {
   // actions are disabled entirely rather than silently dropping it - a
   // partial add on a selection the user made as one unit is surprising.
   const bulkEligibleSongs = useMemo(
-    () => selectedSongs.filter(s => s.category !== 'unsurfaced' && (s.category !== 'recording_session' || !!s.path)),
+    () => selectedSongs.filter(s => s.category !== 'unsurfaced' && (s.category !== 'recording_session' || hasDirectAudioPath(s))),
     [selectedSongs]
   )
   const canBulkAddToPlaylist = selectedSongs.length > 0 && bulkEligibleSongs.length === selectedSongs.length
   const canBulkAddToQueue = selectedSongs.length > 0
     && bulkEligibleSongs.length === selectedSongs.length
-    && bulkEligibleSongs.every(s => s.path)
+    && bulkEligibleSongs.every(s => hasDirectAudioPath(s))
 
   // Which playlists already contain *every* eligible selected song - shown
   // as a checkmark so re-adding to a playlist the whole selection is
@@ -2808,9 +2810,9 @@ export default function ApiTrackerView(): JSX.Element {
       {/* Header */}
       <div className="px-4 md:px-5 pt-4 md:pt-5 pb-3 shrink-0">
         <h1 className="text-text-primary text-xl font-bold mb-1 md:mb-6">{developerMode ? 'Tracker' : 'Catalogue'}</h1>
-        {!developerMode && <p className="catalogue-intro">Unreleased tracks, sessions and other versions.</p>}
+        {!developerMode && <p className="catalogue-intro">Find a title, explore an era or compare versions.</p>}
         <div className="catalogue-sections">
-        <button onClick={() => setShowSections((value) => !value)} aria-expanded={showSections || trackerTab !== 'songs' || developerMode}>Explore the catalogue</button>
+        <button onClick={() => setShowSections((value) => !value)} aria-expanded={showSections || trackerTab !== 'songs' || developerMode}>Catalogue sections <ChevronDown size={14} aria-hidden /></button>
         {(showSections || trackerTab !== 'songs' || developerMode) && (
 
         <GlassSegmented

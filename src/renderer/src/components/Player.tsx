@@ -24,7 +24,7 @@ import {
 import { useStore, useStorePick } from '../store/useStore'
 import { useVizStore } from '../store/vizStore'
 import { registerPlayerCommandHandler, runPlayerCommand } from '../lib/windowSync'
-import { eventToCombo, resolveAction, getAction, effectiveGlobalBinding, comboToAccelerator, registerHotkeyDispatch, HOTKEY_ACTIONS } from '../lib/hotkeys'
+import { eventToCombo, effectiveGlobalBinding, comboToAccelerator, registerHotkeyDispatch, HOTKEY_ACTIONS, isHotkeyActionAllowed, resolveInAppHotkey } from '../lib/hotkeys'
 import { formatDuration } from '../lib/format'
 import { audioQualityLabel } from '../lib/audioQuality'
 import { takeEqAnchor } from '../lib/eqAnchor'
@@ -278,6 +278,7 @@ function ElapsedTime(): JSX.Element {
 // for as long as FM played, so only the parts that show it tick.
 function useFmElapsedMs(): number {
   const active = useStore((s) => s.radioFmActive)
+  const paused = useStore((s) => s.radioFmPaused)
   const elapsed = useStore((s) => s.radioFmNowPlaying?.elapsed_ms)
   const [ms, setMs] = useState(0)
   const base = useRef({ elapsed: 0, at: 0 })
@@ -293,10 +294,14 @@ function useFmElapsedMs(): number {
     }
     base.current = { elapsed, at: Date.now() }
     setMs(elapsed)
+    if (paused) {
+      if (tick.current) { clearInterval(tick.current); tick.current = null }
+      return
+    }
     if (!tick.current) {
       tick.current = setInterval(() => setMs(base.current.elapsed + (Date.now() - base.current.at)), 500)
     }
-  }, [active, elapsed])
+  }, [active, paused, elapsed])
   useEffect(() => () => { if (tick.current) { clearInterval(tick.current); tick.current = null } }, [])
   return ms
 }
@@ -1776,15 +1781,15 @@ export default function Player(): JSX.Element {
     if (!mediaSessionActive) return
     navigator.mediaSession.setActionHandler('play',  () => setPlayback(true))
     navigator.mediaSession.setActionHandler('pause', () => setPlayback(false))
-    navigator.mediaSession.setActionHandler('nexttrack',     () => runPlayerCommand('next'))
-    navigator.mediaSession.setActionHandler('previoustrack', () => runPlayerCommand('previous'))
+    navigator.mediaSession.setActionHandler('nexttrack',     radioFmActive ? null : () => runPlayerCommand('next'))
+    navigator.mediaSession.setActionHandler('previoustrack', radioFmActive ? null : () => runPlayerCommand('previous'))
     return () => {
       navigator.mediaSession.setActionHandler('play',          null)
       navigator.mediaSession.setActionHandler('pause',         null)
       navigator.mediaSession.setActionHandler('nexttrack',     null)
       navigator.mediaSession.setActionHandler('previoustrack', null)
     }
-  }, [setPlayback, mediaSessionActive])
+  }, [setPlayback, mediaSessionActive, radioFmActive])
 
   // Media Session position state — for lock screen seek bar. Lives in its own
   // component (rendered below) so the ~4x/sec currentTime updates re-render
@@ -2199,10 +2204,11 @@ export default function Player(): JSX.Element {
     const artist = radioFmActive ? (radioFmNowPlaying?.artist ?? '') : (currentTrack?.artist ?? '')
     el.setTrayPlayback({
       hasTrack: !!currentTrack || radioFmActive,
+      radioFmActive,
       isPlaying: playbackActive,
       title,
       artist,
-      liked: !!currentTrack && likedTrackIds.includes(currentTrack.id),
+      liked: !!currentTrack && !radioFmActive && likedTrackIds.includes(currentTrack.id),
     })
   }, [
     playbackActive,
@@ -2223,6 +2229,8 @@ export default function Player(): JSX.Element {
   const remoteCommandsRef = useRef<Record<string, (arg?: unknown) => void>>({})
   remoteCommandsRef.current = {
     'play-pause':  togglePlayback,
+    'play':        () => setPlayback(true),
+    'pause':       () => setPlayback(false),
     'next':        () => { if (currentTrack && !radioFmActive) handleNext() },
     'previous':    () => { if (currentTrack && !radioFmActive) handlePrev() },
     'toggle-like': () => { if (currentTrack && !radioFmActive) toggleLike(currentTrack.id) },
@@ -2326,7 +2334,11 @@ export default function Player(): JSX.Element {
     'open-settings':    () => useStore.getState().setShowSettings(true),
     'open-diagnostics': () => useStore.getState().setShowDiagnostics(true),
     'toggle-queue':     () => { const s = useStore.getState(); s.setShowQueue(!s.showQueue) },
-    'open-terminal':    () => { const s = useStore.getState(); s.setActiveView(s.activeView === 'terminal' ? (s.previousView ?? 'home') : 'terminal') },
+    'open-terminal':    () => {
+      const s = useStore.getState()
+      if (!s.developerMode) return
+      s.setActiveView(s.activeView === 'terminal' ? (s.previousView ?? 'home') : 'terminal')
+    },
     'focus-search':     () => {
       // The open view gets first claim (e.g. a playlist's collapsed track search).
       if (!window.dispatchEvent(new Event('app:focus-search', { cancelable: true }))) return
@@ -2352,42 +2364,42 @@ export default function Player(): JSX.Element {
         await el.setAppSetting('discordRpcEnabled', !s.discordRpcEnabled)
       } catch { /* ignore */ }
     },
-    'toggle-devtools': () => (window as any).electron?.toggleDevTools?.(),
+    'toggle-devtools': () => {
+      if (!useStore.getState().developerMode) return
+      ;(window as any).electron?.toggleDevTools?.()
+    },
   }
   // Same table, exposed to UI that triggers actions by id (the app menu) — a
   // stable subscription dispatching into the ref's fresh closures.
-  useEffect(() => registerHotkeyDispatch((id) => hotkeyActionsRef.current[id]?.()), [])
+  useEffect(() => registerHotkeyDispatch((id) => {
+    const s = useStore.getState()
+    if (!isHotkeyActionAllowed(id, s.developerMode, !!(window as any).electron)) return
+    hotkeyActionsRef.current[id]?.()
+  }), [])
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
       const combo = eventToCombo(e)
-      if (!combo) return
-      // Never hijack typing (search boxes, the metadata editor, etc.) — media
-      // keys are one exception (meaningless while typing), and so are bare
-      // function keys (F1-F24): conventionally global in every browser/OS,
-      // never part of typed text, so a focused input shouldn't swallow them.
       const target = e.target as HTMLElement | null
       const tag = target?.tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || !!target?.isContentEditable
-      const isFKey = /^F([1-9]|1[0-9]|2[0-4])$/.test(combo.split('+').pop() ?? '')
-      // The terminal's own input has focus while it is open, so its hotkey has
-      // to get through typing too or it could never close the terminal.
-      if (typing && !combo.startsWith('Media') && !isFKey && resolveAction(combo, useStore.getState().hotkeyBindings) !== 'open-terminal') return
-      // Leave Space/Enter alone when a button/link/select is focused so they
-      // still activate it (native keyboard behavior) instead of toggling play.
       const clickable = tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || tag === 'SUMMARY' || target?.getAttribute('role') === 'button'
-      if (clickable && (combo === 'Space' || combo === 'Enter')) return
-      const id = resolveAction(combo, useStore.getState().hotkeyBindings)
-      if (!id) return
-      // Desktop-only actions are unbindable-in-practice on web — ignore them so
-      // e.g. Alt+3 doesn't half-switch to a Library view web builds don't have.
-      if (getAction(id)?.electronOnly && !(window as any).electron) return
-      const fn = hotkeyActionsRef.current[id]
+      const state = useStore.getState()
+      const decision = resolveInAppHotkey({
+        combo,
+        overrides: state.hotkeyBindings,
+        developerMode: state.developerMode,
+        hasElectron: !!(window as any).electron,
+        typing,
+        clickable,
+        repeat: e.repeat,
+        repeatableIds: REPEATABLE_HOTKEYS,
+      })
+      if (!decision.id) return
+      const fn = hotkeyActionsRef.current[decision.id]
       if (!fn) return
-      e.preventDefault()
-      // A held key repeats. That's wanted for stepping (seek, volume, speed),
-      // but a held Space or L flipped play/pause or the like on and off.
-      if (e.repeat && !REPEATABLE_HOTKEYS.has(id)) return
-      lastInAppFire.current = { id, at: Date.now() }
+      if (decision.preventDefault) e.preventDefault()
+      if (!decision.run) return
+      lastInAppFire.current = { id: decision.id, at: Date.now() }
       fn()
     }
     document.addEventListener('keydown', handler)
@@ -2406,6 +2418,8 @@ export default function Player(): JSX.Element {
     const el = (window as any).electron
     if (!el?.onGlobalShortcut) return
     return el.onGlobalShortcut((id: string) => {
+      const s = useStore.getState()
+      if (!isHotkeyActionAllowed(id, s.developerMode, true)) return
       const last = lastInAppFire.current
       if (last && last.id === id && Date.now() - last.at < 300) return
       hotkeyActionsRef.current[id]?.()
@@ -2430,6 +2444,7 @@ export default function Player(): JSX.Element {
     const entries: { accelerator: string; id: string }[] = []
     if (globalHotkeysEnabled) {
       for (const action of HOTKEY_ACTIONS) {
+        if (!isHotkeyActionAllowed(action.id, developerMode, true)) continue
         const accelerator = comboToAccelerator(effectiveGlobalBinding(action.id, globalHotkeyBindings))
         if (accelerator) entries.push({ accelerator, id: action.id })
       }
@@ -2442,7 +2457,7 @@ export default function Player(): JSX.Element {
         if (result?.failed?.length) console.warn('[global-shortcuts] OS refused to register:', result.failed)
       })
       .catch((err: unknown) => console.error('[global-shortcuts] registerGlobalShortcuts threw:', err))
-  }, [globalHotkeysEnabled, globalHotkeyBindings])
+  }, [globalHotkeysEnabled, globalHotkeyBindings, developerMode])
 
   // Seek: buffer visually while dragging, only commit on mouse release
   const handleSeekMouseDown = (): void => {
