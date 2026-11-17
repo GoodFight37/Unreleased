@@ -1,68 +1,37 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const {
-  WRLD_ATMOSPHERES,
+  WRLD_BACKDROPS,
   WRLD_CURATED_LYRICS,
-  resolveWrldAtmosphere,
+  normalizeWrldBackdrop,
+  resolveWrldEra,
 } = require('../src/renderer/src/lib/wrldAtmospheres.ts')
 
-test('curated WRLD lists stay focused and non-bloated', () => {
-  assert.equal(WRLD_ATMOSPHERES.length, 6)
+test('curated WRLD lists stay focused and exclude legacy visualizer walls', () => {
+  assert.deepEqual(WRLD_BACKDROPS.map((b) => b.id), ['mesh', 'glass', 'off'])
   assert.equal(WRLD_CURATED_LYRICS.length, 4)
   assert.equal(WRLD_CURATED_LYRICS[0].id, 'classic')
 })
 
-test('999 Era Auto matches album and asset era atmospheres when animations are on', () => {
-  const lnd = resolveWrldAtmosphere({
-    atmosphere: 'auto',
-    animationsOn: true,
-    glSupported: true,
-    album: 'Legends Never Die',
-  })
-  assert.equal(lnd.vizMode, 'nebula')
-  assert.equal(lnd.eraLabel, 'LEGENDS NEVER DIE')
-  assert.ok(lnd.auraRgb)
-
-  const drfl = resolveWrldAtmosphere({
-    atmosphere: 'auto',
-    animationsOn: true,
-    glSupported: true,
-    artUrl: 'https://juicewrldapi.com/assets/drfl.png',
-  })
-  assert.equal(drfl.vizMode, 'embers')
-  assert.equal(drfl.eraLabel, 'DEATH RACE FOR LOVE')
-
-  const gbgr = resolveWrldAtmosphere({
-    atmosphere: 'auto',
-    animationsOn: true,
-    glSupported: true,
-    album: 'Goodbye & Good Riddance',
-  })
-  assert.equal(gbgr.vizMode, 'rain')
-  assert.equal(gbgr.eraLabel, 'GOODBYE & GOOD RIDDANCE')
+test('normalizes persisted backdrop ids cleanly to modern modes', () => {
+  assert.equal(normalizeWrldBackdrop('mesh'), 'mesh')
+  assert.equal(normalizeWrldBackdrop('glass'), 'glass')
+  assert.equal(normalizeWrldBackdrop('off'), 'off')
+  assert.equal(normalizeWrldBackdrop('auto'), 'mesh')
+  assert.equal(normalizeWrldBackdrop('nebula'), 'mesh')
+  assert.equal(normalizeWrldBackdrop(null), 'mesh')
 })
 
-test('falls back to 2D aurora without WebGL and shuts off completely when calm/off', () => {
-  const noGl = resolveWrldAtmosphere({
-    atmosphere: 'lnd',
-    animationsOn: true,
-    glSupported: false,
-  })
-  assert.equal(noGl.vizMode, 'aurora')
+test('resolves Juice WRLD era labels and baked asset keys accurately', () => {
+  const lnd = resolveWrldEra(null, 'Legends Never Die')
+  assert.equal(lnd.eraLabel, 'LEGENDS NEVER DIE')
+  assert.equal(lnd.eraAsset, '/assets/lnd.jpg')
 
-  const calm = resolveWrldAtmosphere({
-    atmosphere: 'auto',
-    animationsOn: false,
-    glSupported: true,
-    album: 'Legends Never Die',
-  })
-  assert.equal(calm.vizMode, 'none')
-  assert.equal(calm.eraLabel, 'LEGENDS NEVER DIE')
+  const drfl = resolveWrldEra('https://juicewrldapi.com/assets/drfl.png', null)
+  assert.equal(drfl.eraLabel, 'DEATH RACE FOR LOVE')
+  assert.equal(drfl.eraAsset, '/assets/drfl.png')
 
-  const off = resolveWrldAtmosphere({
-    atmosphere: 'off',
-    animationsOn: true,
-    glSupported: true,
-  })
-  assert.equal(off.vizMode, 'none')
+  const gbgr = resolveWrldEra(null, 'Goodbye & Good Riddance')
+  assert.equal(gbgr.eraLabel, 'GOODBYE & GOOD RIDDANCE')
+  assert.equal(gbgr.eraAsset, '/assets/gbgr.jpg')
 })

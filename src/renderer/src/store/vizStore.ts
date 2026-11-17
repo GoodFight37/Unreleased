@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import { ls } from '../lib/persist'
 import { normalizeMode, EDGE_PREFIX, type Boost, type Quality } from '../lib/viz'
 import {
-  isWrldAtmosphereId,
+  normalizeWrldBackdrop,
   isWrldCuratedLyricId,
-  type WrldAtmosphereId,
+  type WrldBackdropMode,
   type WrldCuratedLyricId,
 } from '../lib/wrldAtmospheres'
 import { LOOKS } from '../desktop/light/looks'
@@ -102,8 +102,8 @@ interface VizState {
   setVizEdgeOverlay: (look: string | null) => void
   /** A picker opened (true) or closed (false). */
   coverViz: (on: boolean) => void
-  /** Curated WRLD atmosphere preset (defaults to 999 Era Auto). */
-  wrldAtmosphere: WrldAtmosphereId
+  /** Curated WRLD backdrop style ('mesh' Apple-style fluid cover mesh, 'glass', or 'off'). */
+  wrldAtmosphere: WrldBackdropMode
   /** Quick toggle to calm/disable WRLD animations (gaming / reduced distraction) without losing the chosen preset. */
   wrldAnimations: boolean
   /** Curated lyric presentation unlocked for all users in WRLD (defaults to classic). */
@@ -111,7 +111,7 @@ interface VizState {
   /** Hides chrome and playback controls in WRLD for clean screen-recording/captures. */
   wrldCleanView: boolean
 
-  setWrldAtmosphere: (id: WrldAtmosphereId) => void
+  setWrldAtmosphere: (id: WrldBackdropMode) => void
   setWrldAnimations: (on: boolean) => void
   setWrldLyricLook: (look: WrldCuratedLyricId) => void
   setWrldCleanView: (on: boolean) => void
@@ -135,10 +135,7 @@ export const useVizStore = create<VizState>((set) => ({
   wrldFmTab: ls.get('wrldFmTab') === 'chat' ? 'chat' : 'radio',
   wrldFmSound: ls.get<boolean>('wrldFmSound') === true,
   vizCovered: 0,
-  wrldAtmosphere: (() => {
-    const v = ls.get<unknown>('wrldAtmosphere')
-    return isWrldAtmosphereId(v) ? v : 'auto'
-  })(),
+  wrldAtmosphere: normalizeWrldBackdrop(ls.get<unknown>('wrldAtmosphere')),
   wrldAnimations: ls.get<boolean>('wrldAnimations') ?? true,
   wrldLyricLook: (() => {
     const v = ls.get<unknown>('wrldLyricLook')
@@ -222,7 +219,7 @@ if (typeof window !== 'undefined') {
       case 'wrldFmCollapsed': useVizStore.setState({ wrldFmCollapsed: value === true }); break
       case 'wrldFmTab': useVizStore.setState({ wrldFmTab: value === 'chat' ? 'chat' : 'radio' }); break
       case 'wrldFmSound': useVizStore.setState({ wrldFmSound: value === true }); break
-      case 'wrldAtmosphere': if (isWrldAtmosphereId(value)) useVizStore.setState({ wrldAtmosphere: value }); break
+      case 'wrldAtmosphere': useVizStore.setState({ wrldAtmosphere: normalizeWrldBackdrop(value) }); break
       case 'wrldAnimations': useVizStore.setState({ wrldAnimations: value !== false }); break
       case 'wrldLyricLook': if (isWrldCuratedLyricId(value)) useVizStore.setState({ wrldLyricLook: value }); break
     }

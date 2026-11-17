@@ -793,18 +793,6 @@ input[type='range']:active::-moz-range-thumb {
 :where(html[data-effects-motion="reduce"]) .wrld-drift { animation: none; }
 @media (prefers-reduced-motion: reduce) { .wrld-drift { animation: none; } }
 
-/* Soft behind-cover halo while WRLD is actively playing (composited scale/opacity). */
-.wrld-cover-aura {
-  animation: wrld-cover-aura 6s ease-in-out infinite alternate;
-  will-change: transform, opacity;
-}
-@keyframes wrld-cover-aura {
-  0%   { transform: scale(0.97); opacity: 0.56; }
-  100% { transform: scale(1.045); opacity: 0.88; }
-}
-:where(html[data-effects-motion="reduce"]) .wrld-cover-aura { animation: none; }
-@media (prefers-reduced-motion: reduce) { .wrld-cover-aura { animation: none; } }
-
 /* ─── Sliding nav highlight ────────────────────────────────────────────────────
    hooks/useSlidingIndicator: one highlight behind the nav items, moved onto the
    active one. z-index -1 inside the nav's own stacking context (it's `isolate`)

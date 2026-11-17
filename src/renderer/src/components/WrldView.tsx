@@ -1,5 +1,6 @@
 import { effectsMotionMedia, useEffectsState } from '../lib/effectsPreference'
-import { resolveWrldAtmosphere } from '../lib/wrldAtmospheres'
+import { resolveWrldEra } from '../lib/wrldAtmospheres'
+import LiquidMeshBackdrop from './LiquidMeshBackdrop'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
@@ -526,14 +527,30 @@ export default function WrldView(): JSX.Element {
     wrldAnimations: s.wrldAnimations,
     wrldCleanView: s.wrldCleanView,
   })))
-  const stageAnimated = wrldAnimations && !reducedMotion
-  const stageAura = useMemo(() => resolveWrldAtmosphere({
-    atmosphere: wrldAtmosphere,
-    animationsOn: stageAnimated,
-    glSupported: true,
-    artUrl: artSrc && !artError ? artSrc : null,
-    album: displayAlbum ?? null,
-  }), [wrldAtmosphere, stageAnimated, artSrc, artError, displayAlbum])
+  const stageAnimated = wrldAnimations && !reducedMotion && wrldAtmosphere !== 'off'
+  const stageEra = useMemo(
+    () => resolveWrldEra(artSrc && !artError ? artSrc : null, displayAlbum ?? null),
+    [artSrc, artError, displayAlbum],
+  )
+  const coverStageRef = useRef<HTMLDivElement>(null)
+  const coverGlintRef = useRef<HTMLDivElement>(null)
+  const handleCoverMove = (e: React.PointerEvent<HTMLDivElement>): void => {
+    if (!stageAnimated || !coverStageRef.current) return
+    const r = e.currentTarget.getBoundingClientRect()
+    if (!r.width || !r.height) return
+    const nx = ((e.clientX - r.left) / r.width) * 2 - 1
+    const ny = ((e.clientY - r.top) / r.height) * 2 - 1
+    const scale = playbackActive ? 1 : 0.955
+    coverStageRef.current.style.transform = `perspective(1100px) rotateX(${(-ny * 4.2).toFixed(2)}deg) rotateY(${(nx * 4.2).toFixed(2)}deg) scale(${scale})`
+    if (coverGlintRef.current) {
+      coverGlintRef.current.style.opacity = '1'
+      coverGlintRef.current.style.background = `radial-gradient(circle at ${((nx + 1) * 50).toFixed(1)}% ${((ny + 1) * 50).toFixed(1)}%, rgba(255,255,255,0.18), transparent 58%)`
+    }
+  }
+  const handleCoverLeave = (): void => {
+    if (coverStageRef.current) coverStageRef.current.style.transform = ''
+    if (coverGlintRef.current) coverGlintRef.current.style.opacity = '0'
+  }
 
   // ArtBox / FmRadioPanel / AlbumsGrid / AlbumDetail are rendered via plain
   // function calls, NOT <JSX/> element syntax: they're (re)defined on every
@@ -543,27 +560,28 @@ export default function WrldView(): JSX.Element {
   // re-render. As plain calls they're just part of this component's own tree.
   // (Corollary: they must not contain hooks of their own.)
   const ArtBox = ({ mobile }: { mobile: boolean }) => (
-    <div className={mobile ? 'w-14 h-14 relative shrink-0' : 'relative w-full'}>
-      {!mobile && !useThemeBackground && stageAnimated && artSrc && !artError && (
-        <div
-          aria-hidden="true"
-          className={`pointer-events-none absolute -inset-6 rounded-[40px] blur-2xl transition-opacity duration-500 ${playbackActive ? 'wrld-cover-aura' : 'opacity-45'}`}
-          style={{
-            background: stageAura.auraRgb
-              ? `radial-gradient(circle at 50% 48%, rgba(${stageAura.auraRgb}, 0.34), rgba(var(--accent-rgb), 0.14) 55%, transparent 74%)`
-              : `radial-gradient(circle at 50% 48%, rgb(var(--accent-rgb) / 0.32), transparent 72%)`,
-          }}
-        />
-      )}
+    <div
+      ref={mobile ? undefined : coverStageRef}
+      onPointerMove={mobile ? undefined : handleCoverMove}
+      onPointerLeave={mobile ? undefined : handleCoverLeave}
+      className={mobile
+        ? 'w-14 h-14 relative shrink-0'
+        : 'relative w-full will-change-transform transition-transform duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none'}
+      style={mobile ? undefined : {
+        transform: stageAnimated && !playbackActive ? 'scale(0.955)' : undefined,
+      }}
+    >
       <div
         className={mobile
           ? 'relative w-14 h-14 rounded-xl overflow-hidden shadow-lg'
-          : `relative rounded-3xl overflow-hidden w-full ring-1 ${
+          : `relative rounded-3xl overflow-hidden w-full ring-1 transition-shadow duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
               useThemeBackground
                 ? 'shadow-[0_24px_64px_rgba(0,0,0,0.35)] ring-black/5 dark:ring-white/10'
                 : textIsDark
                   ? 'shadow-[0_28px_72px_rgba(0,0,0,0.28)] ring-black/10'
-                  : 'shadow-[0_28px_72px_rgba(0,0,0,0.52)] ring-white/15'
+                  : playbackActive
+                    ? 'shadow-[0_32px_84px_rgba(0,0,0,0.58)] ring-white/20'
+                    : 'shadow-[0_18px_48px_rgba(0,0,0,0.38)] ring-white/10'
             }`}
         style={mobile ? {} : { aspectRatio: '1' }}
         data-viz={mobile ? undefined : 'cover'}
@@ -591,6 +609,13 @@ export default function WrldView(): JSX.Element {
           <div className="w-full h-full bg-white/10 flex items-center justify-center">
             <Music className={`text-white/20 ${mobile ? 'w-6 h-6' : 'w-16 h-16'}`} />
           </div>
+        )}
+        {!mobile && (
+          <div
+            ref={coverGlintRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 mix-blend-soft-light"
+          />
         )}
       </div>
     </div>
@@ -763,6 +788,14 @@ export default function WrldView(): JSX.Element {
                   backgroundImage: `radial-gradient(120% 90% at 100% 0%, rgb(var(--accent-rgb) / 0.16), transparent 55%),
                                      radial-gradient(100% 85% at 0% 100%, rgb(var(--accent-rgb) / 0.10), transparent 55%)`,
                 } : undefined}
+              />
+            ) : wrldAtmosphere === 'mesh' ? (
+              <LiquidMeshBackdrop
+                artUrl={artSrc && !artError ? artSrc : null}
+                eraAsset={stageEra.eraAsset}
+                isDark={!textIsDark}
+                playing={playbackActive}
+                animated={stageAnimated}
               />
             ) : artSrc && !artError ? (
               // Blurred to 60px, so resolution is meaningless here - always the
@@ -1038,9 +1071,9 @@ export default function WrldView(): JSX.Element {
               <div className="w-full max-w-[var(--wrld-player-width)] flex items-center gap-3 select-none" style={{ color: txtTer }}>
                 <span className="text-lg font-black tracking-[-0.08em]">999</span>
                 <span className="text-[10px] font-semibold tracking-[0.24em]">JUICE WRLD</span>
-                {stageAura.eraLabel && !useThemeBackground && (
+                {stageEra.eraLabel && !useThemeBackground && (
                   <span className="ml-auto text-[10px] font-semibold tracking-[0.16em] opacity-80 truncate">
-                    {stageAura.eraLabel}
+                    {stageEra.eraLabel}
                   </span>
                 )}
               </div>

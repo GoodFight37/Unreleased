@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft, Sparkles, Eye, EyeOff } from 'lucide-react'
 import { Visualizer, VISUALIZERS, needsWebGL, type VizLayout } from '../lib/viz'
-import { WRLD_ATMOSPHERES, WRLD_CURATED_LYRICS, resolveWrldAtmosphere } from '../lib/wrldAtmospheres'
+import { WRLD_BACKDROPS, WRLD_CURATED_LYRICS, resolveWrldEra } from '../lib/wrldAtmospheres'
 import { useEffectsState } from '../lib/effectsPreference'
 import { getAnalysisTap, resumeEffectsContext } from '../lib/audioEffects'
 import { smallCoverUrl } from '../lib/juicewrldApi'
@@ -149,18 +149,10 @@ export default function WrldVisualizer({
   const [overlayFailed, setOverlayFailed] = useState(false)
   const shownEdge = overlayFailed ? null : vizEdgeOverlay
   const animationsActive = wrldAnimations && !reducedMotion
-  const resolvedAtmosphere = resolveWrldAtmosphere({
-    atmosphere: wrldAtmosphere,
-    animationsOn: animationsActive,
-    glSupported,
-    artUrl,
-    album: albumName ?? albumKey,
-  })
-  const engineMode = !animationsActive
-    ? 'none'
-    : developerMode
-      ? activeMode
-      : resolvedAtmosphere.vizMode
+  const resolvedEra = resolveWrldEra(artUrl, albumName ?? albumKey)
+  // Legacy 2D/WebGL visualizer presets run only when Developer Mode explicitly selects one;
+  // normal WRLD playback uses the integrated LiquidMeshBackdrop shader instead.
+  const engineMode = !animationsActive || !developerMode ? 'none' : activeMode
   // "Off" tears the engine down entirely - no canvases, audio tap or frame loop.
   const off = engineMode === 'none'
   const [showSettings, setShowSettings] = useState(false)
@@ -609,15 +601,15 @@ export default function WrldVisualizer({
 
             <div className="pt-3 border-t border-[var(--border)]">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-text-secondary text-xs font-semibold">999 Atmosphere</p>
-                {wrldAtmosphere === 'auto' && resolvedAtmosphere.eraLabel && (
+                <p className="text-text-secondary text-xs font-semibold">Backdrop</p>
+                {resolvedEra.eraLabel && (
                   <span className="text-[10px] font-semibold tracking-wider uppercase text-accent">
-                    {resolvedAtmosphere.eraLabel}
+                    {resolvedEra.eraLabel}
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {WRLD_ATMOSPHERES.map((preset) => {
+              <div className="flex flex-col gap-1.5">
+                {WRLD_BACKDROPS.map((preset) => {
                   const selected = wrldAtmosphere === preset.id
                   return (
                     <button
@@ -626,14 +618,14 @@ export default function WrldVisualizer({
                         setWrldAtmosphere(preset.id)
                         announce(preset.label)
                       }}
-                      className={`text-left px-2.5 py-2 rounded-xl border transition-colors ${
+                      className={`text-left px-3 py-2 rounded-xl border transition-colors ${
                         selected
                           ? 'bg-accent/15 border-[var(--accent)] text-text-primary'
                           : 'border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-[var(--surface-overlay)]'
                       }`}
                     >
-                      <div className="text-[11px] font-semibold leading-tight truncate">{preset.label}</div>
-                      <div className="text-[10px] opacity-75 leading-tight mt-0.5 truncate">{preset.subtitle}</div>
+                      <div className="text-[11px] font-semibold leading-tight">{preset.label}</div>
+                      <div className="text-[10px] opacity-75 leading-tight mt-0.5">{preset.subtitle}</div>
                     </button>
                   )
                 })}
