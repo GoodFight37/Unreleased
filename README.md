@@ -21,6 +21,11 @@ Built from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased), powered b
 - **Clearer listening.** Version groups offer direct playback, missing audio
   is distinguished from playable versions, and WRLD has a visible return action.
   Pause 999 FM and resume on the live stream without leaving the station.
+- **Curated 999 Stage in WRLD.** Full-screen listening offers curated Juice
+  WRLD era atmospheres (`999 Era Auto`, *Legends Never Die*, *Death Race*,
+  *GB&GR*, *999 Abyss*), a living cover halo, direct lyric styles (*Classic*,
+  *Karaoke*, *Cinema*, *999 Edit*), a Clean stage toggle (`C`) for screen
+  recordings, and an instant animation toggle for calm / gaming sessions.
 - **A compiled launch.** The Windows launcher opens the built application
   directly instead of starting a development server every time. It starts on
   Discover in normal mode and uses its own data profile, importing existing

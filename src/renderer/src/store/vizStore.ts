@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import { ls } from '../lib/persist'
 import { normalizeMode, EDGE_PREFIX, type Boost, type Quality } from '../lib/viz'
+import {
+  isWrldAtmosphereId,
+  isWrldCuratedLyricId,
+  type WrldAtmosphereId,
+  type WrldCuratedLyricId,
+} from '../lib/wrldAtmospheres'
 import { LOOKS } from '../desktop/light/looks'
 import { useStore } from './useStore'
 
@@ -96,6 +102,19 @@ interface VizState {
   setVizEdgeOverlay: (look: string | null) => void
   /** A picker opened (true) or closed (false). */
   coverViz: (on: boolean) => void
+  /** Curated WRLD atmosphere preset (defaults to 999 Era Auto). */
+  wrldAtmosphere: WrldAtmosphereId
+  /** Quick toggle to calm/disable WRLD animations (gaming / reduced distraction) without losing the chosen preset. */
+  wrldAnimations: boolean
+  /** Curated lyric presentation unlocked for all users in WRLD (defaults to classic). */
+  wrldLyricLook: WrldCuratedLyricId
+  /** Hides chrome and playback controls in WRLD for clean screen-recording/captures. */
+  wrldCleanView: boolean
+
+  setWrldAtmosphere: (id: WrldAtmosphereId) => void
+  setWrldAnimations: (on: boolean) => void
+  setWrldLyricLook: (look: WrldCuratedLyricId) => void
+  setWrldCleanView: (on: boolean) => void
 }
 
 export const useVizStore = create<VizState>((set) => ({
@@ -116,6 +135,16 @@ export const useVizStore = create<VizState>((set) => ({
   wrldFmTab: ls.get('wrldFmTab') === 'chat' ? 'chat' : 'radio',
   wrldFmSound: ls.get<boolean>('wrldFmSound') === true,
   vizCovered: 0,
+  wrldAtmosphere: (() => {
+    const v = ls.get<unknown>('wrldAtmosphere')
+    return isWrldAtmosphereId(v) ? v : 'auto'
+  })(),
+  wrldAnimations: ls.get<boolean>('wrldAnimations') ?? true,
+  wrldLyricLook: (() => {
+    const v = ls.get<unknown>('wrldLyricLook')
+    return isWrldCuratedLyricId(v) ? v : 'classic'
+  })(),
+  wrldCleanView: false,
 
   selectMode: (id, persist) => {
     const mode = normalizeMode(id)
@@ -150,6 +179,22 @@ export const useVizStore = create<VizState>((set) => ({
     if (vizEdgeOverlay) useStore.getState().setDesktop({ light: { look: vizEdgeOverlay } })
   },
   coverViz: (on) => set((s) => ({ vizCovered: Math.max(0, s.vizCovered + (on ? 1 : -1)) })),
+  setWrldAtmosphere: (wrldAtmosphere) => {
+    set({ wrldAtmosphere })
+    ls.set('wrldAtmosphere', wrldAtmosphere)
+  },
+  setWrldAnimations: (wrldAnimations) => {
+    set({ wrldAnimations })
+    ls.set('wrldAnimations', wrldAnimations)
+  },
+  setWrldLyricLook: (wrldLyricLook) => {
+    set({ wrldLyricLook })
+    ls.set('wrldLyricLook', wrldLyricLook)
+    if (wrldLyricLook !== 'classic') {
+      useStore.getState().setDesktop({ lyrics: { look: wrldLyricLook } })
+    }
+  },
+  setWrldCleanView: (wrldCleanView) => set({ wrldCleanView }),
 }))
 
 // Settings usually runs in a pop-out window with its own copy of this store. What it saves arrives here as a storage
@@ -177,6 +222,9 @@ if (typeof window !== 'undefined') {
       case 'wrldFmCollapsed': useVizStore.setState({ wrldFmCollapsed: value === true }); break
       case 'wrldFmTab': useVizStore.setState({ wrldFmTab: value === 'chat' ? 'chat' : 'radio' }); break
       case 'wrldFmSound': useVizStore.setState({ wrldFmSound: value === true }); break
+      case 'wrldAtmosphere': if (isWrldAtmosphereId(value)) useVizStore.setState({ wrldAtmosphere: value }); break
+      case 'wrldAnimations': useVizStore.setState({ wrldAnimations: value !== false }); break
+      case 'wrldLyricLook': if (isWrldCuratedLyricId(value)) useVizStore.setState({ wrldLyricLook: value }); break
     }
   })
 }

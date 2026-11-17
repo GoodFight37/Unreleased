@@ -1,4 +1,5 @@
-import { effectsMotionMedia } from '../lib/effectsPreference'
+import { effectsMotionMedia, useEffectsState } from '../lib/effectsPreference'
+import { resolveWrldAtmosphere } from '../lib/wrldAtmospheres'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
@@ -519,6 +520,20 @@ export default function WrldView(): JSX.Element {
     radioFmActive, radioFmIsLive, radioFmNowPlaying, currentTrack,
   )
   const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
+  const { reducedMotion } = useEffectsState()
+  const { wrldAtmosphere, wrldAnimations, wrldCleanView } = useVizStore(useShallow(s => ({
+    wrldAtmosphere: s.wrldAtmosphere,
+    wrldAnimations: s.wrldAnimations,
+    wrldCleanView: s.wrldCleanView,
+  })))
+  const stageAnimated = wrldAnimations && !reducedMotion
+  const stageAura = useMemo(() => resolveWrldAtmosphere({
+    atmosphere: wrldAtmosphere,
+    animationsOn: stageAnimated,
+    glSupported: true,
+    artUrl: artSrc && !artError ? artSrc : null,
+    album: displayAlbum ?? null,
+  }), [wrldAtmosphere, stageAnimated, artSrc, artError, displayAlbum])
 
   // ArtBox / FmRadioPanel / AlbumsGrid / AlbumDetail are rendered via plain
   // function calls, NOT <JSX/> element syntax: they're (re)defined on every
@@ -528,37 +543,56 @@ export default function WrldView(): JSX.Element {
   // re-render. As plain calls they're just part of this component's own tree.
   // (Corollary: they must not contain hooks of their own.)
   const ArtBox = ({ mobile }: { mobile: boolean }) => (
-    <div
-      className={mobile
-        ? 'w-14 h-14 rounded-xl overflow-hidden shrink-0 shadow-lg'
-        : 'rounded-3xl overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.35)] w-full'}
-      style={mobile ? {} : { aspectRatio: '1' }}
-      data-viz={mobile ? undefined : 'cover'}
-      // Right-click → "Change cover", same as mobile's long-press. Only on
-      // the big desktop art, not the small header thumbnail (mobile=true) -
-      // mirrors mobile only wiring this to its one large cover.
-      onContextMenu={!mobile && coverSongId != null ? openCoverPicker : undefined}
-    >
-      {artSrc && !artError ? (
-        // The mobile box is 56px, so the degraded cover is all it ever needs;
-        // the desktop box is the biggest cover in the app and loads the full
-        // one behind a degraded first paint.
-        mobile
-          // Keyed for the same reason as ProgressiveCover: reusing the element
-          // across a track change leaves the old cover painted until the new
-          // one decodes.
-          ? <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]} alt="Album art" className="w-full h-full object-contain" onError={() => setArtError(true)} />
-          : <ProgressiveCover src={artSrc} alt="Album art" className="w-full h-full object-contain" onError={() => setArtError(true)} />
-      ) : radioFmActive ? (
-        <div className="w-full h-full bg-gradient-to-br from-red-900/60 to-black flex flex-col items-center justify-center gap-2">
-          <Radio className={`text-red-400 opacity-70 ${mobile ? 'w-6 h-6' : 'w-16 h-16'}`} />
-          {!mobile && <span className="text-red-300/70 text-2xl font-bold tracking-widest">999 FM</span>}
-        </div>
-      ) : (
-        <div className="w-full h-full bg-white/10 flex items-center justify-center">
-          <Music className={`text-white/20 ${mobile ? 'w-6 h-6' : 'w-16 h-16'}`} />
-        </div>
+    <div className={mobile ? 'w-14 h-14 relative shrink-0' : 'relative w-full'}>
+      {!mobile && !useThemeBackground && stageAnimated && artSrc && !artError && (
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute -inset-6 rounded-[40px] blur-2xl transition-opacity duration-500 ${playbackActive ? 'wrld-cover-aura' : 'opacity-45'}`}
+          style={{
+            background: stageAura.auraRgb
+              ? `radial-gradient(circle at 50% 48%, rgba(${stageAura.auraRgb}, 0.34), rgba(var(--accent-rgb), 0.14) 55%, transparent 74%)`
+              : `radial-gradient(circle at 50% 48%, rgb(var(--accent-rgb) / 0.32), transparent 72%)`,
+          }}
+        />
       )}
+      <div
+        className={mobile
+          ? 'relative w-14 h-14 rounded-xl overflow-hidden shadow-lg'
+          : `relative rounded-3xl overflow-hidden w-full ring-1 ${
+              useThemeBackground
+                ? 'shadow-[0_24px_64px_rgba(0,0,0,0.35)] ring-black/5 dark:ring-white/10'
+                : textIsDark
+                  ? 'shadow-[0_28px_72px_rgba(0,0,0,0.28)] ring-black/10'
+                  : 'shadow-[0_28px_72px_rgba(0,0,0,0.52)] ring-white/15'
+            }`}
+        style={mobile ? {} : { aspectRatio: '1' }}
+        data-viz={mobile ? undefined : 'cover'}
+        // Right-click → "Change cover", same as mobile's long-press. Only on
+        // the big desktop art, not the small header thumbnail (mobile=true) -
+        // mirrors mobile only wiring this to its one large cover.
+        onContextMenu={!mobile && coverSongId != null ? openCoverPicker : undefined}
+      >
+        {artSrc && !artError ? (
+          // The mobile box is 56px, so the degraded cover is all it ever needs;
+          // the desktop box is the biggest cover in the app and loads the full
+          // one behind a degraded first paint.
+          mobile
+            // Keyed for the same reason as ProgressiveCover: reusing the element
+            // across a track change leaves the old cover painted until the new
+            // one decodes.
+            ? <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]} alt="Album art" className="w-full h-full object-contain" onError={() => setArtError(true)} />
+            : <ProgressiveCover src={artSrc} alt="Album art" className="w-full h-full object-contain" onError={() => setArtError(true)} />
+        ) : radioFmActive ? (
+          <div className="w-full h-full bg-gradient-to-br from-red-900/60 to-black flex flex-col items-center justify-center gap-2">
+            <Radio className={`text-red-400 opacity-70 ${mobile ? 'w-6 h-6' : 'w-16 h-16'}`} />
+            {!mobile && <span className="text-red-300/70 text-2xl font-bold tracking-widest">999 FM</span>}
+          </div>
+        ) : (
+          <div className="w-full h-full bg-white/10 flex items-center justify-center">
+            <Music className={`text-white/20 ${mobile ? 'w-6 h-6' : 'w-16 h-16'}`} />
+          </div>
+        )}
+      </div>
     </div>
   )
 
@@ -734,8 +768,8 @@ export default function WrldView(): JSX.Element {
               // Blurred to 60px, so resolution is meaningless here - always the
               // degraded copy, which also gets the backdrop up on the first frame.
               <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]}
-                className="wrld-drift absolute inset-0 w-full h-full object-cover"
-                style={{ filter: `blur(60px) brightness(${isDarkSkin ? 0.22 : 0.34}) saturate(${isDarkSkin ? 2.4 : 1.8})`, willChange: 'transform' }}
+                className={`${stageAnimated ? 'wrld-drift ' : ''}absolute inset-0 w-full h-full object-cover`}
+                style={{ filter: `blur(60px) brightness(${isDarkSkin ? 0.22 : 0.34}) saturate(${isDarkSkin ? 2.4 : 1.8})`, willChange: stageAnimated ? 'transform' : undefined }}
                 onError={() => setArtError(true)}
               />
             ) : (
@@ -750,6 +784,7 @@ export default function WrldView(): JSX.Element {
               rootRef={pageRef}
               fullscreen={fullscreen}
               artUrl={artSrc && !artError ? artSrc : null}
+              albumName={displayAlbum ?? null}
               trackKey={radioFmActive ? (radioFmNowPlaying?.title ?? null) : (currentTrack?.id ?? null)}
               albumKey={displayAlbum ?? null}
               // The held value, not !!rawLyrics: the toolbar derives its own
@@ -1003,6 +1038,11 @@ export default function WrldView(): JSX.Element {
               <div className="w-full max-w-[var(--wrld-player-width)] flex items-center gap-3 select-none" style={{ color: txtTer }}>
                 <span className="text-lg font-black tracking-[-0.08em]">999</span>
                 <span className="text-[10px] font-semibold tracking-[0.24em]">JUICE WRLD</span>
+                {stageAura.eraLabel && !useThemeBackground && (
+                  <span className="ml-auto text-[10px] font-semibold tracking-[0.16em] opacity-80 truncate">
+                    {stageAura.eraLabel}
+                  </span>
+                )}
               </div>
 
               {/* Album art */}
@@ -1063,15 +1103,15 @@ export default function WrldView(): JSX.Element {
                 </div>
               </div>
 
-              {/* Progress bar - FM gets a read-only version (no scrubbing on live radio) */}
-              <div className="w-full max-w-[var(--wrld-player-width)]" data-viz="meta">
+              {/* Progress bar - FM gets a read-only version (no scrubbing on live radio); hidden cleanly in Clean stage mode */}
+              <div className={`w-full max-w-[var(--wrld-player-width)] transition-opacity duration-300 ${wrldCleanView ? 'opacity-0 pointer-events-none' : ''}`} data-viz="meta">
                 {radioFmActive
                   ? <FmProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />
                   : <ProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />}
               </div>
 
               {/* Playback controls */}
-              <div className="w-full max-w-[var(--wrld-player-width)] flex flex-col gap-4" data-viz="meta">
+              <div className={`w-full max-w-[var(--wrld-player-width)] flex flex-col gap-4 transition-opacity duration-300 ${wrldCleanView ? 'opacity-0 pointer-events-none' : ''}`} data-viz="meta">
                 {/* Main controls row — during 999 FM, Play/Pause stops or rejoins
                     the live stream while Shuffle/Repeat/Previous/Next stay unavailable. */}
                 <div className={`flex items-center justify-between transition-opacity ${noTrack ? 'opacity-35 pointer-events-none' : ''}`}>
@@ -2233,9 +2273,10 @@ const LyricsPanel = memo(function LyricsPanel({
   const theme = useStore(s => s.theme)
   const isLightLyrics = txtSec.startsWith('rgba(0,0,0') || !getSkin(theme).dark
   const developerMode = useStore((s) => s.developerMode)
+  const wrldLyricLook = useVizStore((s) => s.wrldLyricLook)
   const radioFmPaused = useStore((s) => s.radioFmPaused)
   const lyricsPaused = radioFmActive && radioFmPaused
-  const lyricLook = developerMode ? savedLyricLook : 'classic'
+  const lyricLook = developerMode ? savedLyricLook : wrldLyricLook
   // null = auto, i.e. the art-derived text colors this tab already picks.
   const activeColor   = developerMode ? lyricsColorActive ?? txtPri : txtPri
   const inactiveColor = developerMode ? lyricsColorInactive ?? txtSec : txtSec

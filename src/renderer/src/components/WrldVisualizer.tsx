@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft } from 'lucide-react'
+import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft, Sparkles, Eye, EyeOff } from 'lucide-react'
 import { Visualizer, VISUALIZERS, needsWebGL, type VizLayout } from '../lib/viz'
+import { WRLD_ATMOSPHERES, WRLD_CURATED_LYRICS, resolveWrldAtmosphere } from '../lib/wrldAtmospheres'
+import { useEffectsState } from '../lib/effectsPreference'
 import { getAnalysisTap, resumeEffectsContext } from '../lib/audioEffects'
 import { smallCoverUrl } from '../lib/juicewrldApi'
 import { ERA_PALETTES } from '../lib/eraPalettes'
@@ -9,7 +11,7 @@ import { eventToCombo } from '../lib/hotkeys'
 import { hasEscapeLayer, useEscapeToClose } from '../hooks/useEscapeToClose'
 import { useStore } from '../store/useStore'
 import { useVizStore, useWrldEdgeLook } from '../store/vizStore'
-import VizControls from './VizControls'
+import VizControls, { Toggle } from './VizControls'
 import WrldEdgeLight from './WrldEdgeLight'
 import LyricsControls from './LyricsControls'
 import DesktopSettings from './DesktopSettings'
@@ -86,6 +88,8 @@ interface Props {
   /** Cursor hiding, the chrome fade, the hotkeys and exit exist only in fullscreen. */
   fullscreen: boolean
   artUrl: string | null
+  /** Display album or era name, used by 999 Era Auto to pick a matching atmosphere. */
+  albumName?: string | null
   /** Changes once per track; drives auto-switch. */
   trackKey: string | null
   albumKey: string | null
@@ -103,7 +107,7 @@ interface Props {
 }
 
 export default function WrldVisualizer({
-  rootRef, fullscreen, artUrl, trackKey, albumKey, hasLyrics, fm, onEnter, onExit, onClose, onPopOutMini,
+  rootRef, fullscreen, artUrl, albumName, trackKey, albumKey, hasLyrics, fm, onEnter, onExit, onClose, onPopOutMini,
 }: Props): JSX.Element {
   // 999 FM plays with isPlaying off; the visualizer stops listening when this is false.
   const isPlaying = useStore((s) => s.isPlaying || (s.radioFmActive && !s.radioFmPaused))
@@ -116,12 +120,25 @@ export default function WrldVisualizer({
   const startRandomRadio = useStore((s) => s.startRandomRadio)
   // The screen light's look, while WRLD's Edge light is on.
   const vizEdgeOverlay = useWrldEdgeLook()
-  const { activeMode, vizQuality, vizUseArtwork, vizBoost, covered } = useVizStore(useShallow((s) => ({
+  const { reducedMotion } = useEffectsState()
+  const {
+    activeMode, vizQuality, vizUseArtwork, vizBoost, covered,
+    wrldAtmosphere, wrldAnimations, wrldLyricLook, wrldCleanView,
+    setWrldAtmosphere, setWrldAnimations, setWrldLyricLook, setWrldCleanView,
+  } = useVizStore(useShallow((s) => ({
     activeMode: s.activeMode,
     vizQuality: s.vizQuality,
     vizUseArtwork: s.vizUseArtwork,
     vizBoost: s.vizBoost,
     covered: s.vizCovered > 0,
+    wrldAtmosphere: s.wrldAtmosphere,
+    wrldAnimations: s.wrldAnimations,
+    wrldLyricLook: s.wrldLyricLook,
+    wrldCleanView: s.wrldCleanView,
+    setWrldAtmosphere: s.setWrldAtmosphere,
+    setWrldAnimations: s.setWrldAnimations,
+    setWrldLyricLook: s.setWrldLyricLook,
+    setWrldCleanView: s.setWrldCleanView,
   })))
 
   const hostRef = useRef<HTMLDivElement>(null)
@@ -131,10 +148,26 @@ export default function WrldVisualizer({
   // just doesn't show.
   const [overlayFailed, setOverlayFailed] = useState(false)
   const shownEdge = overlayFailed ? null : vizEdgeOverlay
+  const animationsActive = wrldAnimations && !reducedMotion
+  const resolvedAtmosphere = resolveWrldAtmosphere({
+    atmosphere: wrldAtmosphere,
+    animationsOn: animationsActive,
+    glSupported,
+    artUrl,
+    album: albumName ?? albumKey,
+  })
+  const engineMode = !animationsActive
+    ? 'none'
+    : developerMode
+      ? activeMode
+      : resolvedAtmosphere.vizMode
   // "Off" tears the engine down entirely - no canvases, audio tap or frame loop.
-  const off = activeMode === 'none'
+  const off = engineMode === 'none'
   const [showSettings, setShowSettings] = useState(false)
+  const [showAmbiance, setShowAmbiance] = useState(false)
+  const [cleanPeek, setCleanPeek] = useState(false)
   useEscapeToClose(() => setShowSettings(false), showSettings)
+  useEscapeToClose(() => setShowAmbiance(false), showAmbiance)
   // The settings popup's tab, the same one next time.
   const [settingsTab, setSettingsTab] = useState<'viz' | 'desktop'>(() => (ls.get('wrldSettingsTab') === 'desktop' ? 'desktop' : 'viz'))
   const pickSettingsTab = (tab: 'viz' | 'desktop'): void => { setSettingsTab(tab); ls.set('wrldSettingsTab', tab) }
@@ -208,14 +241,14 @@ export default function WrldVisualizer({
   useEffect(() => {
     const viz = vizRef.current
     if (!viz) return
-    viz.setMode(activeMode)
-    if (activeMode === 'none') {
+    viz.setMode(engineMode)
+    if (engineMode === 'none') {
       viz.stop()
       return
     }
     viz.syncAccent()
     viz.start()
-  }, [activeMode, off])
+  }, [engineMode, off])
 
   // --accent is written to <html>'s inline style by several paths (accent
   // picker, skins, the chat /theme command), so follow the style itself rather
@@ -349,9 +382,11 @@ export default function WrldVisualizer({
     seenPanel.current = panel
     announce(panel === 'queue' ? 'Queue' : panel === 'radio' ? 'Radio' : panel === 'chat' ? 'Chat' : panel === 'lyrics' ? 'Lyrics' : 'Panel off')
   }, [panel, announce])
-  // ←/→ and V. Capture phase so these run before the Player's document-level
-  // hotkeys and stop them for the keys handled here; anything else (Space,
-  // L to like, the lyrics toggle) falls through to the app as usual.
+  // Reset clean capture overlay when leaving WRLD so controls are never stuck hidden on next visit.
+  useEffect(() => () => { setWrldCleanView(false) }, [setWrldCleanView])
+
+  // ←/→ in fullscreen and C for Clean stage. Capture phase so these run before
+  // the Player's document-level hotkeys; anything else (Space, L, Escape) falls through.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const t = e.target as HTMLElement | null
@@ -359,6 +394,14 @@ export default function WrldVisualizer({
       // A dialog or menu open over the fullscreen view owns the keyboard.
       if (hasEscapeLayer()) return
       const combo = eventToCombo(e)
+      if (combo === 'KeyC') {
+        const next = !useVizStore.getState().wrldCleanView
+        useVizStore.getState().setWrldCleanView(next)
+        announce(next ? 'Clean stage' : 'Controls shown')
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
       if (!fullscreen) return
       if (combo === 'ArrowLeft') cycle(-1)
       else if (combo === 'ArrowRight') cycle(1)
@@ -369,7 +412,7 @@ export default function WrldVisualizer({
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [cycle, wake, fullscreen])
+  }, [cycle, wake, fullscreen, announce])
 
   // ── Auto-switch: a random mode per track or album, never saved ─────────────
   const prevTrack = useRef<string | null>(null)
@@ -415,16 +458,25 @@ export default function WrldVisualizer({
         </div>
       )}
 
+      {/* Subtle top-right hover target when Clean stage hides the toolbar for screen recordings */}
+      {wrldCleanView && !cleanPeek && (
+        <div
+          className="absolute top-0 right-0 w-44 h-20 z-30"
+          onMouseEnter={() => setCleanPeek(true)}
+          aria-hidden
+        />
+      )}
+
       <div
         ref={toolbarRef}
         // Clear of the Electron title bar outside fullscreen, and of a top-docked floating nav
         // pill only when they'd overlap.
         style={{ top: `max(${underPill ? 'calc(var(--nav-pill-top, 0px) + 1rem)' : '1rem'}, ${IS_ELECTRON && !fullscreen ? '2.5rem' : '1rem'})` }}
         className={`wrld-toolbar glass-bar absolute right-4 z-40 flex items-center gap-0.5 p-[5px] rounded-[14px] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl border border-[var(--border)] transition-[opacity,transform] duration-200 ${
-          idle && !showSettings ? 'opacity-0 -translate-y-1.5 pointer-events-none' : ''
+          ((idle || (wrldCleanView && !cleanPeek)) && !showSettings && !showAmbiance) ? 'opacity-0 -translate-y-1.5 pointer-events-none' : ''
         }`}
         onMouseEnter={() => { overToolbar.current = true }}
-        onMouseLeave={() => { overToolbar.current = false; wake() }}
+        onMouseLeave={() => { overToolbar.current = false; setCleanPeek(false); wake() }}
       >
         <button className="h-9 px-2 flex items-center gap-1 rounded-[10px] text-xs text-text-primary hover:bg-white/10"
           onClick={onClose} title="Back to music (Esc)" aria-label="Close listening view">
@@ -468,6 +520,32 @@ export default function WrldVisualizer({
           <Dices size={15} />
           <span>Random</span>
         </button>
+        <span className="w-px h-5 mx-1 bg-[var(--border)]" />
+        <button
+          className={`h-9 px-2.5 flex items-center gap-1.5 rounded-[10px] text-[11px] font-semibold tracking-[0.06em] transition-colors ${showAmbiance ? toolOn : toolIdle}`}
+          onClick={() => { setShowSettings(false); setShowAmbiance((v) => !v) }}
+          title="Stage ambiance & lyric style"
+          aria-label="Stage ambiance"
+          aria-expanded={showAmbiance}
+        >
+          <Sparkles size={15} />
+          <span className="hidden lg:inline">999 Stage</span>
+        </button>
+        <button
+          className={`${tool} ${wrldCleanView ? toolOn : toolIdle}`}
+          onClick={() => {
+            const next = !wrldCleanView
+            setWrldCleanView(next)
+            setShowAmbiance(false)
+            setShowSettings(false)
+            announce(next ? 'Clean stage' : 'Controls shown')
+          }}
+          title={wrldCleanView ? 'Show controls (C)' : 'Clean stage for recording (C)'}
+          aria-label="Clean stage"
+          aria-pressed={wrldCleanView}
+        >
+          {wrldCleanView ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
         {developerMode && <>
         <span className="w-px h-5 mx-1 bg-[var(--border)]" />
         <button
@@ -481,7 +559,7 @@ export default function WrldVisualizer({
         </button>
         <button
           className={`${tool} ${showSettings ? toolOn : toolIdle}`}
-          onClick={() => setShowSettings((v) => !v)}
+          onClick={() => { setShowAmbiance(false); setShowSettings((v) => !v) }}
           title="Visualizer settings"
           aria-label="Visualizer settings"
           aria-expanded={showSettings}
@@ -509,6 +587,85 @@ export default function WrldVisualizer({
               </button>
             )}
           </>
+        )}
+        {showAmbiance && (
+          <div className="absolute top-full right-0 mt-2 w-[340px] max-w-[calc(100vw-2rem)] max-h-[75vh] overflow-y-auto p-4 rounded-[16px] bg-[var(--surface)] border border-[var(--border)] shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-text-primary text-xs font-semibold">Stage animations</p>
+                <p className="text-text-muted text-[11px]">
+                  {!reducedMotion && wrldAnimations ? 'Active visuals & cover aura' : 'Calm mode (zero stage motion)'}
+                </p>
+              </div>
+              <Toggle
+                on={wrldAnimations}
+                onClick={() => {
+                  const next = !wrldAnimations
+                  setWrldAnimations(next)
+                  announce(next ? 'Stage animations on' : 'Calm mode')
+                }}
+              />
+            </div>
+
+            <div className="pt-3 border-t border-[var(--border)]">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-text-secondary text-xs font-semibold">999 Atmosphere</p>
+                {wrldAtmosphere === 'auto' && resolvedAtmosphere.eraLabel && (
+                  <span className="text-[10px] font-semibold tracking-wider uppercase text-accent">
+                    {resolvedAtmosphere.eraLabel}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {WRLD_ATMOSPHERES.map((preset) => {
+                  const selected = wrldAtmosphere === preset.id
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => {
+                        setWrldAtmosphere(preset.id)
+                        announce(preset.label)
+                      }}
+                      className={`text-left px-2.5 py-2 rounded-xl border transition-colors ${
+                        selected
+                          ? 'bg-accent/15 border-[var(--accent)] text-text-primary'
+                          : 'border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-[var(--surface-overlay)]'
+                      }`}
+                    >
+                      <div className="text-[11px] font-semibold leading-tight truncate">{preset.label}</div>
+                      <div className="text-[10px] opacity-75 leading-tight mt-0.5 truncate">{preset.subtitle}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[var(--border)]">
+              <p className="text-text-secondary text-xs font-semibold mb-2">Lyric presentation</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {WRLD_CURATED_LYRICS.map((style) => {
+                  const selected = wrldLyricLook === style.id
+                  return (
+                    <button
+                      key={style.id}
+                      onClick={() => {
+                        setWrldLyricLook(style.id)
+                        announce(`${style.label} lyrics`)
+                      }}
+                      className={`text-left px-2.5 py-2 rounded-xl border transition-colors ${
+                        selected
+                          ? 'bg-accent/15 border-[var(--accent)] text-text-primary'
+                          : 'border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-[var(--surface-overlay)]'
+                      }`}
+                    >
+                      <div className="text-[11px] font-semibold leading-tight">{style.label}</div>
+                      <div className="text-[10px] opacity-75 leading-tight mt-0.5 truncate">{style.subtitle}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         )}
         {developerMode && showSettings && (
           <div
