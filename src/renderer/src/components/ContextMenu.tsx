@@ -6,6 +6,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 import { useEscapeToClose } from '../hooks/useEscapeToClose'
 import { popOut, useExitGhost } from '../hooks/useExitGhost'
 import { placeFlyout } from '../lib/menuFlyout'
+import { shouldIgnoreMenuScroll } from '../lib/menuScroll'
 import { ClampedMenu } from './ClampedMenu'
 import { Sheet, SheetItem, SheetDivider } from './mobile/Sheet'
 
@@ -182,7 +183,10 @@ export default function ContextMenu({
     const inside = (t: EventTarget | null): boolean =>
       t instanceof Element && (!!t.closest(`[data-ctx-menu="${menuId}"]`) || !!ignoreRef?.current?.contains(t))
     const onDown = (e: MouseEvent): void => { if (!inside(e.target)) onClose() }
-    const onScroll = (e: Event): void => { if (!inside(e.target)) onClose() }
+    const onScroll = (e: Event): void => {
+      if (inside(e.target) || shouldIgnoreMenuScroll(e.target)) return
+      onClose()
+    }
     document.addEventListener('mousedown', onDown)
     window.addEventListener('scroll', onScroll, true)
     return () => {

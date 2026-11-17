@@ -1,4 +1,5 @@
 import { PopLayer } from './PopLayer'
+import { shouldIgnoreMenuScroll } from '../lib/menuScroll'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
@@ -87,7 +88,10 @@ export default function ThemedSelect({
     const inside = (t: EventTarget | null): boolean =>
       t instanceof Node && (!!listRef.current?.contains(t) || !!triggerRef.current?.contains(t))
     const onDown = (e: MouseEvent): void => { if (!inside(e.target)) close() }
-    const onScroll = (e: Event): void => { if (!inside(e.target)) close() }
+    const onScroll = (e: Event): void => {
+      if (shouldIgnoreMenuScroll(e.target, [listRef.current, triggerRef.current], triggerRef.current)) return
+      close()
+    }
     const onResize = (): void => close()
     document.addEventListener('mousedown', onDown)
     window.addEventListener('scroll', onScroll, true)

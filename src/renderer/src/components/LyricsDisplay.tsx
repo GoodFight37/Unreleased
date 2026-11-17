@@ -9,6 +9,7 @@ import { isDonorStreamUrl } from '../lib/donorPlayback'
 import { seekAudio, getAudioCurrentTime } from './Player'
 import ContextMenu from './ContextMenu'
 import WordLyricLine from './WordLyricLine'
+import { IGNORE_MENU_SCROLL_ATTR } from '../lib/menuScroll'
 
 interface LyricsDisplayProps {
   /** Playback-clock source for synced-line highlighting. Defaults to the live
@@ -89,9 +90,15 @@ export default memo(function LyricsDisplay({ getTime, onSeek, compact, override 
   }, [isSynced, syncedLines, lyricsOffset, getTime])
 
   useEffect(() => {
-    if (activeRef.current && containerRef.current) {
-      activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }
+    const box = containerRef.current
+    const line = activeRef.current
+    if (!box || !line) return
+    // Scroll only the lyrics container itself; scrollIntoView can drag outer scrollers
+    // and dispatch scroll events across unrelated parts of the window.
+    const boxRect = box.getBoundingClientRect()
+    const lineRect = line.getBoundingClientRect()
+    const targetTop = box.scrollTop + (lineRect.top - boxRect.top) - (box.clientHeight - lineRect.height) / 2
+    box.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
   }, [currentLineIdx])
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
@@ -149,6 +156,7 @@ export default memo(function LyricsDisplay({ getTime, onSeek, compact, override 
       <div
         ref={containerRef}
         onContextMenu={handleContextMenu}
+        {...{ [IGNORE_MENU_SCROLL_ATTR]: 'true' }}
         // no-scrollbar, not a <style> rule: an unscoped ::-webkit-scrollbar
         // rule hid every scrollbar in the app while synced lyrics were up.
         className={`h-full overflow-y-auto no-scrollbar ${compact ? 'py-10 px-5 space-y-3' : 'py-16 px-8 space-y-4'}`}

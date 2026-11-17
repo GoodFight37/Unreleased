@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type RefObject } from 'react'
+import { shouldIgnoreMenuScroll } from '../lib/menuScroll'
 
 /* Placement + dismissal for a popover portaled to <body> next to an anchor,
    same rules as ThemedSelect's list: fixed position so overflow-hidden cards
@@ -28,7 +29,10 @@ export function useAnchoredPopover(
     const inside = (t: EventTarget | null): boolean =>
       t instanceof Node && (!!popRef.current?.contains(t) || !!anchorRef.current?.contains(t))
     const onDown = (e: MouseEvent): void => { if (!inside(e.target)) setOpen(false) }
-    const onScroll = (e: Event): void => { if (!inside(e.target)) setOpen(false) }
+    const onScroll = (e: Event): void => {
+      if (shouldIgnoreMenuScroll(e.target, [popRef.current, anchorRef.current], anchorRef.current)) return
+      setOpen(false)
+    }
     const onResize = (): void => setOpen(false)
     document.addEventListener('mousedown', onDown)
     window.addEventListener('scroll', onScroll, true)

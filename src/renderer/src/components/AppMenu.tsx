@@ -14,6 +14,7 @@ import { APP_VERSION } from '../lib/appVersion'
 import { useSlidingIndicator } from '../hooks/useSlidingIndicator'
 import { useEscapeToClose } from '../hooks/useEscapeToClose'
 import { popOut, useExitGhost } from '../hooks/useExitGhost'
+import { shouldIgnoreMenuScroll } from '../lib/menuScroll'
 import { ClampedMenu } from './ClampedMenu'
 
 // View tabs that have a dedicated navigation hotkey — the rest navigate via
@@ -450,8 +451,7 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
       close()
     }
     const onScroll = (e: Event): void => {
-      const target = e.target as Node | null
-      if (target && panelRef.current?.contains(target)) return
+      if (shouldIgnoreMenuScroll(e.target, [panelRef.current, triggerRef.current], triggerRef.current)) return
       close()
     }
     window.addEventListener('mousedown', onDown, true)
