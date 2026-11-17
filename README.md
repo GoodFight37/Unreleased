@@ -4,7 +4,7 @@ A desktop music player for exploring Juice WRLD's released and unreleased catalo
 
 Built from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased), with a cover-led interface, glass controls and a simpler everyday layout.
 
-![Discover — Light theme](docs/screenshots/home.png)
+![Unreleased Glass](docs/screenshots/app-home-272ab8c1.png)
 
 ## What you can do
 
@@ -25,25 +25,13 @@ The interface adds translucent glass controls and cover-inspired backgrounds. WR
 
 ## Windows installation
 
-Get the Windows installer from [Releases](https://github.com/GoodFight37/Unreleased/releases). Download `Unreleased Glass-Setup-<version>.exe`, run it and open **Unreleased Glass** from the Start menu. A release without an attached `.exe` is not ready to install yet.
+Open [Releases](https://github.com/GoodFight37/Unreleased/releases), download the Windows installer and run it. Then open **Unreleased Glass** from the Start menu.
 
 Installed versions check this repository for updates. Glass uses its own profile and keeps the original Unreleased installation separate. Before the first launch, close the original player so Glass can import its preferences. Imported offline files are copied, which can require extra disk space.
 
-## Screenshots
+![Unreleased Glass](docs/screenshots/app-catalogue-272ab8c1.png)
 
-Captured from the running desktop app with live catalogue data and real cover art. The first view uses the saved Light theme; the Dark view uses the app's built-in theme.
-
-**Catalogue**
-
-![Catalogue — Light theme](docs/screenshots/catalogue.png)
-
-**WRLD fullscreen listening**
-
-![WRLD with real catalogue artwork and lyrics](docs/screenshots/wrld.png)
-
-**Dark theme**
-
-![Discover — Dark theme](docs/screenshots/home-dark.png)
+![Unreleased Glass](docs/screenshots/app-wrld-272ab8c1.png)
 
 ## For developers
 
