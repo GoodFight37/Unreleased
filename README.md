@@ -11,8 +11,11 @@ Built from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased), powered b
   directly, with liked songs, albums and local files alongside them.
   Discover follows the selected song with catalogue credits, dates and notes.
 - **Glass where it floats.** The navigation, player, menus and dialogs keep
-  their glass treatment; music lists stay crisp and readable.
-  All three destinations share the same ambient backdrop.
+  their glass treatment with audio-reactive rim highlights, slow idle caustics
+  and orbital specular light, and 120+ fps smooth seek playback; music lists
+  stay crisp and readable with beat-synced playing indicators. A **Game &
+  economy mode** toggle in Settings pauses continuous loops while keeping the
+  static glass look intact.
 - **Dark, Light and album themes.** The saved palette is restored before
   the main interface loads.
 - **Simple settings.** Everyday music controls stay visible. Technical tools

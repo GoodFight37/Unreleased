@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, ReactNode, ElementType, CSSProperties } from 'react'
 import {
   ArrowLeft, ArrowRight, X, Brush, Palette, Volume2, Zap, Clock, Github, MessageCircle, PenLine, BookOpen, Eye, EyeOff, ChevronDown, Globe, RefreshCw, DownloadCloud, FolderOpen, FolderPlus, Monitor, BellOff, Minus, Loader2, Plus, AlignLeft, FileText, Trash2, Wrench, FlaskConical, PanelLeft, PanelTop, Waves, Keyboard, RotateCcw, AppWindow, PictureInPicture2, Minimize2, ListOrdered, GripVertical, CloudUpload, Type, AlignCenter, Menu, Upload, ScrollText, ShieldCheck, Disc, Images, Search, Server, Home, AudioLines, SlidersHorizontal, Bell, Bug, House, Heart, User, Check,
-  Activity, Headphones,
+  Activity, Headphones, Gamepad2,
 } from 'lucide-react'
 import { DebugAnonymousToggle, DebugLogOpenButton, DebugRecordButton } from './DebugRecorder'
 import { ADDRESSES as DONATION_ADDRESSES, AddressRow as DonationAddressRow } from './DonationNotice'
@@ -42,7 +42,7 @@ import DesktopSettings from './DesktopSettings'
 import { useContentMotion } from '../hooks/useContentMotion'
 import { useSlidingIndicator } from '../hooks/useSlidingIndicator'
 import { MotionDisclosure } from './MotionDisclosure'
-import { useEffectsMode, setEffectsMode, type EffectsMode } from '../lib/effectsPreference'
+import { useEffectsMode, setEffectsMode, useEffectsQuality, setEffectsQuality, type EffectsMode } from '../lib/effectsPreference'
 
 const ACCENT_PRESETS = [
   '#1db954', '#7c3aed', '#2563eb', '#dc2626',
@@ -491,6 +491,7 @@ interface AppSettings {
 // and view links (Docs, Editor) navigate the MAIN window instead.
 export default function Settings({ floating = false }: { floating?: boolean }): JSX.Element {
   const effectsMode = useEffectsMode()
+  const effectsQuality = useEffectsQuality()
   // Which Account sub-page is open; kept here so a search result can land on it.
   const [accountPage, setAccountPage] = useState<AccountPage>('home')
   const [notificationSound, setNotificationSoundState] = useState(getNotificationSoundId())
@@ -1289,6 +1290,9 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                 <SettingsGroup title="Effects">
                   <Row icon={Waves} iconColor="#8b5cf6" label="Liquid Glass & animations" sub="On by default. Follow system for accessibility, or reduce effects to save resources.">
                     <ThemedSelect value={effectsMode} onChange={v => setEffectsMode(v as EffectsMode)} options={[{value:'on',label:'On'}, {value:'system',label:'Follow system'}, {value:'reduced',label:'Reduced'}]} title="Liquid Glass and animations" className="min-w-[140px]" />
+                  </Row>
+                  <Row icon={Gamepad2} iconColor="#8b5cf6" label="Game & economy mode" sub="Keeps static Liquid Glass sharp while pausing continuous animations and live background flow.">
+                    <Toggle on={effectsQuality === 'game'} onClick={() => setEffectsQuality(effectsQuality === 'game' ? 'full' : 'game')} />
                   </Row>
                   {developerMode && (<Row
                     icon={Waves}

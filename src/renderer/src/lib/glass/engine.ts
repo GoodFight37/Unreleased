@@ -5,7 +5,7 @@ import { getGlassPreset, type GlassPreset } from './presets'
 
 export type GlassState = { light: boolean; source: 'ambient' | 'cover'; pointer: [number, number]; lens: [number, number, number]; merge: number; tint: [number, number, number]; rect: [number, number, number, number]; play: [number, number, number, number]; preset?: GlassPreset }
 export type CompositorSurface = { cx: number; cy: number; hw: number; hh: number; radius: number; kind: number; layer: number; playFusion: number }
-export type CompositorState = Omit<GlassState, 'rect'> & { surfaces: CompositorSurface[] }
+export type CompositorState = Omit<GlassState, 'rect'> & { surfaces: CompositorSurface[]; audio?: [number, number, number, number] }
 export type Measurement = { frames: number; cpuP50: number; cpuP95: number; gpuP50: number | null; gpuP95: number | null; durationMs: number }
 const percentile = (v: number[], q: number) => { const sorted = [...v].sort((a,b) => a-b); return sorted[Math.min(sorted.length-1, Math.floor(sorted.length*q))] ?? 0 }
 
@@ -165,10 +165,11 @@ export async function createGlassCompositor(canvas: HTMLCanvasElement, overlayCa
       const count = Math.min(32, state.surfaces.length)
       const preset = state.preset ?? getGlassPreset(state.light)
       const nowSec = (performance.now() / 1000) % 600
+      const audio = state.audio ?? [0, 0, 0, 0]
       const uniforms = new Float32Array([
         w, h, ...state.pointer, ...state.lens, state.merge, ...state.tint, state.light ? 1 : 0,
         state.source === 'cover' ? 1 : 0, 1 / bgW, 1 / bgH, count,
-        0, 0, 0, 0, ...state.play,
+        0, audio[0], audio[1], audio[3], ...state.play,
         preset.refractionStrength, preset.rimIntensity, preset.chromaticFringe, preset.tintOpacity,
         preset.frost, nowSec, preset.caustic, preset.bevel,
       ])

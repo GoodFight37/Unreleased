@@ -6,6 +6,7 @@ import { getSkin } from '../skins'
 import { buildImageUrl } from '../juicewrldApi'
 import { fetchImageBlob } from '../coverImage'
 import { useEffectsState } from '../effectsPreference'
+import { listenToMeter } from '../../desktop/meter'
 import { useStore } from '../../store/useStore'
 
 export type GlassSurfaceKind = 'panel' | 'pill' | 'field' | 'player' | 'segthumb'
@@ -414,7 +415,7 @@ function collectSurfaces(dt: number, reducedMotion: boolean): { surfaces: Compos
 
 /** Global WebGPU glass compositor mount (placed once in App.tsx). */
 export function GlassCompositorLayer(): JSX.Element | null {
-  const { reducedMotion, reducedTransparency } = useEffectsState()
+  const { reducedMotion, reducedTransparency, gameMode } = useEffectsState()
   const theme = useStore((s) => s.theme)
   const activeView = useStore((s) => s.activeView)
   const currentTrack = useStore((s) => s.currentTrack)
@@ -442,6 +443,33 @@ export function GlassCompositorLayer(): JSX.Element | null {
     let running = false
     let lastTime = performance.now()
     let engine: Awaited<ReturnType<typeof createGlassCompositor>> | null = null
+    let rawPunch = 0
+    let rawRms = 0
+    let smoothPunch = 0
+    let smoothRms = 0
+    const liveFlow = !reducedMotion && !gameMode
+
+    const unlistenMeter = liveFlow
+      ? listenToMeter((m) => {
+          rawPunch = Math.min(1.2, Math.max(0, m.punch > 1 ? (m.punch - 1) * 1.4 : m.punch * 0.25))
+          rawRms = Math.min(1, Math.max(0, (m.decibels + 52) / 52))
+        })
+      : () => {}
+
+    const syncBeatVars = (): void => {
+      const root = document.documentElement
+      if (liveFlow && smoothRms > 0.015) {
+        if (!root.classList.contains('beat-live')) root.classList.add('beat-live')
+        const b1 = Math.min(1, Math.max(0.24, 0.24 + smoothRms * 0.48 + smoothPunch * 0.45))
+        const b2 = Math.min(1, Math.max(0.28, 0.30 + smoothRms * 0.62 + smoothPunch * 0.28))
+        const b3 = Math.min(1, Math.max(0.22, 0.22 + smoothRms * 0.44 + smoothPunch * 0.52))
+        root.style.setProperty('--beat-1', b1.toFixed(3))
+        root.style.setProperty('--beat-2', b2.toFixed(3))
+        root.style.setProperty('--beat-3', b3.toFixed(3))
+      } else if (root.classList.contains('beat-live')) {
+        root.classList.remove('beat-live')
+      }
+    }
 
     const uploadTintOrCover = (): void => {
       if (!engine) return
@@ -470,6 +498,15 @@ export function GlassCompositorLayer(): JSX.Element | null {
         const factor = reducedMotion ? 1 : preset.springStiffness
         playerExtras.lens[2] += (playerExtras.targetLens - playerExtras.lens[2]) * factor
         playerExtras.merge += (playerExtras.targetMerge - playerExtras.merge) * factor
+        if (liveFlow) {
+          const punchRate = rawPunch > smoothPunch ? 24 : 7
+          smoothPunch += (rawPunch - smoothPunch) * Math.min(1, dt * punchRate)
+          smoothRms += (rawRms - smoothRms) * Math.min(1, dt * 10)
+        } else {
+          smoothPunch = 0
+          smoothRms = 0
+        }
+        syncBeatVars()
         const { surfaces, play, animating } = collectSurfaces(dt, reducedMotion)
         await engine.draw({
           light: backdropState.light,
@@ -481,8 +518,10 @@ export function GlassCompositorLayer(): JSX.Element | null {
           play,
           preset,
           surfaces,
+          audio: [smoothPunch, smoothRms, 0, liveFlow ? 1 : 0],
         })
         if (
+          liveFlow ||
           animating ||
           Math.abs(playerExtras.lens[2] - playerExtras.targetLens) > 0.005 ||
           Math.abs(playerExtras.merge - playerExtras.targetMerge) > 0.005
@@ -582,6 +621,8 @@ export function GlassCompositorLayer(): JSX.Element | null {
 
     return () => {
       stopped = true
+      unlistenMeter()
+      document.documentElement.classList.remove('beat-live')
       cancelAnimationFrame(raf)
       cancelAnimationFrame(animRaf)
       mo.disconnect()
@@ -604,7 +645,7 @@ export function GlassCompositorLayer(): JSX.Element | null {
       engine?.destroy()
       setReady(false)
     }
-  }, [reducedTransparency, reducedMotion])
+  }, [reducedTransparency, reducedMotion, gameMode])
 
   useEffect(() => {
     backdropState.light = !getSkin(theme).dark

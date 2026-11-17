@@ -120,7 +120,7 @@ export default function WrldVisualizer({
   const startRandomRadio = useStore((s) => s.startRandomRadio)
   // The screen light's look, while WRLD's Edge light is on.
   const vizEdgeOverlay = useWrldEdgeLook()
-  const { reducedMotion } = useEffectsState()
+  const { reducedMotion, gameMode } = useEffectsState()
   const {
     activeMode, vizQuality, vizUseArtwork, vizBoost, covered,
     wrldAtmosphere, wrldAnimations, wrldLyricLook, wrldCleanView,
@@ -148,7 +148,7 @@ export default function WrldVisualizer({
   // just doesn't show.
   const [overlayFailed, setOverlayFailed] = useState(false)
   const shownEdge = overlayFailed ? null : vizEdgeOverlay
-  const animationsActive = wrldAnimations && !reducedMotion
+  const animationsActive = wrldAnimations && !reducedMotion && !gameMode
   const resolvedEra = resolveWrldEra(artUrl, albumName ?? albumKey)
   // Legacy 2D/WebGL visualizer presets run only when Developer Mode explicitly selects one;
   // normal WRLD playback uses the integrated LiquidMeshBackdrop shader instead.

@@ -1759,6 +1759,18 @@ img[data-img-fade="in"] { animation: img-fade-in 0.24s var(--ease-out); }
   from { transform: scaleY(0.3); }
   to   { transform: scaleY(1); }
 }
-:where(html[data-effects-motion="reduce"]) .album-eq-playing .album-eq-bar { animation: none; transform: scaleY(0.7); }
+html.beat-live .album-eq-playing .album-eq-bar,
+html.beat-live .eq-bar {
+  animation: none;
+  transform: scaleY(var(--beat-1, 0.55));
+  transition: transform 65ms linear;
+}
+html.beat-live .album-eq-playing .album-eq-bar:nth-child(2),
+html.beat-live .eq-bar:nth-child(2) { transform: scaleY(var(--beat-2, 0.72)); }
+html.beat-live .album-eq-playing .album-eq-bar:nth-child(3),
+html.beat-live .eq-bar:nth-child(3) { transform: scaleY(var(--beat-3, 0.48)); }
+:where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) .album-eq-playing .album-eq-bar,
+:where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) .eq-bar { animation: none; transform: scaleY(0.7); }
+:where(html[data-effects-quality="game"]) .wrld-drift { animation: none; }
 
 :where(html[data-effects-motion="reduce"]) img[data-img-fade="in"] { animation: none; }

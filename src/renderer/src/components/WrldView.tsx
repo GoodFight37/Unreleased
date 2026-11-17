@@ -521,13 +521,13 @@ export default function WrldView(): JSX.Element {
     radioFmActive, radioFmIsLive, radioFmNowPlaying, currentTrack,
   )
   const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
-  const { reducedMotion } = useEffectsState()
+  const { reducedMotion, gameMode } = useEffectsState()
   const { wrldAtmosphere, wrldAnimations, wrldCleanView } = useVizStore(useShallow(s => ({
     wrldAtmosphere: s.wrldAtmosphere,
     wrldAnimations: s.wrldAnimations,
     wrldCleanView: s.wrldCleanView,
   })))
-  const stageAnimated = wrldAnimations && !reducedMotion && wrldAtmosphere !== 'off'
+  const stageAnimated = wrldAnimations && !reducedMotion && !gameMode && wrldAtmosphere !== 'off'
   const stageEra = useMemo(
     () => resolveWrldEra(artSrc && !artError ? artSrc : null, displayAlbum ?? null),
     [artSrc, artError, displayAlbum],

@@ -231,6 +231,9 @@ fn surface_sdf(px: vec2f, s: Surface) -> f32 {
   let dx = surface_sdf(px + vec2f(1., 0.), s) - bestD;
   let dy = surface_sdf(px + vec2f(0., 1.), s) - bestD;
   let normal = normalize(vec2f(dx, dy) + vec2f(0.0001));
+  let liveFlow = clamp(p.rect.w, 0., 1.);
+  let audioPunch = clamp(p.rect.y, 0., 1.2) * liveFlow;
+  let audioRms = clamp(p.rect.z, 0., 1.0) * liveFlow;
   var lensShift = vec2f(0.);
   var dropGlow = 0.0;
   if (isPlayer) {
@@ -239,7 +242,7 @@ fn surface_sdf(px: vec2f, s: Surface) -> f32 {
       lensShift = lq * exp(-length(lq) * 18.) * p.lens.z * -0.58;
     }
     let dpq = (px - p.play.xy * p.size) / max(p.play.z * p.size.y, 1.0);
-    dropGlow = exp(-dot(dpq, dpq) * 0.9) * (0.55 + 0.45 * p.lens.w);
+    dropGlow = exp(-dot(dpq, dpq) * 0.9) * (0.55 + 0.45 * p.lens.w) * (1.0 + audioPunch * 0.42 + audioRms * 0.16);
   }
   let bev = edge * (0.85 + 0.55 * p.look.w) + pow(edge, 2.0) * p.look.w * 0.65;
   let shift = normal * bev * (p.optics.x * (0.92 + interact * 0.6)) + lensShift;
@@ -253,7 +256,9 @@ fn surface_sdf(px: vec2f, s: Surface) -> f32 {
     glass.g,
     textureSampleLevel(blurred, samp, clamp(refracted - normal * fringe, vec2f(0.), vec2f(1.)), 0.).b
   );
-  let lightDir = normalize((p.pointer - uv) * vec2f(aspect, 1.) + vec2f(0.001));
+  let orbitDir = normalize(vec2f(cos(p.look.y * 0.68), sin(p.look.y * 0.68) * 0.65));
+  let ptrDir = normalize((p.pointer - uv) * vec2f(aspect, 1.) + vec2f(0.001));
+  let lightDir = normalize(mix(ptrDir, orbitDir, 0.32 * liveFlow));
   let shine = pow(max(dot(normal, lightDir), 0.), 3.0) * rim;
   let topCatch = pow(max(-normal.y, 0.), 1.5) * rim;
   let bounce = pow(max(dot(normal, -lightDir), 0.), 2.2) * rim;
@@ -263,12 +268,15 @@ fn surface_sdf(px: vec2f, s: Surface) -> f32 {
   let darkBody = vec3f(0.17) * (vec3f(1.) - exp(-toned * 1.4 / 0.17));
   let lightBody = vec3f(1.) - vec3f(0.18) * (vec3f(1.) - exp(-(vec3f(1.) - toned) * 1.4 / 0.18));
   let accessible = mix(darkBody, lightBody, p.tint.w);
+  let caustPhase = p.look.y * 0.65 * liveFlow;
+  let caustWave = sin(uv.x * 16.0 + uv.y * 9.0 + caustPhase) * sin(uv.x * 11.0 - uv.y * 14.0 - caustPhase * 0.78);
+  let caustField = smoothstep(0.15, 0.92, caustWave * 0.5 + 0.5) * p.look.z * (0.28 + audioRms * 0.52) * liveFlow;
   // Outer bevel lip + Play droplet preserve real uncrushed optical refraction outside the text zone.
-  let lipWeight = clamp(lip * 0.62 * rimPolish + dropGlow * 0.42 + interact * 0.28 * edge, 0., 0.85);
-  let bevelColor = mix(chroma * mix(1.12, 1.0, p.tint.w) + p.tint.rgb * (0.14 * (1. - p.tint.w)), accessible, 0.35);
+  let lipWeight = clamp(lip * 0.62 * rimPolish + dropGlow * 0.42 + interact * 0.28 * edge + caustField * edge * 0.16, 0., 0.86);
+  let bevelColor = mix(chroma * mix(1.12, 1.0, p.tint.w) + p.tint.rgb * (0.14 * (1. - p.tint.w) + caustField * edge * 0.28), accessible, 0.35);
   let glassSurface = mix(accessible, bevelColor, lipWeight);
   let lightRimShadow = p.tint.w * exp(-abs(bestD) * 1.5) * 0.14;
-  let spec = (rim * p.optics.y * (0.58 + 0.5 * interact) + shine * p.optics.y * 1.65 + topCatch * p.optics.y * 0.72 + bounce * p.optics.y * 0.28) * (1. + p.look.w * 0.55) * rimPolish;
+  let spec = (rim * p.optics.y * (0.58 + 0.5 * interact) + shine * p.optics.y * 1.65 + topCatch * p.optics.y * 0.72 + bounce * p.optics.y * 0.28) * (1. + p.look.w * 0.55) * (1. + audioPunch * 0.34) * rimPolish;
   let specTint = mix(vec3f(0.96, 0.98, 1.0), vec3f(1.0), p.tint.w);
   let lit = min(glassSurface * (1.0 - lightRimShadow) + spec * specTint * inside, vec3f(1.));
   let isField = s.info.y > 1.5 && s.info.y < 2.5;

@@ -263,9 +263,45 @@ function sameMediaSrc(current: string, wanted: string): boolean {
 // Playback position (progress / currentTime) changes ~4x/sec. Reading it in the
 // Player body re-rendered the entire (huge) component on every tick, so the
 // parts that actually display it subscribe on their own.
+function useLiveProgressRaf(active: boolean, onRatio: (ratio: number) => void): void {
+  const onRatioRef = useRef(onRatio)
+  onRatioRef.current = onRatio
+  useEffect(() => {
+    if (!active) return
+    let raf = 0
+    const tick = (): void => {
+      if (document.hidden) { raf = 0; return }
+      const dur = getAudioDuration()
+      if (dur > 0) {
+        onRatioRef.current(Math.max(0, Math.min(1, getAudioCurrentTime() / dur)))
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    const onVis = (): void => {
+      if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
+      else if (!raf) raf = requestAnimationFrame(tick)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    if (!document.hidden) raf = requestAnimationFrame(tick)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      cancelAnimationFrame(raf)
+    }
+  }, [active])
+}
+
 function ProgressFill({ seekDrag, className }: { seekDrag: number | null; className: string }): JSX.Element {
   const progress = useStore((s) => s.progress)
-  return <div className={className} style={{ width: `${(seekDrag !== null ? seekDrag : progress) * 100}%` }} />
+  const isPlaying = useStore((s) => s.isPlaying)
+  const radioFmActive = useStore((s) => s.radioFmActive)
+  const { reducedMotion, gameMode } = useEffectsState()
+  const ref = useRef<HTMLDivElement>(null)
+
+  useLiveProgressRaf(isPlaying && !radioFmActive && seekDrag === null && !reducedMotion && !gameMode, (ratio) => {
+    if (ref.current) ref.current.style.width = `${ratio * 100}%`
+  })
+
+  return <div ref={ref} className={className} style={{ width: `${(seekDrag !== null ? seekDrag : progress) * 100}%` }} />
 }
 
 function ElapsedTime(): JSX.Element {
@@ -340,13 +376,22 @@ interface SeekRangeProps {
 }
 function SeekRange({ seekDrag, radioFmActive, ...rest }: SeekRangeProps): JSX.Element {
   const progress = useStore((s) => s.progress)
+  const isPlaying = useStore((s) => s.isPlaying)
+  const { reducedMotion, gameMode } = useEffectsState()
   const fmProgress = useFmProgress()
+  const ref = useRef<HTMLInputElement>(null)
   const v = radioFmActive ? fmProgress : (seekDrag !== null ? seekDrag : progress)
   useEffect(() => {
     scheduleGlassCompositor()
   }, [v])
+  useLiveProgressRaf(isPlaying && !radioFmActive && seekDrag === null && !reducedMotion && !gameMode, (ratio) => {
+    if (!ref.current) return
+    ref.current.value = ratio.toFixed(4)
+    ref.current.style.setProperty('--val', `${ratio * 100}%`)
+  })
   return (
     <input
+      ref={ref}
       type="range" min={0} max={1} step={0.001} value={v} className="w-full"
       data-glass-slider="seek"
       aria-label="Playback position"
