@@ -58,6 +58,8 @@ The first remote Windows run for `922ec49a` exposed a line-ending dependency in
 checkout. Build and Electron tests passed; Linux passed. The test now normalizes
 line endings before parsing. All eight theme checks were verified against both
 LF and CRLF input; no palette or application behavior changed for this fix.
+The replacement [desktop CI run](https://github.com/GoodFight37/Unreleased/actions/runs/44102382835)
+for `427ffa31` passed on both Windows and Linux, including the Electron launches.
 
 On the tested Windows/NVIDIA machine, the final general UI pass measured a
 165.2 fps compositor, 164.9 fps WRLD animation and 0.09 ms Glass Lab GPU p95.
@@ -85,8 +87,9 @@ retry after a failed import; they do not migrate a real personal profile.
 - GPU performance on modest hardware and exhaustive accessibility across every
   view, role, skin and artwork remain unmeasured. Local UI checks do not substitute
   for manual listening and interaction review.
-- A new tattoo-inspired logo awaits visual approval. No external fan drawing was
-  added to the application. The existing full-screen WRLD view is preserved.
+- The skull-logo direction was rejected after visual review. No new logo is
+  selected or integrated; the next reference will come from the project owner.
+  No external fan drawing was added. The existing full-screen WRLD view is preserved.
 - Share Studio and LyricsEdit integration are on hold. The next proposed project
   is [shareable WRLD videos](WRLD-STORIES.md), built on the current full-screen
   experience, with optional alternative layouts rather than mandatory vertical video.
