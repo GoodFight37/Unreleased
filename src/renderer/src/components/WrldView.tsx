@@ -4,7 +4,7 @@ import LiquidMeshBackdrop from './LiquidMeshBackdrop'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Music, Radio, Search, X, ChevronDown, ChevronLeft, Play, Pause, SkipBack, SkipForward as SkipFwd, Shuffle, Repeat, Repeat1, Volume2, VolumeX, MoreHorizontal, Info, Heart, ListMusic, GripVertical, Trash2, Download, History, SlidersHorizontal, RefreshCw, TextQuote, Loader2, Settings2, Star, Ban } from 'lucide-react'
+import { Music, Radio, Search, X, ChevronDown, ChevronLeft, Play, Pause, SkipBack, SkipForward as SkipFwd, Shuffle, Repeat, Repeat1, Volume2, VolumeX, MoreHorizontal, Info, Heart, ListMusic, Layers, GripVertical, Trash2, Download, History, SlidersHorizontal, RefreshCw, TextQuote, Loader2, Settings2, Star, Ban } from 'lucide-react'
 import { useWrldExpandIn } from '../lib/wrldExpand'
 import { hasEscapeLayer } from '../hooks/useEscapeToClose'
 import { lazyOverlay } from '../lib/lazyView'
@@ -377,14 +377,11 @@ export default function WrldView(): JSX.Element {
   const songVersionBtnRef = useRef<HTMLButtonElement>(null)
   const wrldPlayRef = useRef<HTMLButtonElement>(null)
   const glassGpuReady = useGlassCompositorReady() && !fullscreen
-  useGlassSurface(songVersionBtnRef, { kind: 'pill', layer: 1, radius: 18 }, !radioFmActive && !fullscreen && songVersions.length > 0)
   useGlassSurface(wrldPlayRef, { kind: 'pill', layer: 1, radius: 28 }, !fullscreen)
   const songVersionMenuRef = useRef<HTMLDivElement>(null)
   const [songVersionMenuPos, setSongVersionMenuPos] = useState({ top: 0, right: 0 })
 
-  // Keep the portaled version menu pinned beside its button: vertically
-  // centred on the notch, then clamped so a long version list can't run off
-  // the top or bottom of the window (it scrolls internally past that).
+  // Keep the portaled version menu anchored cleanly below its action button.
   useLayoutEffect(() => {
     if (!songVersionMenuOpen) return
     const place = (): void => {
@@ -394,8 +391,8 @@ export default function WrldView(): JSX.Element {
       const b = btn.getBoundingClientRect()
       const h = el.offsetHeight
       setSongVersionMenuPos({
-        top: Math.min(Math.max(12, b.top + b.height / 2 - h / 2), Math.max(12, window.innerHeight - 12 - h)),
-        right: Math.max(12, window.innerWidth - b.left + 12),
+        top: Math.min(Math.max(12, b.bottom + 8), Math.max(12, window.innerHeight - 12 - h)),
+        right: Math.max(12, window.innerWidth - b.right),
       })
     }
     place()
@@ -1081,24 +1078,6 @@ export default function WrldView(): JSX.Element {
               {/* Album art */}
               <div className="relative w-full max-w-[var(--wrld-player-width)]">
                 {ArtBox({ mobile: false })}
-                {!radioFmActive && songVersions.length > 0 && (
-                  <div className="absolute right-full top-1/2 -translate-y-1/2 z-20">
-                    {/* Flush against the art's left edge rather than centered
-                        on it - only the half that pokes out past the cover is
-                        drawn (rounded-l-full, flat edge against the art),
-                        instead of a full pill floating half on top of it. */}
-                    <button
-                      ref={songVersionBtnRef}
-                      onClick={() => setSongVersionMenuOpen(o => !o)}
-                      title="Other versions"
-                      className={`w-4 h-9 flex items-center justify-center rounded-l-full bg-white/15 dark:bg-white/[0.08] backdrop-blur-xl backdrop-saturate-150 border-y border-l shadow-lg transition-colors ${
-                        songVersionMenuOpen ? 'border-white/40 dark:border-white/15' : 'border-white/20 dark:border-white/10'
-                      }`}
-                    >
-                      <span className="w-[2px] h-4 bg-white/60" />
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Title + artist */}
@@ -1129,6 +1108,19 @@ export default function WrldView(): JSX.Element {
                       style={{ color: showQueue ? 'var(--accent)' : (textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)') }}
                     >
                       <ListMusic size={16} />
+                    </button>
+                  )}
+                  {!radioFmActive && songVersions.length > 0 && (
+                    <button
+                      ref={songVersionBtnRef}
+                      onClick={() => setSongVersionMenuOpen(o => !o)}
+                      title="Other versions"
+                      aria-label="Other versions"
+                      aria-pressed={songVersionMenuOpen}
+                      className="p-1.5 rounded-full transition-colors hover:bg-white/10"
+                      style={{ color: songVersionMenuOpen ? 'var(--accent)' : (textIsDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)') }}
+                    >
+                      <Layers size={16} />
                     </button>
                   )}
                   <FmLikeButton light={textIsDark} />
@@ -1293,10 +1285,10 @@ export default function WrldView(): JSX.Element {
                 />
                 <div
                   ref={songVersionMenuRef}
-                  className={`fixed z-50 min-w-[120px] max-h-[70vh] overflow-y-auto origin-right bg-black/95 backdrop-blur-xl rounded-lg border border-white/10 py-1 shadow-2xl transition-[opacity,transform] duration-200 ease-out ${
+                  className={`fixed z-50 min-w-[120px] max-h-[70vh] overflow-y-auto origin-top-right bg-black/95 backdrop-blur-xl rounded-lg border border-white/10 py-1 shadow-2xl transition-[opacity,transform] duration-200 ease-out ${
                     songVersionMenuOpen
-                      ? 'opacity-100 scale-100 translate-x-0'
-                      : 'opacity-0 scale-90 translate-x-2 pointer-events-none'
+                      ? 'opacity-100 scale-100 translate-y-0'
+                      : 'opacity-0 scale-90 -translate-y-1 pointer-events-none'
                   }`}
                   style={{ top: songVersionMenuPos.top, right: songVersionMenuPos.right, scrollbarWidth: 'thin' }}
                 >
