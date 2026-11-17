@@ -1,6 +1,6 @@
-# Agent guide: Juice WRLD API and Unreleased
+# Agent guide: Unreleased Glass & Juice WRLD API
 
-**Version 1.82** · updated 2026-11-14. Bump the version and date whenever you
+**Version 1.83** · updated 2026-11-17. Bump the version and date whenever you
 change this file (minor for fixes and additions, major for rewrites).
 
 **Keep this file current.** If you find something in the docs or this file that
@@ -10,84 +10,54 @@ section 10 (what went wrong, what to do instead). Then bump the version.
 Don't write down what the code or a quick look already shows; entries are for
 things a future agent would get wrong.
 
-Read this before working on the Juice WRLD API (juicewrldapi.com), the Unreleased
-player on any platform, or one of the tools around them. It covers how the
-projects fit together, the rules for working in them, and API gotchas.
-
-Paths below are relative to the shared `Unreleased/` folder that holds every
-checkout as a sibling.
+Read this before working on **Unreleased Glass** (`GoodFight37/Unreleased`), the
+Liquid Glass Electron desktop player powered by the Juice WRLD API
+(`juicewrldapi.com`).
 
 ---
 
-## 1. The projects
+## 1. Repository & scope
 
-| Folder | What it is | Branch / repo |
-|---|---|---|
-| `backend/` | Django backend that serves juicewrldapi.com. Its `docs/*.md` is the API reference. On the main machine the checkout is named `Chicken-Dinner/` (the user calls it that too) | separate repo |
-| `unreleased-app/` | Unreleased desktop app (Electron + React). Holds the real `.git` for the player repo; the other player folders are worktrees of it | `app` on `Juice-WRLD-API/Unreleased` |
-| `music-player-web/` | Same player as a website, player.juicewrldapi.com. Has the mobile layouts and the social-preview server | `web` |
-| `music-player-android/` | Android build (Capacitor around the web bundle) | `android` |
-| `music-player-android-dev/` | Rebase of android onto web's renderer, in progress | `android-dev` |
-| `music-player-ios/` | iOS build (Capacitor, needs macOS + Xcode to build) | `ios` |
-| `music-player-beta/` | Beta-only features held back from stable (Session Maker) | `beta` line; check `git branch --show-current` |
-| `unreleased-cli/` | The site terminal as a command-line shell (npm + Ubuntu PPA) | `Juice-WRLD-API/unreleased-cli` |
-| `jwa-mcp/` | MCP server exposing the API as ~29 tools (stdio + HTTP) | `Juice-WRLD-API/jwa-mcp` |
-| `jwa-cdn-node/` | Desktop node for the distributed P2P CDN (Python, WebRTC). Has its own `AGENTS.md`, read it | `Juice-WRLD-API/jwa-cdn-node` |
-| `jwa-whisper/` | "WRLD Sync": generates synced lyrics with local Whisper | `Juice-WRLD-API/juicewrldapi-whisper` |
-| `iJWA/` | Retired. Its features now live in the app as **Desktop** (see section 6) | `Juice-WRLD-API/iJWA` |
-
-Branches in the player repo **do not sync automatically**. Each one has its own
-version number (desktop 2.5.x, web 2.3.x, Android/iOS 3.2.x, beta 3.0.x-beta as of
-2026-10-25) and its own history. Work moves between them by hand ("porting" or
-"relaying"), see section 2.
+- **Repository**: `GoodFight37/Unreleased` (desktop fork of `Juice-WRLD-API/Unreleased`).
+- **Active branch**: **`app`** (single main/default branch on GitHub). We do not
+  maintain separate `web`, `android`, `ios`, `beta`, or per-feature branches here
+  unless the user explicitly asks for one.
+- **Scope**: Electron + React desktop app (`electron/`, `src/renderer/`), WebGPU
+  compositor (`src/renderer/src/lib/glass/`), WebGL2 mesh & desktop visuals, and
+  automated checks (`scripts/`).
+- **Backend API**: external Django service at `https://juicewrldapi.com/juicewrld`
+  (do not try to commit to `backend/`).
 
 ---
 
 ## 2. Rules for working here
 
-### Git
+### Git & workflow
 
-- **Never commit unless the user asks.** Leave changes in the working tree and
-  say what is ready.
-- "Commit" means **commit and push** the branch to `origin`.
-- **Every push to `app` is a release.** `.github/workflows/auto-release.yml` bumps
-  the patch version, tags it, creates the GitHub release and starts the three
-  platform builds (only a commit titled `vX.Y.Z` is skipped). So a pushed
-  change is never "unreleased": the next version number is its release, and
-  the changelog entry for it takes that number.
-- Author every commit as the user. **No
-  `Co-Authored-By` lines, no "Generated with" footers**, in commits or PRs.
-- **Never commit in `backend/`.**
-- Never commit `HANDOFF*.md` files. Exclude them when staging.
-- Don't create worktrees or switch branches on your own. Work in the checkout
-  you were started in.
-- If a worktree reports `fatal: not a git repository`, repair it from
-  `unreleased-app` with `git worktree move` / `git worktree add`, never by re-cloning.
-
-### Porting between platforms
-
-- Before porting, read both sides. Files that share a name often differ.
-- Electron-only work (windows, tray, installer, clipboard bridge, offline
-  library, `electron/`) has no web counterpart. Say so instead of porting it.
-- Record every port in `unreleased-app/md/RELAY_LOG.md` (lives only on `app`).
-  The file has the recipe for the version columns.
-- The shorthand **port-c**: on `web`, port the change to `app`; on `app`, port it
-  to `web`. Then commit and push both.
-- The shorthand **port-b**: commit and push the current branch only, with no
-  porting, authored as the user and with no AI attribution lines. If the push
-  is rejected because `origin` moved ahead, `git pull --rebase` and push again
-  (no force, no merge commit); stop and report if the rebase conflicts.
+- **Single main branch (`app`)**: work directly in this checkout on `app`.
+  Do not create parallel branches or worktrees unless the user asks.
+- **Commit / push**: commit and push cleanly to `origin app` when the user asks
+  to ship/push changes (or keep changes in the working tree if only asked for a
+  draft/audit). If `origin/app` moved ahead, `git pull --rebase origin app` and
+  push again (no `--force`, no merge commit).
+- **Author & exclusions**: author every commit as the user (`GoodFight37`).
+  **No `Co-Authored-By` lines, no "Generated with" footers** in commits or PRs.
+  Never commit `HANDOFF*.md`, `.ui-verify/`, `.env.local`, or user profile data.
+- **Releases**: do not trigger automatic releases on every push; build and tag
+  releases deliberately once tested locally.
 
 ### Finishing the job
 
 - Finish the obvious related work in the same pass instead of listing it as a
-  gap: other code paths that should carry a new field, the edit flow for a new
-  create flow, and above all the **terminal command** for a UI change (see
-  section 5).
-- Don't launch a dev server or browser preview to check your work unless the
-  user asked for it in that turn.
-- Long builds (`electron:build`, release scripts) go in a new visible terminal
-  window. Start it, say it is running, and stop. Don't poll it.
+  gap: related callers, edit/create symmetry, and the **in-app terminal command**
+  for any UI/API addition (see section 5).
+- Verify before shipping UI/GPU changes: run `npm run build`,
+  `npm run typecheck:electron`, `npm run test:scripts`, `npm run test:electron`,
+  `npm run ui:verify`, `npm run ui:motion`, and `git diff --check`.
+- Don't leave stray dev servers running; use Playwright + `--load-dist --ui-verify`
+  with an isolated temporary `--user-data-dir` for UI/perf verification.
+- Long packaging builds (`electron:build`, release scripts) go in a new visible
+  terminal window. Start it, say it is running, and stop. Don't poll it.
 
 ---
 
@@ -238,7 +208,7 @@ key** in a DM starts a new key version for everyone (`resetRoomKey`).
 
 ---
 
-## 4. Unreleased app layout (`app` branch; web is close)
+## 4. Unreleased Glass layout
 
 ```
 electron/                 main process: main.js, preload.js (window.electron),
@@ -462,18 +432,21 @@ main window), so it is a no-op on the website.
 
 ## 7. Commands and checks
 
-| Task | Command (in `unreleased-app/`) |
+| Task | Command (repo root) |
 |---|---|
 | Dev (Vite 3018 + Electron) | `npm run electron:dev` (Linux: `electron:dev:wayland` / `:x11`) |
 | Renderer only | `npm run dev` |
 | Typecheck + build renderer | `npm run build` |
 | Typecheck main process | `npm run typecheck:electron` |
+| Script & utility tests | `npm run test:scripts` |
 | Main-process tests | `npm run test:electron` |
 | Smoke test | `npm run electron:smoke` |
+| Liquid Glass UI & GPU verify | `npm run ui:verify` |
+| Motion check | `npm run ui:motion` |
 | Terminal coverage | `npm run terminal:check-coverage` |
 | Virtual list regression tests | `node --test scripts/renderer-virtual-window.test.cjs` |
 | Package installer | `npm run electron:build` (long, use a visible window) |
-| Release | `scripts\release.bat` (stable: bump, push, GitHub release, CI builds; beta: local build to the gated beta channel) |
+| Release | `scripts\release.bat` (manual release only; do not auto-release on push) |
 
 Before saying a change is done: `npm run build`, plus `typecheck:electron` and
 `test:electron` if you touched `electron/`, plus `terminal:check-coverage` if you
@@ -630,7 +603,7 @@ entries that stop being true.
   restore what only web has: Sandbox and Developer options live under General →
   Advanced there, Smooth fade is hidden on iOS. `npx tsc --noEmit` on web lists
   every reference the merge left dangling. Web files are CRLF in the working
-  tree and LF in git; strip the CRs (`sed -i 's/$//'`) before scripted edits.
+  tree and LF in git; strip the CRs (`sed -i 's/\r$//'`) before scripted edits.
 
 - 2026-11-13: Every pinned ffmpeg checksum in `FFMPEG_SHA256` (`main.js`)
   was one or two characters short since v2.0.0, so the on-demand ffmpeg

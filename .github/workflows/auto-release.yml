@@ -9,8 +9,7 @@ name: Auto release on push
 # a manual release isn't bumped twice.
 
 on:
-  push:
-    branches: [app]
+  workflow_dispatch:
 
 concurrency:
   group: auto-release
