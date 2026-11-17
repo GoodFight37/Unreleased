@@ -7,6 +7,13 @@ installer release or a claim that every feature has been tested.
 
 ## Current integration checks
 
+Theme follow-up (November 18): source commit `a33ab2bc` restores the selected
+theme consistently across Discover, Catalogue and Collection. The live app
+passed 21 checks (seven themes × three views), including enabling and disabling
+cover colors on an album theme. Ten targeted theme/Discover tests pass. README
+captures now show the detailed catalogue and Classic lyrics in the LND theme;
+the extra 999/artist header above WRLD artwork is removed.
+
 Upstream changes through `fbfecbb8` (v2.6.51) are ported into this fork's
 independent 2.6.50 version. The existing WebGPU compositor remains primary;
 SVG refraction is a fallback. WRLD music videos default to Off.
@@ -36,7 +43,8 @@ SVG refraction is a fallback. WRLD music videos default to Off.
 - Normal startup opens Discover. Collection opens playlists, with direct access
   to liked songs, albums and local files; returning from these stays in Collection.
 - Discover, Catalogue and Collection share an ambient backdrop. Navigation has
-  no brand badge. Discover uses a slow cover-colored mesh and shows the selected
+  no brand badge. Discover follows the selected theme (the cover when adaptive
+  colors are enabled) and shows the selected
   track's actual catalogue note beside its artwork. Missing metadata
   stays missing. Loading, empty and failed catalogue states offer a useful action.
 - Search, shortcut labels and navigation use consistent listening-page names,

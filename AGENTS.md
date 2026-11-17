@@ -1,6 +1,6 @@
 # Agent guide: Unreleased Glass & Juice WRLD API
 
-**Version 1.86** · updated 2026-11-17. Bump the version and date whenever you
+**Version 1.87** · updated 2026-11-18. Bump the version and date whenever you
 change this file (minor for fixes and additions, major for rewrites).
 
 **Keep this file current.** If you find something in the docs or this file that
@@ -559,6 +559,11 @@ Node 22.
 
 Newest first. One entry each: date, what went wrong, what to do instead. Delete
 entries that stop being true.
+
+- 2026-11-17: Discover's private mesh ignored theme selection and the cover-color
+  toggle. Resolve artwork through `backdropArt` in `lib/skins.ts`, also used by
+  AmbientBackdrop and the glass compositor. Choosing a theme restores its colors;
+  cover colors can then be enabled on any theme. Do not lock album themes out.
 
 - 2026-11-17: README screenshots copied from `ui:verify` showed its invented
   "999 GLASS" artwork, tracks and purple palette. Public screenshots must use

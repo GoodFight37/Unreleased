@@ -4,7 +4,7 @@ A desktop music player for exploring Juice WRLD's released and unreleased catalo
 
 Built from [Unreleased](https://github.com/Juice-WRLD-API/Unreleased), with a cover-led interface, glass controls and a simpler everyday layout.
 
-![Unreleased Glass](docs/screenshots/app-home-272ab8c1.png)
+![Unreleased Glass](docs/screenshots/app-home-a33ab2bc.png)
 
 ## What you can do
 
@@ -29,9 +29,9 @@ Open [Releases](https://github.com/GoodFight37/Unreleased/releases), download th
 
 Installed versions check this repository for updates. Glass uses its own profile and keeps the original Unreleased installation separate. Before the first launch, close the original player so Glass can import its preferences. Imported offline files are copied, which can require extra disk space.
 
-![Unreleased Glass](docs/screenshots/app-catalogue-272ab8c1.png)
+![Unreleased Glass](docs/screenshots/app-catalogue-a33ab2bc.png)
 
-![Unreleased Glass](docs/screenshots/app-wrld-272ab8c1.png)
+![Unreleased Glass](docs/screenshots/app-wrld-a33ab2bc.png)
 
 ## For developers
 
