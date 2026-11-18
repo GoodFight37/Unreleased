@@ -1,6 +1,6 @@
 # Références UI, Motion & Pixel Art — Unreleased Glass
 
-Guide partagé (Antigravity + Codex) pour élever la finition visuelle, les micro-interactions et l'identité Juice WRLD sans alourdir `package.json` ni casser le rendu Liquid Glass iOS 26.
+Guide pour élever la finition visuelle, les micro-interactions et l'identité Juice WRLD sans alourdir `package.json` ni casser le rendu Liquid Glass iOS 26.
 
 ## 1. Sites de référence et ce qu'il faut en retenir
 
