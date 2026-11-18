@@ -78,6 +78,9 @@ function Progressive({ src: rawSrc, alt = '', className = '', onError, lazy = fa
   )
 }
 
+/** How many times a cover with a stall timer tries every copy again before giving up. */
+const COVER_RETRIES = 2
+
 /** An <img> that, when a source fails to load, moves on to the next one and
  *  only reports onError once every source has failed. Callers that hide the
  *  cover on error otherwise lose it for the whole track to one flaky 500.
@@ -101,6 +104,7 @@ export function FallbackImg({ sources, alt = '', className, style, onError, lazy
 }): JSX.Element | null {
   const [failed, setFailed] = useState<string[]>([])
   const [loaded, setLoaded] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const remaining = [...new Set(sources.map(fullCoverUrl).filter((s): s is string => !!s && !failed.includes(s)))]
   const showing = remaining[0]
   const hasNext = remaining.length > 1
@@ -119,8 +123,12 @@ export function FallbackImg({ sources, alt = '', className, style, onError, lazy
       {...(lazy ? imageLoadAttrs(showing, true) : { decoding: imageLoadAttrs(showing, false).decoding })}
       onLoad={() => { markImageLoaded(showing); setLoaded(showing); onLoad?.() }}
       onError={(e: SyntheticEvent<HTMLImageElement>) => {
-        if (remaining.length <= 1) onError?.(e)
         setFailed((f) => [...f, showing])
+        if (remaining.length > 1) return
+        // A stalled copy was dropped for the next one, so one slow or flaky answer can fail every copy at
+        // once. A caller that hides the cover on error would lose it for the whole song: try them all again.
+        if (stallMs && attempt < COVER_RETRIES) setTimeout(() => { setFailed([]); setAttempt((a) => a + 1) }, 1500 * (attempt + 1))
+        else onError?.(e)
       }}
     />
   )

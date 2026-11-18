@@ -261,7 +261,6 @@ function fillControlPoints(
   calmness: number,
   energyPush: number,
 ): void {
-  const pair = CORNER_PAIRS[cornerPairIdx % CORNER_PAIRS.length]
   const angle = phase * 0.42 + seed * Math.PI * 2
   const driftScale = 1 - calmness * 0.45
   const beatPush = beatEnv * energyPush
@@ -287,14 +286,6 @@ function fillControlPoints(
         const p = phase * 0.35 + seed * 4.1 + idx * 0.9
         px += Math.sin(p) * 0.14 * driftScale
         py += Math.cos(p * 0.9) * 0.14 * driftScale
-      }
-
-      if (idx === pair[0] || idx === pair[1]) {
-        // Gentle corner lobe swell scaled by era audio sensitivity
-        const signX = i === 0 ? -1 : 1
-        const signY = j === 0 ? -1 : 1
-        px -= signX * beatPush * 0.68
-        py -= signY * beatPush * 0.68
       }
 
       outPos[o] = px
