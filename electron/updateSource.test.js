@@ -12,7 +12,7 @@ test('stable updater follows the packaged fork feed and ignores upstream beta co
   const disabled = vm.runInNewContext(main.match(/const UPSTREAM_BETA_DISABLED = .+/)[0] + '; UPSTREAM_BETA_DISABLED')
   assert.equal(disabled, true)
   const context = { UPSTREAM_BETA_DISABLED: disabled, UPDATE_REPO: repo, autoUpdater: { setFeedURL: feed => feeds.push(feed) } }
-  vm.runInNewContext(`let activeBetaCode = null; ${source('applyUpdateFeed', '// Semver precedence')} applyUpdateFeed('old-upstream-code'); globalThis.active = activeBetaCode`, context)
+  vm.runInNewContext(`let activeBetaCode = null\n${source('applyUpdateFeed', '// Semver precedence')}\napplyUpdateFeed('old-upstream-code')\nglobalThis.active = activeBetaCode`, context)
   assert.equal(context.active, null)
   assert.equal(context.autoUpdater.allowPrerelease, false)
   assert.equal(feeds[0].owner, 'GoodFight37')
@@ -24,7 +24,7 @@ test('stable updater follows the packaged fork feed and ignores upstream beta co
 
 test('upstream beta marker and network checks remain disabled', async () => {
   const context = { UPSTREAM_BETA_DISABLED: true, fs: { readFileSync: () => assert.fail('Must not read the upstream beta marker') } }
-  vm.runInNewContext(`${source('readBetaCode', '// Stable releases')} globalThis.code = readBetaCode()`, context)
+  vm.runInNewContext(`${source('readBetaCode', '// Stable releases')}\nglobalThis.code = readBetaCode()`, context)
   assert.equal(context.code, null)
   const start = main.indexOf('async function checkBetaUpdate(')
   assert.notEqual(start, -1, 'checkBetaUpdate was renamed or removed in main.js')
@@ -32,7 +32,7 @@ test('upstream beta marker and network checks remain disabled', async () => {
   assert.notEqual(end, -1, 'could not find the end of checkBetaUpdate in main.js')
   const body = main.slice(start, end)
   const checked = { UPSTREAM_BETA_DISABLED: true }
-  vm.runInNewContext(`${body}; globalThis.check = checkBetaUpdate`, checked)
+  vm.runInNewContext(`${body}\nglobalThis.check = checkBetaUpdate`, checked)
   assert.equal(typeof checked.check, 'function', 'checkBetaUpdate did not evaluate as a function')
   assert.equal(await checked.check(), false)
 })
