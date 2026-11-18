@@ -693,7 +693,6 @@ export default function FootageView(): JSX.Element {
         <FootagePlayerModal
           item={watching.item}
           channel={channel}
-          startAt={watching.startAt}
           onClose={() => setWatching(null)}
         />
       )}

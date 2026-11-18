@@ -4480,6 +4480,8 @@ app.whenReady().then(() => {
     // A denied check marks the picked file read-only, and createWritable then
     // fails without ever reaching the request handler.
     if (permission === 'notifications') return notificationAllowed(webContents, details.requestingUrl || webContents?.getURL() || '', details.isMainFrame)
+    // Video fullscreen from the app's own window (Footage player); never for embedded frames.
+    if (permission === 'fullscreen') return webContents === mainWindow?.webContents && details.isMainFrame
     if (permission === 'fileSystem') {
       const ok = canUseFileSystem({ origin, isDev })
       if (!ok) runLog('permissions', 'fileSystem check denied', JSON.stringify({ origin, access: details.fileAccessType }))
@@ -4498,6 +4500,7 @@ app.whenReady().then(() => {
   })
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     if (permission === 'notifications') { callback(notificationAllowed(webContents, details.requestingUrl, details.isMainFrame)); return }
+    if (permission === 'fullscreen') { callback(webContents === mainWindow?.webContents && details.isMainFrame); return }
     if (permission === 'fileSystem' && canUseFileSystem({ origin: details.requestingUrl, isDev })) {
       callback(true)
       return

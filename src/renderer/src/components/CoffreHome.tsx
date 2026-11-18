@@ -554,7 +554,6 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
       <FootagePlayerModal
         item={watching.item}
         channel={channel}
-        startAt={watching.startAt}
         onClose={() => setWatching(null)}
       />
     )}

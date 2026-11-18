@@ -478,18 +478,15 @@ export function FootageTile({
 export function FootagePlayerModal({
   item,
   channel = '',
-  startAt = 0,
   onClose,
 }: {
   item: FootageTileItem
   channel?: string
-  startAt?: number
   onClose: () => void
 }): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const isPlaying = useStore((s) => s.isPlaying)
   const { reducedMotion } = useEffectsState()
-  const [fromStartShown, setFromStartShown] = useState(startAt > 1)
   const [musicPausedByVideo, setMusicPausedByVideo] = useState(false)
 
   useEffect(() => {
@@ -542,14 +539,6 @@ export function FootagePlayerModal({
           preload="metadata"
           playsInline
           src={buildStreamUrl(item.path, channel || undefined)}
-          onLoadedMetadata={(e) => {
-            if (startAt > 1) {
-              const dur = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0
-              try {
-                e.currentTarget.currentTime = dur > 2 ? Math.min(startAt, Math.max(dur - 2, 0)) : startAt
-              } catch { /* ignore */ }
-            }
-          }}
           onPlay={() => {
             footageModalVideoGate.videoWillPlay()
             setMusicPausedByVideo(footageModalVideoGate.isMusicPausedByVideo())
@@ -569,25 +558,6 @@ export function FootagePlayerModal({
             </>
           )}
           <span className="font-semibold truncate">{cleanFootageDisplayTitle(item.title)}</span>
-          {fromStartShown && startAt > 1 && (
-            <>
-              <span className="opacity-80 text-xs">from {formatVideoSeconds(startAt)}</span>
-              <button
-                type="button"
-                className="coffre-secondary py-1 px-3 text-xs"
-                onClick={() => {
-                  const v = videoRef.current
-                  if (v) {
-                    v.currentTime = 0
-                    v.play().catch(() => {})
-                  }
-                  setFromStartShown(false)
-                }}
-              >
-                From the beginning
-              </button>
-            </>
-          )}
         </div>
       </div>
     </div>
