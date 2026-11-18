@@ -40,7 +40,8 @@ export default function SongFootagePill({
   light?: boolean
   placement?: 'bar' | 'wrld'
 }): JSX.Element | null {
-  const channel = useStore((s) => s.activeChannel) ?? ''
+  // Video archive lives on the primary channel ('').
+  const channel = ''
   const [matches, setMatches] = useState<FootageMatch[]>([])
   const [open, setOpen] = useState(false)
   const [watching, setWatching] = useState<FootageTileItem | null>(null)

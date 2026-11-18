@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, Play, Search, X } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
-import { loadFileIndex, parseFileQuery, searchFileIndex, type FileIndex } from '../lib/fileSearch'
+import { loadFileIndex, parseFileQuery, peekFileIndex, searchFileIndex, type FileIndex } from '../lib/fileSearch'
 import { buildImageUrl, buildStreamUrl, loadAllSongs, type JWApiFileEntry, type JWApiSong } from '../lib/juicewrldApi'
 import {
   buildFootageSongIndex,
@@ -199,25 +199,24 @@ function FeaturedFootageBanner({
 
 export default function FootageView(): JSX.Element {
   const {
-    activeChannel,
     setActiveView,
     setApiTrackerCategory,
     setApiTrackerEra,
     setApiTrackerTab,
   } = useStorePick(
-    'activeChannel',
     'setActiveView',
     'setApiTrackerCategory',
     'setApiTrackerEra',
     'setApiTrackerTab',
   )
-  const channel = activeChannel ?? ''
+  // Studio footage, freestyles, official clips and primary snippets live on the primary channel ('').
+  const channel = ''
   const [tab, setTab] = useState<FootageTabId>('studio')
   const [selectedEraFolder, setSelectedEraFolder] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [fileIndex, setFileIndex] = useState<FileIndex | null>(null)
+  const [fileIndex, setFileIndex] = useState<FileIndex | null>(() => peekFileIndex(channel))
   const [songs, setSongs] = useState<JWApiSong[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !peekFileIndex(channel))
   const [watching, setWatching] = useState<{ item: FootageTileItem; startAt: number } | null>(null)
 
   useEffect(() => {

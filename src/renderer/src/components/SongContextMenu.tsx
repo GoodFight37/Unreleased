@@ -169,7 +169,8 @@ export default function SongContextMenu({
     }))
   )
   const { track, songId } = state
-  const footageChannel = useStore(s => s.activeChannel) ?? ''
+  // Footage & primary snippets live on the primary archive channel ('').
+  const footageChannel = ''
   const developerMode = useStore(s => s.developerMode)
   const [footageLabel, setFootageLabel] = useState<string | null>(null)
   const footageTitle = song?.name ?? track.apiTitle ?? track.title

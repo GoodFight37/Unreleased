@@ -79,17 +79,18 @@ export interface HomePlaylistCard {
 // genuinely needs song durations, so it isn't shown here - /stats owns that.
 export function useHomeData() {
   const {
-    account, activeChannel, playlists, guestPlaylists, followedPlaylists, likedTrackIds,
+    account, playlists, guestPlaylists, followedPlaylists, likedTrackIds,
     songPrefs, setActiveView, setPendingPlaylistId, playTrack,
     radioFmActive, setRadioFmActive, radioFmIsLive, radioFmNowPlaying,
     homeSectionVisibility, ensurePlaylists, setIsPlaying, recentTracksRev,
   } = useStorePick(
-    'account', 'activeChannel', 'playlists', 'guestPlaylists', 'followedPlaylists', 'likedTrackIds',
+    'account', 'playlists', 'guestPlaylists', 'followedPlaylists', 'likedTrackIds',
     'songPrefs', 'setActiveView', 'setPendingPlaylistId', 'playTrack',
     'radioFmActive', 'setRadioFmActive', 'radioFmIsLive', 'radioFmNowPlaying',
     'homeSectionVisibility', 'ensurePlaylists', 'setIsPlaying', 'recentTracksRev',
   )
-  const channel = activeChannel ?? ''
+  // Discover's studio footage row always reads the primary archive channel ('').
+  const channel = ''
 
   const showSection = (id: string): boolean => isHomeSectionVisible(id, homeSectionVisibility)
 

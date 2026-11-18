@@ -100,7 +100,8 @@ const FAMILY_BADGE_LABELS: Record<string, string> = {
 }
 
 function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
-  const channel = useStore(s => s.activeChannel) ?? ''
+  // Footage & primary snippets live on the primary archive channel ('').
+  const channel = ''
   const isPlaying = useStore(s => s.isPlaying)
   const [approximate, setApproximate] = useState(false)
   const [matches, setMatches] = useState<FootageMatch[] | null>([])

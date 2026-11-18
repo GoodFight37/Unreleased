@@ -2168,16 +2168,15 @@ export default function ApiTrackerView(): JSX.Element {
   // current view/layout and field filters don't read.
   const [videoFilter, setVideoFilter] = useState(false)
   const [studioFilter, setStudioFilter] = useState('')
-  const [fileIndex, setFileIndex] = useState(() => peekFileIndex(activeChannel ?? ''))
+  const [fileIndex, setFileIndex] = useState(() => peekFileIndex(''))
   useEffect(() => {
-    const ch = activeChannel ?? ''
-    const cached = peekFileIndex(ch)
+    const cached = peekFileIndex('')
     if (cached) { setFileIndex(cached); return }
     if (!showFilterMenu && !videoFilter) return
     let stale = false
-    loadFileIndex(ch).then((idx) => { if (!stale && idx) setFileIndex(idx) }).catch(() => {})
+    loadFileIndex('').then((idx) => { if (!stale && idx) setFileIndex(idx) }).catch(() => {})
     return () => { stale = true }
-  }, [activeChannel, showFilterMenu, videoFilter])
+  }, [showFilterMenu, videoFilter])
 
   const videoTitleKeys = useMemo(
     () => (fileIndex ? buildVideoTitleKeySet(fileIndex.items.map((x) => x.entry)) : new Set<string>()),
