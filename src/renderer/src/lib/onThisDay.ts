@@ -295,5 +295,44 @@ export function thisWeekRecorded(
       break
     }
   }
-  return [...byTitle.values()].sort((a, b) => b.year - a.year || a.month - b.month || a.day - b.day || a.title.localeCompare(b.title))
+  return [...byTitle.values()].sort((a, b) => b.year - a.year || a.month - a.month || a.day - a.day || a.title.localeCompare(b.title))
+}
+
+export function firstRecordingLocation(raw: string | null | undefined): string {
+  const s = raw?.trim()
+  if (!s || s.toLowerCase() === 'null') return ''
+  return s.split(/\r?\n/)[0]?.trim() ?? ''
+}
+
+/** Songs sharing BOTH a Recorded calendar date and the same first recording location,
+ *  excluding versions of the target song itself. Never asserts they are the same session. */
+export function sameDateAndStudio(
+  target: JWApiSong,
+  songs: ReadonlyArray<JWApiSong>,
+): JWApiSong[] {
+  const loc = normalizeForSearch(firstRecordingLocation(target.recording_locations))
+  if (!loc) return []
+  const targetDates = new Set(
+    songDates(target)
+      .filter((d) => d.kind === 'recorded')
+      .map((d) => `${d.year}-${d.month}-${d.day}`),
+  )
+  if (targetDates.size === 0) return []
+  const targetBase = normalizeForSearch(baseTitle(target.name))
+  const seen = new Set<string>()
+  const sorted = [...songs].sort(songOrder)
+  const out: JWApiSong[] = []
+  for (const s of sorted) {
+    if (s.id === target.id) continue
+    const baseKey = normalizeForSearch(baseTitle(s.name))
+    if (!baseKey || baseKey === targetBase || seen.has(baseKey)) continue
+    if (normalizeForSearch(firstRecordingLocation(s.recording_locations)) !== loc) continue
+    const sharesDate = songDates(s).some(
+      (d) => d.kind === 'recorded' && targetDates.has(`${d.year}-${d.month}-${d.day}`),
+    )
+    if (!sharesDate) continue
+    seen.add(baseKey)
+    out.push(s)
+  }
+  return out
 }

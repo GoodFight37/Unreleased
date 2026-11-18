@@ -286,3 +286,36 @@ export function createAudibleVideoGate(deps: {
     isMusicPausedByVideo: () => videoOpen && resumeAfterVideo && !touchedDuringVideo,
   }
 }
+
+/** Builds a fast normalized lookup set of song titles that have at least one non-excluded video entry. */
+export function buildVideoTitleKeySet(entries: ReadonlyArray<Pick<JWApiFileEntry, 'name' | 'path' | 'type'>>): Set<string> {
+  const keys = new Set<string>()
+  for (const entry of entries) {
+    if (excludedFootageReason(entry) === 'rights') continue
+    const fam = classifyFootageEntry(entry)
+    if (!fam) continue
+    if (fam === 'snippet') {
+      const folder = entry.path.split('/')[2] || ''
+      const k = cleanFootageTitleKey(folder)
+      if (k && k.replace(/\s+/g, '').length >= 3) keys.add(k)
+    } else if (fam === 'official') {
+      const parsed = parseVideoName(entry.name || entry.path.split('/').pop() || '')
+      const k = cleanFootageTitleKey(parsed?.title ?? entry.name)
+      if (k && k.replace(/\s+/g, '').length >= 3) keys.add(k)
+    } else {
+      const parsed = fam === 'freestyle' ? parseFreestyleName(entry.name || entry.path.split('/').pop() || '') : null
+      const k = cleanFootageTitleKey(parsed ? parsed.title : (entry.name || ''))
+      if (k && k.replace(/\s+/g, '').length >= 4) keys.add(k)
+    }
+  }
+  return keys
+}
+
+export function songHasVideoMatch(song: Pick<JWApiSong, 'name' | 'track_titles'>, videoKeys: ReadonlySet<string>): boolean {
+  if (videoKeys.size === 0) return false
+  if (videoKeys.has(cleanFootageTitleKey(song.name))) return true
+  for (const alias of song.track_titles ?? []) {
+    if (videoKeys.has(cleanFootageTitleKey(alias))) return true
+  }
+  return false
+}

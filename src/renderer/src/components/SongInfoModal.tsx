@@ -11,7 +11,7 @@ import { useStore, useStorePick, IS_FLOAT_WINDOW } from '../store/useStore'
 import { useDragToDismiss } from '../hooks/useDragToDismiss'
 import { useCanEdit } from '../hooks/useChannelRoles'
 import { attachToMainWindow, sendPlayerCommand } from '../lib/windowSync'
-import { JWApiSong, CATEGORY_LABELS, CATEGORY_COLORS, buildImageUrl, parseDuration, getSongById, resolvePrefCoverUrl } from '../lib/juicewrldApi'
+import { JWApiSong, CATEGORY_LABELS, CATEGORY_COLORS, buildImageUrl, parseDuration, getSongById, loadAllSongs, resolvePrefCoverUrl } from '../lib/juicewrldApi'
 import { isReleasedPath, loadMusicVideoIndex, videoFromPath, videosFor, VIDEO_KIND_LABEL, type MusicVideo } from '../lib/musicVideos'
 import { clearMusicVideoDefault, getMusicVideoDefaults, onMusicVideoDefaultsChange, setMusicVideoDefault } from '../lib/musicVideoDefaultsApi'
 import { openInFiles } from './SongContextMenu'
@@ -24,6 +24,7 @@ import SongPrefsSection from './SongPrefsSection'
 import { ProgressiveCover } from './ProgressiveCover'
 import { loadSongFootage, footageBrowserOnly, type FootageMatch } from '../lib/footageIndex'
 import { classifyFootageEntry, createAudibleVideoGate, excludedFootageReason } from '../lib/footageCatalog'
+import { firstRecordingLocation, sameDateAndStudio, songDates } from '../lib/onThisDay'
 import { buildStreamUrl } from '../lib/juicewrldApi'
 import { glassPillButton } from './glassControls'
 import { showAppToast } from '../lib/appToast'
@@ -368,6 +369,24 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
   const versions = useMemo(() => versionEntries.entries ?? [], [versionEntries.entries])
   const loadingVersions = versionEntries.loading
 
+  const [sameDateStudioSongs, setSameDateStudioSongs] = useState<JWApiSong[]>([])
+  const hasRecordedAndStudio = useMemo(() => {
+    if (!displaySong) return false
+    return !!firstRecordingLocation(displaySong.recording_locations)
+      && songDates(displaySong).some((d) => d.kind === 'recorded')
+  }, [displaySong])
+  useEffect(() => {
+    setSameDateStudioSongs([])
+    if (!displaySong || !hasRecordedAndStudio) return
+    let stale = false
+    loadAllSongs()
+      .then((all) => {
+        if (!stale) setSameDateStudioSongs(sameDateAndStudio(displaySong, all))
+      })
+      .catch(() => {})
+    return () => { stale = true }
+  }, [displaySong, hasRecordedAndStudio])
+
   // Cover art actions (copy to clipboard / save to disk). `coverMsg` briefly
   // takes over the cover tile to report the outcome, since neither action
   // changes anything visible on its own.
@@ -668,6 +687,30 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
 
           <TextSection icon={MapPin} label="Recording Location" value={displaySong.recording_locations} />
           <TextSection icon={Calendar} label="Record Date(s)" value={displaySong.record_dates} />
+          {sameDateStudioSongs.length > 0 && (
+            <Section icon={MapPin} label="Same date, same studio">
+              <p className="text-[11px] text-text-muted mb-2">
+                Catalogue entries sharing this recording date and studio. That does not make them the same session.
+              </p>
+              <div className="space-y-1">
+                {sameDateStudioSongs.slice(0, 10).map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => handleViewVersion(s.id)}
+                    className="w-full text-left flex items-center justify-between gap-2 hover:bg-surface-overlay rounded-lg px-1.5 py-1 -mx-1.5 transition-colors"
+                  >
+                    <span className="text-text-primary text-xs truncate">{s.name}</span>
+                    {s.era?.name && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-overlay text-text-muted shrink-0">
+                        {s.era.name}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </Section>
+          )}
           <TextSection icon={CalendarClock} label="Preview Date" value={displayDate(displaySong.preview_date)} />
           <TextSection icon={CalendarDays} label="Release Date" value={displayDate(displaySong.release_date)} />
           <TextSection icon={CalendarDays} label="Other Date(s)" value={displaySong.dates} />

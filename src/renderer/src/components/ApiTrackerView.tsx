@@ -50,6 +50,9 @@ import { displaySongName } from '../lib/songPrefs'
 import { SearchHelpButton } from './SearchHelpPopover'
 import { loadEraFullNames, eraLabel, listEras } from '../lib/eras'
 import { ERA_LOOK, eraStart } from '../lib/eraLook'
+import { loadFileIndex, peekFileIndex } from '../lib/fileSearch'
+import { buildVideoTitleKeySet, songHasVideoMatch } from '../lib/footageCatalog'
+import { firstRecordingLocation } from '../lib/onThisDay'
 import { useMultiSelect } from '../hooks/useMultiSelect'
 import { useLongPress } from '../hooks/useLongPress'
 import {
@@ -274,6 +277,7 @@ function SidebarCheckRow({ label, count, checked, onClick }: {
 function FilterPopover({
   stats, eras, selectedCategories, selectedEras, onCategory, onEra, onClearCategories, onClearEras, onClearAll, onClose,
   libraryFilter, onLibraryFilter, hasLibrary,
+  videoFilter, onVideoFilter, studios, studioFilter, onStudioFilter,
 }: {
   stats: JWApiStats | null
   eras: JWApiEra[]
@@ -288,6 +292,11 @@ function FilterPopover({
   libraryFilter: 'all' | 'have' | 'missing'
   onLibraryFilter: (f: 'all' | 'have' | 'missing') => void
   hasLibrary: boolean
+  videoFilter: boolean
+  onVideoFilter: (v: boolean) => void
+  studios: string[]
+  studioFilter: string
+  onStudioFilter: (s: string) => void
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const fullEraNames = useStore((s) => s.fullEraNames)
@@ -311,7 +320,7 @@ function FilterPopover({
     unsurfaced:        stats?.category_stats.unsurfaced,
     recording_session: stats?.category_stats.recording_session,
   }
-  const hasFilters = selectedCategories.size > 0 || selectedEras.size > 0 || libraryFilter !== 'all'
+  const hasFilters = selectedCategories.size > 0 || selectedEras.size > 0 || libraryFilter !== 'all' || videoFilter || !!studioFilter
 
   return (
     <div
@@ -370,7 +379,25 @@ function FilterPopover({
         <SidebarCheckRow label="Not downloaded" checked={libraryFilter === 'missing'} onClick={() => onLibraryFilter('missing')} />
       </div>
       {!hasLibrary && libraryFilter === 'have' && (
-        <p className="text-[0.6875rem] text-text-muted pt-1.5">Nothing downloaded offline yet - right-click a song and choose "Download offline" first.</p>
+        <p className="text-[0.6875rem] text-text-muted pt-1.5">Nothing downloaded offline yet - right-click a song and choose &quot;Download offline&quot; first.</p>
+      )}
+
+      <p className="text-[0.625rem] font-bold uppercase tracking-widest text-text-muted pt-3 pb-1">Media</p>
+      <div className="flex flex-col gap-0.5">
+        <SidebarCheckRow label="All songs" checked={!videoFilter} onClick={() => onVideoFilter(false)} />
+        <SidebarCheckRow label="With video" checked={videoFilter} onClick={() => onVideoFilter(true)} />
+      </div>
+
+      {studios.length > 0 && (
+        <>
+          <p className="text-[0.625rem] font-bold uppercase tracking-widest text-text-muted pt-3 pb-1">Recording studio</p>
+          <div className="flex flex-col gap-0.5">
+            <SidebarCheckRow label="All studios" checked={!studioFilter} onClick={() => onStudioFilter('')} />
+            {studios.map((s) => (
+              <SidebarCheckRow key={s} label={s} checked={studioFilter === s} onClick={() => onStudioFilter(s)} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   )
@@ -2139,10 +2166,29 @@ export default function ApiTrackerView(): JSX.Element {
   }, [activeOrderField])
   // ?omit= for the song-list fetch below: drop whatever display fields the
   // current view/layout and field filters don't read.
+  const [videoFilter, setVideoFilter] = useState(false)
+  const [studioFilter, setStudioFilter] = useState('')
+  const [fileIndex, setFileIndex] = useState(() => peekFileIndex(activeChannel ?? ''))
+  useEffect(() => {
+    const ch = activeChannel ?? ''
+    const cached = peekFileIndex(ch)
+    if (cached) { setFileIndex(cached); return }
+    if (!showFilterMenu && !videoFilter) return
+    let stale = false
+    loadFileIndex(ch).then((idx) => { if (!stale && idx) setFileIndex(idx) }).catch(() => {})
+    return () => { stale = true }
+  }, [activeChannel, showFilterMenu, videoFilter])
+
+  const videoTitleKeys = useMemo(
+    () => (fileIndex ? buildVideoTitleKeySet(fileIndex.items.map((x) => x.entry)) : new Set<string>()),
+    [fileIndex],
+  )
+
   const bulkOmit = useTrackerOmit([
     ...(viewMode === 'grid' ? GRID_API_FIELDS : apiFieldsFor(viewMode === 'list' ? listColumns : detailFields)),
     ...filterApiFields(parsedSearch.filters),
     ...(activeOrderField === 'date_leaked' ? ['date_leaked'] : []),
+    ...(showFilterMenu || studioFilter ? ['recording_locations'] : []),
   ])
   // Sets rather than single values so "Search Settings" can filter by more
   // than one category/era at once (OR'd within each dimension, AND'd across
@@ -2191,8 +2237,10 @@ export default function ApiTrackerView(): JSX.Element {
       if (libraryFilter === 'have' && !has) return false
       if (libraryFilter === 'missing' && has) return false
     }
+    if (videoFilter && videoTitleKeys.size > 0 && !songHasVideoMatch(song, videoTitleKeys)) return false
+    if (studioFilter && firstRecordingLocation(song.recording_locations).toLowerCase() !== studioFilter.toLowerCase()) return false
     return true
-  }, [categoryFilter, eraFilter, libraryFilter, songInLibrary])
+  }, [categoryFilter, eraFilter, libraryFilter, songInLibrary, videoFilter, videoTitleKeys, studioFilter])
 
   useEffect(() => {
     if (apiTrackerCategory) { setCategoryFilter(new Set([apiTrackerCategory as Category])); setApiTrackerCategory('') }
@@ -2468,6 +2516,15 @@ export default function ApiTrackerView(): JSX.Element {
     }
     return out
   }, [catalog])
+  const topStudios = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const s of catalog) {
+      const loc = firstRecordingLocation(s.recording_locations)
+      if (!loc) continue
+      counts.set(loc, (counts.get(loc) ?? 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 14).map(([loc]) => loc)
+  }, [catalog])
   const fullEraNamesPref = useStore((s) => s.fullEraNames)
 
   const songs = useMemo(
@@ -2555,7 +2612,7 @@ export default function ApiTrackerView(): JSX.Element {
     // whole catalog is always fetched - see fetchAllCompactGroups above), so
     // apply them here instead. A group counts as a match if any of its
     // versions does, same as clicking a member's own category/era badge.
-    if (categoryFilter.size > 0 || eraFilter.size > 0 || libraryFilter !== 'all') {
+    if (categoryFilter.size > 0 || eraFilter.size > 0 || libraryFilter !== 'all' || videoFilter || !!studioFilter) {
       filtered = filtered.filter(g => g.members.some(m => matchesFilters(m.item)))
     }
     if (!compactSort.field) return filtered
@@ -2571,7 +2628,7 @@ export default function ApiTrackerView(): JSX.Element {
     return sorted
     // searchPrefs: the haystack's displaySongName reads renames.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compactGroups, parsedSearch, compactSort, categoryFilter, eraFilter, libraryFilter, matchesFilters, linkSessionEdit, searchPrefs])
+  }, [compactGroups, parsedSearch, compactSort, categoryFilter, eraFilter, libraryFilter, videoFilter, studioFilter, matchesFilters, linkSessionEdit, searchPrefs])
 
   useEffect(() => {
     const el = listScrollRef.current
@@ -2915,14 +2972,14 @@ export default function ApiTrackerView(): JSX.Element {
               <button
                 onClick={() => setShowFilterMenu((v) => !v)}
                 onMouseDown={(e) => e.stopPropagation()}
-                className={`${glassToolButton(showFilterMenu || multiFilterActive || categoryFilter.size > 0 || eraFilter.size > 0 || libraryFilter !== 'all')} catalog-tool`}
+                className={`${glassToolButton(showFilterMenu || multiFilterActive || categoryFilter.size > 0 || eraFilter.size > 0 || libraryFilter !== 'all' || videoFilter || !!studioFilter)} catalog-tool`}
                 title="Filters"
               >
                 <ListFilter size={15} />
                 {!developerMode && <span className="text-xs">Filters</span>}
-                {(categoryFilter.size + eraFilter.size + (libraryFilter !== 'all' ? 1 : 0)) > 0 && (
+                {(categoryFilter.size + eraFilter.size + (libraryFilter !== 'all' ? 1 : 0) + (videoFilter ? 1 : 0) + (studioFilter ? 1 : 0)) > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-[3px] rounded-full bg-accent text-[0.5625rem] leading-[15px] font-bold text-white text-center">
-                    {categoryFilter.size + eraFilter.size + (libraryFilter !== 'all' ? 1 : 0)}
+                    {categoryFilter.size + eraFilter.size + (libraryFilter !== 'all' ? 1 : 0) + (videoFilter ? 1 : 0) + (studioFilter ? 1 : 0)}
                   </span>
                 )}
               </button>
@@ -2936,11 +2993,16 @@ export default function ApiTrackerView(): JSX.Element {
                   onEra={(e) => { toggleEraFilter(e); resetSongs() }}
                   onClearCategories={() => { setCategoryFilter(new Set()); resetSongs() }}
                   onClearEras={() => { setEraFilter(new Set()); resetSongs() }}
-                  onClearAll={() => { setCategoryFilter(new Set()); setEraFilter(new Set()); setLibraryFilter('all'); resetSongs() }}
+                  onClearAll={() => { setCategoryFilter(new Set()); setEraFilter(new Set()); setLibraryFilter('all'); setVideoFilter(false); setStudioFilter(''); resetSongs() }}
                   onClose={() => setShowFilterMenu(false)}
                   libraryFilter={libraryFilter}
                   onLibraryFilter={(f) => { setLibraryFilter(f); resetSongs() }}
                   hasLibrary={Object.keys(offlineTracks).length > 0}
+                  videoFilter={videoFilter}
+                  onVideoFilter={(v) => { setVideoFilter(v); resetSongs() }}
+                  studios={topStudios}
+                  studioFilter={studioFilter}
+                  onStudioFilter={(s) => { setStudioFilter(s); resetSongs() }}
                 />
               )}
             </div>
@@ -3026,7 +3088,7 @@ export default function ApiTrackerView(): JSX.Element {
           {/* Active filter chips - one per selected category/era, each
               individually removable so multi-select filters can be trimmed
               down one at a time instead of all-or-nothing. */}
-          {(categoryFilter.size > 0 || eraFilter.size > 0 || libraryFilter !== 'all') && (
+          {(categoryFilter.size > 0 || eraFilter.size > 0 || libraryFilter !== 'all' || videoFilter || !!studioFilter) && (
             <div className="flex gap-1.5 flex-wrap">
               {[...categoryFilter].map((cat) => (
                 <button
@@ -3054,6 +3116,24 @@ export default function ApiTrackerView(): JSX.Element {
                   className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs font-medium"
                 >
                   {libraryFilter === 'have' ? 'Downloaded offline' : 'Not downloaded'}
+                  <X size={10} />
+                </button>
+              )}
+              {videoFilter && (
+                <button
+                  onClick={() => { setVideoFilter(false); resetSongs() }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs font-medium"
+                >
+                  With video
+                  <X size={10} />
+                </button>
+              )}
+              {studioFilter && (
+                <button
+                  onClick={() => { setStudioFilter(''); resetSongs() }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs font-medium"
+                >
+                  Studio: {studioFilter}
                   <X size={10} />
                 </button>
               )}

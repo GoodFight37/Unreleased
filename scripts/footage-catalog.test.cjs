@@ -48,6 +48,8 @@ const {
   scoreStudioFootage,
   formatFootageMenuLabel,
   createAudibleVideoGate,
+  buildVideoTitleKeySet,
+  songHasVideoMatch,
 } = load('lib/footageCatalog.ts', {
   './juicewrldApi': api,
   './musicVideos': musicVideos,
@@ -218,4 +220,36 @@ test('formatFootageMenuLabel separates studio footage from snippets and omits ri
     { entry: { path: 'Snippets/9. Death Race For Love/Condone It/clip1.mp4', name: 'clip1.mp4' } },
     { entry: { path: 'Snippets/9. Death Race For Love/Condone It/clip2.mp4', name: 'clip2.mp4' } },
   ]), 'Watch footage (1 studio · 2 snippets)')
+})
+
+test('sameDateAndStudio finds other songs sharing a recorded date and studio without claiming same session', () => {
+  const target = {
+    id: 1,
+    name: 'Condone It (v1)',
+    category: 'unreleased',
+    path: 'a.mp3',
+    record_dates: 'Recorded\nDecember 19, 2018.',
+    recording_locations: 'Blue Room West\nLos Angeles, CA',
+  }
+  const all = [
+    target,
+    { id: 2, name: 'Condone It (v2)', category: 'unreleased', path: 'b.mp3', record_dates: 'Recorded\nDecember 19, 2018.', recording_locations: 'Blue Room West' },
+    { id: 3, name: 'Syphilis', category: 'released', path: 'c.mp3', record_dates: 'Recorded\nDecember 19, 2018.', recording_locations: 'Blue Room West' },
+    { id: 4, name: 'Other Day', category: 'unreleased', path: 'd.mp3', record_dates: 'Recorded\nDecember 20, 2018.', recording_locations: 'Blue Room West' },
+    { id: 5, name: 'Other Studio', category: 'unreleased', path: 'e.mp3', record_dates: 'Recorded\nDecember 19, 2018.', recording_locations: 'Home Studio Encino' },
+    { id: 6, name: 'Export Only', category: 'unreleased', path: 'f.mp3', record_dates: 'File Exported\nDecember 19, 2018.', recording_locations: 'Blue Room West' },
+  ]
+  const matches = onThisDay.sameDateAndStudio(target, all)
+  assert.deepEqual(matches.map((s) => s.id), [3])
+})
+
+test('buildVideoTitleKeySet and songHasVideoMatch exclude rights-blocked videos and YouTube audio uploads', () => {
+  const keys = buildVideoTitleKeySet([
+    { path: 'Footage/Music Box Juice WRLD Into the Abyss.mp4', name: 'Music Box Juice WRLD Into the Abyss.mp4', type: 'file' },
+    { path: 'Footage/Youtube/2020/2020-07-10/Juice WRLD - Wishing Well (Official Audio).mp4', name: 'Juice WRLD - Wishing Well (Official Audio).mp4', type: 'file' },
+    { path: 'Snippets/9. Death Race For Love/Condone It/clip.mp4', name: 'clip.mp4', type: 'file' },
+  ])
+  assert.equal(songHasVideoMatch({ name: 'Condone It (v1)' }, keys), true)
+  assert.equal(songHasVideoMatch({ name: 'Wishing Well' }, keys), false)
+  assert.equal(songHasVideoMatch({ name: 'Music Box Juice WRLD Into the Abyss' }, keys), false)
 })
