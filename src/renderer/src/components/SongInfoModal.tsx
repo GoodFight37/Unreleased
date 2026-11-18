@@ -24,7 +24,7 @@ import { copyCoverImage, saveCoverImage } from '../lib/coverImage'
 import SongPrefsSection from './SongPrefsSection'
 import { ProgressiveCover } from './ProgressiveCover'
 import { loadSongFootage, footageBrowserOnly, type FootageMatch } from '../lib/footageIndex'
-import { classifyFootageEntry, createAudibleVideoGate, excludedFootageReason } from '../lib/footageCatalog'
+import { classifyFootageEntry, createAudibleVideoGate, excludedFootageReason, footageSourceOf } from '../lib/footageCatalog'
 import { getActiveRadioClient } from '../lib/radioSocketService'
 import { firstRecordingLocation, sameDateAndStudio, songDates } from '../lib/onThisDay'
 import { buildStreamUrl } from '../lib/juicewrldApi'
@@ -78,6 +78,8 @@ function SubVal({ label, value }: { label: string; value: string | null | undefi
 
 let activeFootageVideo: HTMLVideoElement | null = null
 let suppressingGateStoreSync = false
+const streamOf = (path: string, channel?: string): string => { const s = footageSourceOf(path, channel); return buildStreamUrl(s.path, s.channel || undefined) }
+
 const songModalVideoGate = createAudibleVideoGate({
   isMusicPlaying: () => !!useStore.getState().isPlaying,
   setMusicPlaying: (playing) => {
@@ -186,7 +188,7 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
                 </p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {!guarded && <button className={glassPillButton(active?.entry.path === entry.path)} onClick={() => setActive(active?.entry.path === entry.path ? null : match)}><Play size={12} />{active?.entry.path === entry.path ? 'Close video' : 'Watch here'}</button>}
-                  {!rightsBlocked && <a href={buildStreamUrl(entry.path, channel || undefined)} target="_blank" rel="noopener noreferrer" className={glassPillButton(false)}><ExternalLink size={12} />Open in browser</a>}
+                  {!rightsBlocked && <a href={streamOf(entry.path, channel)} target="_blank" rel="noopener noreferrer" className={glassPillButton(false)}><ExternalLink size={12} />Open in browser</a>}
                 </div>
                 {rightsBlocked ? <p className="mt-1">Not playable while its rights are being clarified.</p> : guarded && <p className="mt-1">Use your browser for this video.</p>}
               </div>
@@ -194,7 +196,7 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
           })}
         </ul>}
       {active && <video key={`${channel}:${active.entry.path}`} ref={videoRef} preload="none" controls playsInline
-        aria-label={active.entry.name} src={buildStreamUrl(active.entry.path, channel || undefined)}
+        aria-label={active.entry.name} src={streamOf(active.entry.path, channel)}
         className="w-full max-h-80 rounded-xl mt-3"
         onPlay={() => songModalVideoGate.videoWillPlay()}
         onLoadedMetadata={e => {

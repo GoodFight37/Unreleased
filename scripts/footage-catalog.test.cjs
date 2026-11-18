@@ -51,6 +51,7 @@ const {
   buildVideoTitleKeySet,
   songHasVideoMatch,
   videoHasNoSound,
+  footageSourceOf,
 } = load('lib/footageCatalog.ts', {
   './juicewrldApi': api,
   './musicVideos': musicVideos,
@@ -333,4 +334,10 @@ test('videoHasNoSound only flags a playing, unmuted video that decoded no audio'
   assert.equal(videoHasNoSound({ ...base, paused: true }), false)
   assert.equal(videoHasNoSound({ ...base, currentTime: 0.5 }), false)
   assert.equal(videoHasNoSound({ muted: false, paused: false, currentTime: 3 }), false)
+})
+
+test('footageSourceOf streams the copy with sound for a silent archive file and leaves other files alone', () => {
+  assert.deepEqual(footageSourceOf('Footage/No Laces.mp4'), { path: 'Snippets/No Laces/No Laces (1).mov', channel: 'legacy' })
+  assert.deepEqual(footageSourceOf('Footage/Doubting Me (Studio Session).mp4', ''), { path: 'Snippets/Doubting Me/Doubting Me (2).mp4', channel: 'legacy' })
+  assert.deepEqual(footageSourceOf('Footage/Be Here (In The Mix).mp4', 'comp'), { path: 'Footage/Be Here (In The Mix).mp4', channel: 'comp' })
 })

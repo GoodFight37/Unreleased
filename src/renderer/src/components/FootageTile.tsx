@@ -8,6 +8,7 @@ import { videoFrameShape, windowForPath, type PreviewWindowResult, type VideoFra
 import {
   createAudibleVideoGate,
   videoHasNoSound,
+  footageSourceOf,
   type FootageFamily,
   type FootageSongLink,
 } from '../lib/footageCatalog'
@@ -72,6 +73,12 @@ function cachePoster(key: string, entry: PosterCacheEntry): void {
 let activeHoverVideo: HTMLVideoElement | null = null
 let activeModalVideo: HTMLVideoElement | null = null
 let suppressingGateSync = false
+
+/** The stream URL of a footage file, from its copy with sound when the archive file has none. */
+export const footageUrl = (path: string, channel?: string): string => {
+  const s = footageSourceOf(path, channel)
+  return buildStreamUrl(s.path, s.channel || undefined)
+}
 
 export const footageModalVideoGate = createAudibleVideoGate({
   isMusicPlaying: () => useStore.getState().isPlaying,
@@ -280,7 +287,7 @@ export function useVideoPosterFrame(
     const begin = (): void => {
       setPosterState('loading')
       v.preload = 'metadata'
-      v.src = buildStreamUrl(path, channel || undefined)
+      v.src = footageUrl(path, channel)
       timeout = window.setTimeout(() => { if (!posterDrawnRef.current) finish('failed') }, POSTER_TIMEOUT_MS)
     }
     const request = (): void => {
@@ -414,7 +421,7 @@ export function FootageTile({
       }
       if (!v.getAttribute('src')) {
         v.preload = 'metadata'
-        v.src = buildStreamUrl(item.path, (item.streamChannel ?? channel) || undefined)
+        v.src = footageUrl(item.path, item.streamChannel ?? channel)
         // play() right at metadata: the seek to the preview start (if any) is already queued, and no seek happens when it starts at 0.
         v.addEventListener('loadedmetadata', startPlay, { once: true })
       } else if (v.readyState >= 3) {
@@ -564,7 +571,7 @@ export function FootagePlayerModal({
           autoPlay
           preload="metadata"
           playsInline
-          src={buildStreamUrl(item.path, (item.streamChannel ?? channel) || undefined)}
+          src={footageUrl(item.path, item.streamChannel ?? channel)}
           onPlay={() => {
             footageModalVideoGate.videoWillPlay()
             setMusicPausedByVideo(footageModalVideoGate.isMusicPausedByVideo())

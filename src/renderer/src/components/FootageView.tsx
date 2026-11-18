@@ -27,6 +27,7 @@ import {
   stopActiveHoverPreview,
   useVideoPosterFrame,
   type FootageTileItem,
+  footageUrl,
 } from './FootageTile'
 import { ProgressiveCover } from './ProgressiveCover'
 
@@ -161,7 +162,7 @@ function FeaturedFootageBanner({
       }
       if (!v.getAttribute('src')) {
         v.preload = 'metadata'
-        v.src = buildStreamUrl(item.path, (item.streamChannel ?? channel) || undefined)
+        v.src = footageUrl(item.path, item.streamChannel ?? channel)
         v.addEventListener('loadedmetadata', startPlay, { once: true })
       } else if (v.readyState >= 3) {
         startPlay()
