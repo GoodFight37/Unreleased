@@ -28,11 +28,12 @@ const HOLD_UNDER_TERMINAL: ViewType[] = ['editor', 'contributor', 'albums-admin'
 // Home and the staff dashboards are on it so their scrollers reach the window
 // bottom: ending at the bar's top edge clipped the tiles' drop shadows into a
 // hard line beside the bar.
-const SCROLL_UNDER: ViewType[] = ['home', 'editor-profile', 'contributor-profile', 'playlists', 'albums', 'liked', 'library', 'api-tracker', 'api-files', 'news', 'stats', 'docs', 'shared-playlist', 'public-profile', 'track']
+const SCROLL_UNDER: ViewType[] = ['home', 'footage', 'editor-profile', 'contributor-profile', 'playlists', 'albums', 'liked', 'library', 'api-tracker', 'api-files', 'news', 'stats', 'docs', 'shared-playlist', 'public-profile', 'track']
 
 function getViewFromPath(pathname: string): ViewType {
   if (pathname === '/' || pathname === '/tracker') return 'api-tracker'
   if (pathname === '/home') return 'home'
+  if (pathname === '/footage') return 'footage'
   if (pathname.startsWith('/files')) return 'api-files'
   if (pathname === '/editor') return 'editor'
   if (pathname === '/editor-profile') return 'editor-profile'
@@ -118,6 +119,7 @@ import { startLyricsJobWatch } from './lib/lyricsJobWatch'
 // so a chunk that vanished in a redeploy triggers a reload instead of an
 // error card — see lib/lazyView.
 const HomeView = lazyView(() => import('./components/HomeView'))
+const FootageView = lazyView(() => import('./components/FootageView'))
 const EditorPage = lazyView(() => import('./components/EditorPage'))
 const AdminPage = lazyView(() => import('./components/AdminPage'))
 const SharedPlaylistView = lazyView(() => import('./components/SharedPlaylistView'))
@@ -201,6 +203,7 @@ function throttledFocus(fn: () => void): () => void {
 function renderView(v: ViewType): JSX.Element {
   return (
     v === 'home' ? <HomeView />
+      : v === 'footage' ? <FootageView />
       : v === 'api-tracker' ? <ApiTrackerView />
       : v === 'api-files' ? <ApiFilesView />
       : v === 'contributor-profile' ? <ContributorProfileView />

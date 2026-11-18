@@ -1,6 +1,7 @@
 import { effectsMotionMedia, useEffectsState } from '../lib/effectsPreference'
 import { isWrldFanLyricId, resolveWrldEra } from '../lib/wrldAtmospheres'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
+import SongFootagePill from './SongFootagePill'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
@@ -918,6 +919,12 @@ export default function WrldView(): JSX.Element {
                     <Settings2 size={16} />
                   </button>
                 )}
+                <SongFootagePill
+                  songTitle={displayTitle}
+                  songId={radioFmActive ? (radioFmNowPlaying?.song_id ?? radioFmMatchedSong?.songId ?? null) : (currentTrack ? userApi.trackIdToSongId(currentTrack.id) : null)}
+                  light={textIsDark}
+                  placement="wrld"
+                />
                 <FmLikeButton light={textIsDark} />
                 <SongMenu light={textIsDark} onShareLyrics={rawLyrics ? openShareLyrics : undefined} />
               </div>
@@ -1159,6 +1166,12 @@ export default function WrldView(): JSX.Element {
                       <Layers size={16} />
                     </button>
                   )}
+                  <SongFootagePill
+                    songTitle={displayTitle}
+                    songId={radioFmActive ? (radioFmNowPlaying?.song_id ?? radioFmMatchedSong?.songId ?? null) : (currentTrack ? userApi.trackIdToSongId(currentTrack.id) : null)}
+                    light={textIsDark}
+                    placement="wrld"
+                  />
                   <FmLikeButton light={textIsDark} />
                   <SongMenu light={textIsDark} onShareLyrics={rawLyrics ? openShareLyrics : undefined} />
                 </div>

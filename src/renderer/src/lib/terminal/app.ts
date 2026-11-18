@@ -20,7 +20,7 @@ const st = (): ReturnType<typeof useStore.getState> => useStore.getState()
 // anywhere else leaves it (its scrollback and position are kept for when you
 // come back); the overlays - queue, equalizer, diagnostics - open on top of it.
 const VIEWS: Record<string, ViewType> = {
-  home: 'home', tracker: 'api-tracker', songs: 'api-tracker', files: 'api-files', playlists: 'playlists', liked: 'liked',
+  home: 'home', tracker: 'api-tracker', songs: 'api-tracker', footage: 'footage', files: 'api-files', playlists: 'playlists', liked: 'liked',
   chat: 'chat', news: 'news', docs: 'docs', wrld: 'wrld', stats: 'stats', statistics: 'statistics',
   heardle: 'heardle', wordle: 'wordle', tierlist: 'tierlist', editor: 'editor', library: 'library', contributor: 'contributor',
   albums: 'albums', 'albums-admin': 'albums-admin',

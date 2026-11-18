@@ -41,6 +41,11 @@ const ROUTES: Record<ViewType, SeoEntry> = {
     title: 'unreleased - Juice WRLD music player',
     description: DEFAULT_DESCRIPTION,
   },
+  footage: {
+    path: '/footage',
+    title: 'Footage',
+    description: 'Studio sessions, behind-the-scenes clips, freestyles, official music videos and snippets from the Juice WRLD archive.',
+  },
   'api-files': {
     path: '/files',
     title: 'Files',

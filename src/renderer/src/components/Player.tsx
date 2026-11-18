@@ -57,6 +57,7 @@ import { getActiveRadioClient } from '../lib/radioSocketService'
 import { runLog } from '../lib/runLog'
 import { isOfflineCopyUnreadable, markOfflineCopyUnreadable } from '../lib/offlineCopies'
 import { CoverFade, LikePop, SwapIcon, TrackSwap } from './PlayerMotion'
+import SongFootagePill from './SongFootagePill'
 import { PopLayer } from './PopLayer'
 import { useGlassSurface, useGlassCompositorReady, setCompositorPlayEl, setCompositorLens, setCompositorSlider, scheduleGlassCompositor } from '../lib/glass/compositor'
 import { useEffectsState } from '../lib/effectsPreference'
@@ -3023,7 +3024,7 @@ export default function Player(): JSX.Element {
             </div>
 
             {/* Artist + radio badge */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
               <p className="text-text-muted text-xs truncate">{radioFmActive && radioFmNowPlaying ? radioFmNowPlaying.artist : (currentTrack?.artist || '')}</p>
               {(radioMode || radioFmActive) && (
                 <span className={`flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-widest shrink-0 ${radioFmActive ? 'text-red-400' : 'text-accent'}`}>
@@ -3035,6 +3036,11 @@ export default function Player(): JSX.Element {
                   {playerQuality}
                 </span>
               )}
+              <SongFootagePill
+                songTitle={radioFmActive && radioFmNowPlaying ? radioFmNowPlaying.title : (currentTrack?.apiTitle || currentTrack?.title)}
+                songId={radioFmActive ? (radioFmNowPlaying?.song_id ?? radioFmMatchedSong?.songId ?? null) : currentSongId}
+                placement="bar"
+              />
             </div>
           </TrackSwap>
         </div>

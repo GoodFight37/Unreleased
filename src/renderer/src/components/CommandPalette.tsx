@@ -30,6 +30,7 @@ interface PaletteItem {
 const VIEW_ENTRIES: { view: ViewType; label: string; keywords?: string; electronOnly?: boolean; staffOnly?: boolean; devOnly?: boolean }[] = [
   { view: 'home', label: 'Home', keywords: 'dashboard overview' },
   { view: 'api-tracker', label: 'Tracker', keywords: 'songs catalog search leaks' },
+  { view: 'footage', label: 'Footage', keywords: 'videos studio freestyles clips snippets' },
   { view: 'api-files', label: 'Files', keywords: 'browser folders audio', devOnly: true },
   { view: 'library', label: 'Library', keywords: 'local music folders', electronOnly: true },
   { view: 'playlists', label: 'Playlists', keywords: 'collections' },

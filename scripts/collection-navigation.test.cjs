@@ -34,7 +34,7 @@ function render(name, state) {
         return labels
       }
       if (id.endsWith('/navItems')) return {
-        NAV_ITEMS: ['home', 'api-tracker', 'library', 'playlists'].map((view) => ({ view })),
+        NAV_ITEMS: ['home', 'api-tracker', 'library', 'playlists', 'footage'].map((view) => ({ view })),
         orderedNavControls: () => [], navTabFor: (view) => view, tabEntryView: (view) => view,
       }
       return {}
@@ -132,4 +132,15 @@ test('pickLeadPlaylist prioritises explicit pins, then recent synced playlists, 
 
   // 4. Empty collections return null without inventing content
   assert.equal(mod.pickLeadPlaylist([], [], null, []), null)
+})
+
+test('Sidebar renders the four primary destinations including Footage and navigates to it', () => {
+  const calls = []
+  const { nodes } = render('Sidebar', { activeView: 'home', developerMode: false, sidebarPosition: 'top', downloads: [], setActiveView: (view) => calls.push(view) })
+  const labels = nodes.filter((node) => node.props['data-indicator-key']).map((node) => node.props['aria-label'])
+  assert.deepEqual(labels, ['Discover', 'Catalogue', 'Collection', 'Footage'])
+  const footageBtn = nodes.find((node) => node.props['aria-label'] === 'Footage')
+  assert.ok(footageBtn)
+  footageBtn.props.onClick()
+  assert.deepEqual(calls, ['footage'])
 })

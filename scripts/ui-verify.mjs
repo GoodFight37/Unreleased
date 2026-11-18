@@ -813,7 +813,7 @@ async function main() {
     await win.evaluate(() => window.__store.getState().setShowSettings(false))
     await win.evaluate(() => window.__store.getState().setActiveView('api-tracker'))
     const navLabels = await win.locator('.app-sidebar [data-indicator-key]').allTextContents()
-    coffreChecks.push({ name: 'three-primary-destinations', labels: navLabels, pass: navLabels.length === 3 && ['Discover', 'Catalogue', 'Collection'].every((name) => navLabels.some((label) => label.includes(name))) })
+    coffreChecks.push({ name: 'four-primary-destinations', labels: navLabels, pass: navLabels.length === 4 && ['Discover', 'Catalogue', 'Collection', 'Footage'].every((name) => navLabels.some((label) => label.includes(name))) })
     coffreChecks.push({ name: 'navigation-is-only-controls', pass: await win.locator('.coffre-brand').count() === 0 })
     const catalogueBackground = await win.locator('.coffre-catalogue').evaluate((el) => getComputedStyle(el).backgroundColor)
     await win.locator('.app-sidebar').getByRole('button', { name: 'Discover', exact: true }).click()

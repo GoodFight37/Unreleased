@@ -140,7 +140,7 @@ export default function Sidebar(): JSX.Element {
   // web-only tabs on web and anything the user has toggled off.
   const items = developerMode
     ? orderedNavItems(navOrder, hasChatAccess(account), showStaffProfile(account)).filter((i) => isNavItemVisible(i, navVisibility, isElectron))
-    : (['home', 'api-tracker', 'playlists'] as ViewType[]).map((view) => ({
+    : (['home', 'api-tracker', 'playlists', 'footage'] as ViewType[]).map((view) => ({
         ...NAV_ITEMS.find((item) => item.view === view)!, label: viewLabel(view, '', false),
       }))
   // Which tab reads as current - not always activeView, since some views are

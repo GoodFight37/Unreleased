@@ -1592,6 +1592,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
     recordNav(get().activeView)
     const paths: Partial<Record<ViewType, string>> = {
       'home': '/home',
+      'footage': '/footage',
       'api-tracker': '/tracker',
       'api-files': '/files',
       'editor': '/editor',
