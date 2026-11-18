@@ -1,6 +1,7 @@
 // The lyric styles beside the fisheye, each on LyricScene: they wake only as a word or a line is due, and every move
 // is the browser's own animation.
-import { LyricScene, type SceneLine, type StageLook, type StageSong } from './scene'
+import { LyricScene, type LyricRenderer, type SceneLine, type StageLook, type StageSong } from './scene'
+import { CutScene } from './cut'
 import { chance, cssColor, ink, spring, width, wrap, type Wrapped } from './type'
 
 const GLIDE = spring(0.6, 0.86)
@@ -801,6 +802,6 @@ export class CinemaScene extends LyricScene {
   }
 }
 
-export const SCENES: Record<string, new (host: HTMLElement) => LyricScene> = {
-  spread: SpreadScene, karaoke: KaraokeScene, typewriter: TypewriterScene, neon: NeonScene, echo: EchoScene, glitch: GlitchScene, cinema: CinemaScene,
+export const SCENES: Record<string, new (host: HTMLElement) => LyricRenderer> = {
+  spread: SpreadScene, karaoke: KaraokeScene, typewriter: TypewriterScene, neon: NeonScene, echo: EchoScene, glitch: GlitchScene, cinema: CinemaScene, cut: CutScene,
 }

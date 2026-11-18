@@ -1,6 +1,6 @@
 export type WrldBackdropMode = 'mesh' | 'glass' | 'off'
-export type WrldCuratedLyricId = 'classic' | 'karaoke' | 'cinema' | 'fisheye'
-export type WrldFanLyricId = 'classic' | 'cinema' | 'fisheye'
+export type WrldCuratedLyricId = 'classic' | 'karaoke' | 'cinema' | 'fisheye' | 'cut'
+export type WrldFanLyricId = 'classic' | 'cinema' | 'fisheye' | 'cut'
 export type EraAtmosphereId = '999' | 'gbgr' | 'drfl' | 'lnd'
 
 export interface WrldBackdropPreset {
@@ -38,6 +38,7 @@ export const WRLD_CURATED_LYRICS: readonly WrldCuratedLyricStyle[] = [
   { id: 'karaoke', label: 'Karaoke', subtitle: 'Word-lit sing-along' },
   { id: 'cinema', label: 'Cinema', subtitle: 'Widescreen centered lines' },
   { id: 'fisheye', label: '999 Edit', subtitle: '3D lyric-edit lens' },
+  { id: 'cut', label: 'Cut', subtitle: 'Cut-up type, each word lights as it is sung' },
 ]
 
 /** Fan-facing lyric presentations (Developer mode keeps all extra looks). */
@@ -45,6 +46,7 @@ export const WRLD_FAN_LYRICS: readonly { id: WrldFanLyricId; label: string; subt
   { id: 'classic', label: 'Classic', subtitle: 'Scrolling editorial column' },
   { id: 'cinema', label: 'Cinema', subtitle: 'Widescreen centered lines' },
   { id: 'fisheye', label: '999', subtitle: '3D lyric-edit lens' },
+  { id: 'cut', label: 'Cut', subtitle: 'Cut-up type, each word lights as it is sung' },
 ]
 
 /** Post frames: how WRLD's lyrics are laid out once Post hides the player. */

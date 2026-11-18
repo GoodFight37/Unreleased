@@ -13,9 +13,9 @@ const { eraStart } = require('../src/renderer/src/lib/eraLook.ts')
 
 test('curated WRLD lists stay focused and exclude legacy visualizer walls', () => {
   assert.deepEqual(WRLD_BACKDROPS.map((b) => b.id), ['mesh', 'glass', 'off'])
-  assert.equal(WRLD_CURATED_LYRICS.length, 4)
+  assert.equal(WRLD_CURATED_LYRICS.length, 5)
   assert.equal(WRLD_CURATED_LYRICS[0].id, 'classic')
-  assert.deepEqual(WRLD_FAN_LYRICS.map((l) => l.id), ['classic', 'cinema', 'fisheye'])
+  assert.deepEqual(WRLD_FAN_LYRICS.map((l) => l.id), ['classic', 'cinema', 'fisheye', 'cut'])
 })
 
 test('normalizes persisted backdrop ids cleanly to modern modes', () => {

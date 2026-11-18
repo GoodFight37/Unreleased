@@ -1,0 +1,21 @@
+/* Cut: the lyrics as a typographic cut-up (cut.ts). Colors are the Juice WRLD yellow on dark and a deeper ochre on
+   light, so the strong word keeps its identity and its contrast on both. */
+.cut-stage {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  --cut-ink: #f4f1ea; --cut-accent: #f2d14b; --cut-soft: color-mix(in srgb, var(--cut-accent) 62%, var(--cut-ink));
+  --cut-dim: rgba(244, 241, 234, 0.6); --cut-shadow: 0 2px 28px rgba(0, 0, 0, 0.35);
+}
+.cut-stage.is-light {
+  --cut-ink: #15141a; --cut-accent: #7a5a00; --cut-dim: rgba(21, 20, 26, 0.72); --cut-shadow: 0 0 0 transparent;
+}
+.cut-phrase { position: absolute; inset: 0; }
+.cut-w {
+  position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; letter-spacing: -0.02em;
+  --cut-c: var(--cut-ink); color: var(--cut-c); text-shadow: var(--cut-shadow); will-change: transform, opacity;
+}
+.cut-w.hero { --cut-c: var(--cut-accent); }
+.cut-w.soft { --cut-c: var(--cut-soft); }
+.cut-ad { position: absolute; white-space: nowrap; font-style: italic; font-weight: 600; color: var(--cut-dim); }
+.cut-dots { position: absolute; display: flex; gap: 14px; }
+.cut-dots i { width: 12px; height: 12px; border-radius: 50%; background: var(--cut-ink); }
+.cut-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

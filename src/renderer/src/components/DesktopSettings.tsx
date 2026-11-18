@@ -7,7 +7,7 @@ import { DESKTOP_DEFAULTS, type DesktopPatch, type DesktopSettings as Settings }
 import { ls } from '../lib/persist'
 import { LOOKS, PLACES } from '../desktop/light/looks'
 import { beatOf, hsbToRgb, type HSB } from '../desktop/light/engine'
-import { LYRIC_LOOKS, FACES, lyricLookOf, lyricFontFor } from '../desktop/lyrics/looks'
+import { DESKTOP_LOOKS, FACES, lyricLookOf, lyricFontFor } from '../desktop/lyrics/looks'
 import { listenToMeter } from '../desktop/meter'
 import { desktopApi, desktopWindowsSupported, type DesktopDisplay } from '../desktop/api'
 import { lazyOverlay } from '../lib/lazyView'
@@ -371,7 +371,7 @@ export default function DesktopSettings({ heading = true }: { heading?: boolean 
         <Line label="Style" sub={lyrics.look === 'classic' ? 'The scrolling list' : 'Word by word, as a lyric video'}>
           <div className="flex items-center gap-2">
             <ThemedSelect value={lyrics.look} onChange={(look) => set({ lyrics: { look } })}
-              options={[{ value: 'classic', label: 'Classic' }, ...LYRIC_LOOKS.map((l) => ({ value: l.id, label: l.title }))]} className={SELECT_CLASS} />
+              options={[{ value: 'classic', label: 'Classic' }, ...DESKTOP_LOOKS.map((l) => ({ value: l.id, label: l.title }))]} className={SELECT_CLASS} />
             <button onClick={() => setPicker('lyrics')} className={BUTTON_CLASS} title="See every style playing"><LayoutGrid size={12} /> Browse</button>
           </div>
         </Line>

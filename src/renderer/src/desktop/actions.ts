@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore'
 import { useVizStore, wrldEdgeLook } from '../store/vizStore'
 import { ls } from '../lib/persist'
 import { LOOKS, lookOf } from './light/looks'
-import { LYRIC_LOOKS, lyricLookOf } from './lyrics/looks'
+import { DESKTOP_LOOKS, lyricLookOf } from './lyrics/looks'
 import { desktopApi, desktopWindowsSupported } from './api'
 
 type Widget = 'player' | 'playlist' | 'clock'
@@ -65,7 +65,7 @@ export function stepLight(step = 1): string {
 /** The lyric style after the one picked, Classic among them. */
 export function stepLyricStyle(step = 1): string {
   const s = useStore.getState()
-  const ids = ['classic', ...LYRIC_LOOKS.map((l) => l.id)]
+  const ids = ['classic', ...DESKTOP_LOOKS.map((l) => l.id)]
   const at = Math.max(ids.indexOf(s.desktop.lyrics.look), 0)
   const next = ids[(at + step + ids.length) % ids.length]
   s.setDesktop({ lyrics: { look: next } })

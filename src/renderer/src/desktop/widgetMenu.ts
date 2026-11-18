@@ -4,7 +4,7 @@
 // system's menu over a window on the desktop (electron/desktop, which asks the main window for it). Picking a row
 // sends its command as a widget's press does (lib/desktopBridge's runDesktopCommand; 'clear' is the main process's).
 import { DESKTOP_DEFAULTS, type DesktopSettings, type PlaylistSource } from '../store/desktopSlice'
-import { LYRIC_LOOKS } from './lyrics/looks'
+import { DESKTOP_LOOKS } from './lyrics/looks'
 
 export type WidgetWhich = 'player' | 'playlist' | 'clock'
 /** A part of a widget with a menu of its own: the player's lyrics. */
@@ -68,7 +68,7 @@ export function widgetMenu(which: WidgetWhich, desktop: DesktopSettings, ctx: Wi
       ...(ctx.where === 'tab' && ctx.lyrics?.has ? [{ label: 'Share lyrics', cmd: 'share-lyrics' }] : []),
       ...(ctx.lyrics?.timed ? [{ label: 'Download synced lyrics', cmd: 'download-lyrics' }] : []),
       'divider',
-      { label: 'Style', children: LYRIC_LOOKS.map((l) => ({ label: l.title, radio: true, checked: l.id === look, cmd: 'set', arg: { lyrics: { look: l.id } } })) },
+      { label: 'Style', children: DESKTOP_LOOKS.map((l) => ({ label: l.title, radio: true, checked: l.id === look, cmd: 'set', arg: { lyrics: { look: l.id } } })) },
       toggle('Fold the card away with lyrics', 'hidesLyricsCard', p.hidesLyricsCard),
       { label: 'Hide lyrics', ...set({ lyricsOpen: false }) },
     )

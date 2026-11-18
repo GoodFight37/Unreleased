@@ -2,7 +2,7 @@ import { useStore } from '../../store/useStore'
 import { wrldEdgeLook } from '../../store/vizStore'
 import type { DesktopPatch } from '../../store/desktopSlice'
 import { LOOKS, PLACES, lookOf } from '../../desktop/light/looks'
-import { FACES, LYRIC_LOOKS, lyricLookOf, lyricFontFor } from '../../desktop/lyrics/looks'
+import { FACES, DESKTOP_LOOKS, lyricLookOf, lyricFontFor } from '../../desktop/lyrics/looks'
 import { desktopApi, desktopWindowsSupported } from '../../desktop/api'
 import * as actions from '../../desktop/actions'
 import { fail, parseBool, type TermCommand } from './types'
@@ -109,7 +109,7 @@ export const DESKTOP_COMMANDS: TermCommand[] = [
         if (sub === 'motion') return MOTIONS.filter((s) => s.startsWith(p))
         if (sub === 'tune') return TUNING.filter((s) => s.startsWith(p))
         if (sub === 'colors') return ['artwork', 'own', 'one', 'two'].filter((s) => s.startsWith(p))
-        if (sub === 'lyrics') return ['classic', 'next', ...LYRIC_LOOKS.map((l) => l.id)].filter((s) => s.startsWith(p))
+        if (sub === 'lyrics') return ['classic', 'next', ...DESKTOP_LOOKS.map((l) => l.id)].filter((s) => s.startsWith(p))
         if (sub === 'font') return FACES.map((f) => f.key).filter((s) => s.toLowerCase().startsWith(p))
         if (sub === 'player' || sub === 'playlist' || sub === 'clock') return ['on', 'off', 'reset', ...Object.keys(WIDGET_KEYS[sub])].filter((s) => s.startsWith(p))
         if (sub === 'widgets') return ['on', 'off'].filter((s) => s.startsWith(p))
@@ -189,7 +189,7 @@ export const DESKTOP_COMMANDS: TermCommand[] = [
           const word = rest[0]?.toLowerCase()
           if (!word) { ctx.print(`Lyric style: ${d.lyrics.look === 'classic' ? 'Classic' : lyricLookOf(d.lyrics.look).title}`, 'plain'); return }
           if (word === 'next' || word === 'previous') { say(actions.stepLyricStyle(word === 'next' ? 1 : -1)); return }
-          const look = word === 'classic' ? 'classic' : (LYRIC_LOOKS.find((l) => l.id === word)?.id ?? fail(`styles: classic, ${LYRIC_LOOKS.map((l) => l.id).join(', ')}`))
+          const look = word === 'classic' ? 'classic' : (DESKTOP_LOOKS.find((l) => l.id === word)?.id ?? fail(`styles: classic, ${DESKTOP_LOOKS.map((l) => l.id).join(', ')}`))
           s.setDesktop({ lyrics: { look } })
           say(`Lyric style: ${look === 'classic' ? 'Classic' : lyricLookOf(look).title}`)
           return

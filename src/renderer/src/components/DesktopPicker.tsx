@@ -5,7 +5,7 @@ import { useStore } from '../store/useStore'
 import { LOOKS, lookOf, placeNumber, tickerHeight, type Look } from '../desktop/light/looks'
 import { EdgeRenderer } from '../desktop/light/renderer'
 import { hsbToRgb, type AlbumColors, type LightFrame } from '../desktop/light/engine'
-import { LYRIC_LOOKS, lyricFontFor } from '../desktop/lyrics/looks'
+import { DESKTOP_LOOKS, lyricFontFor } from '../desktop/lyrics/looks'
 import { LyricStage } from '../desktop/lyrics/stage'
 import { epochNow } from '../desktop/lyrics/scene'
 import type { TimedLyrics } from '../desktop/lyrics/timing'
@@ -240,7 +240,7 @@ function LyricGrid({ chosen, onPick, colors }: { chosen: string; onPick: (id: st
 
   return (
     <div ref={gridRef} className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 overflow-y-auto p-5 pt-1 min-h-0">
-      {LYRIC_LOOKS.map((l) => (
+      {DESKTOP_LOOKS.map((l) => (
         <div key={l.id} data-lyric={l.id} onClick={() => onPick(l.id)} className="cursor-pointer group">
           <div className={`relative w-full aspect-[220/124] rounded-xl overflow-hidden bg-[#0d0d0d] transition-shadow ${
             chosen === l.id ? 'shadow-[0_0_0_2px_rgba(255,255,255,0.9)]' : 'shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] group-hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)]'

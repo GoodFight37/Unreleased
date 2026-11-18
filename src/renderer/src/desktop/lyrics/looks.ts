@@ -1,7 +1,7 @@
 // The lyric styles to choose from, as the lights are, each with the face it's set in until another is picked for
 // it: every style keeps its own. "classic" is the app's own scrolling list, outside the iJWA styles.
 
-export interface LyricLook { id: string; title: string; face: string }
+export interface LyricLook { id: string; title: string; face: string; wrldOnly?: boolean }
 
 export const LYRIC_LOOKS: LyricLook[] = [
   { id: 'fisheye', title: 'Fisheye', face: 'Georgia' },
@@ -12,7 +12,11 @@ export const LYRIC_LOOKS: LyricLook[] = [
   { id: 'echo', title: 'Echo', face: 'Franklin' },
   { id: 'glitch', title: 'Glitch', face: 'ArialBlack' },
   { id: 'cinema', title: 'Cinema', face: 'PalatinoItalic' },
+  { id: 'cut', title: 'Cut', face: 'Segoe', wrldOnly: true },
 ]
+
+/** The looks the Desktop widgets and menus offer; WRLD-only ones stay out. */
+export const DESKTOP_LOOKS: LyricLook[] = LYRIC_LOOKS.filter((l) => !l.wrldOnly)
 
 export const lyricLookOf = (id: string | undefined): LyricLook => LYRIC_LOOKS.find((l) => l.id === id) || LYRIC_LOOKS[0]
 

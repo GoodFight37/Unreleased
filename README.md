@@ -25,6 +25,8 @@ Footage shows a real frame from each video, loaded as you scroll, with a plain "
 
 The interface adds translucent glass controls and cover-inspired backgrounds. WRLD brings artwork and lyrics into one listening view, with clear ways to return to your music or change the atmosphere.
 
+WRLD's lyric menu also offers Cut, a cut-up type style where each word lights as it is sung, in dark and light themes.
+
 ## Installation
 
 Open [Releases](https://github.com/GoodFight37/Unreleased/releases) and download the file for your system:
