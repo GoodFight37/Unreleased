@@ -1794,14 +1794,14 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
               <div>
                 <SettingsTitle>Playback</SettingsTitle>
                 <SettingsGroup title="Playback">
-                  {developerMode && (<Row
+                  <Row
                     icon={ListOrdered}
                     iconColor="#7c3aed"
                     label="Remember queue and now playing"
                     sub="Restore your queue, current track and position on this device when you reopen. Playback stays paused."
                   >
                     <Toggle on={rememberQueue} onClick={() => setRememberQueue(!rememberQueue)} />
-                  </Row>)}
+                  </Row>
                   {(
 
                     <Row icon={Volume2} iconColor="#2563eb" label="Audio output">

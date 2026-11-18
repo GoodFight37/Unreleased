@@ -25,6 +25,7 @@ import SongPrefsSection from './SongPrefsSection'
 import { ProgressiveCover } from './ProgressiveCover'
 import { loadSongFootage, footageBrowserOnly, type FootageMatch } from '../lib/footageIndex'
 import { classifyFootageEntry, createAudibleVideoGate, excludedFootageReason } from '../lib/footageCatalog'
+import { getActiveRadioClient } from '../lib/radioSocketService'
 import { firstRecordingLocation, sameDateAndStudio, songDates } from '../lib/onThisDay'
 import { buildStreamUrl } from '../lib/juicewrldApi'
 import { glassPillButton } from './glassControls'
@@ -83,6 +84,23 @@ const songModalVideoGate = createAudibleVideoGate({
     suppressingGateStoreSync = true
     try { useStore.getState().setIsPlaying(playing) } finally { suppressingGateStoreSync = false }
   },
+  isRadioPlaying: () => {
+    const s = useStore.getState()
+    return s.radioFmActive && !s.radioFmPaused
+  },
+  setRadioPlaying: (playing) => {
+    suppressingGateStoreSync = true
+    try {
+      const client = getActiveRadioClient()
+      if (playing) {
+        if (useStore.getState().radioFmActive) void client?.startListening().catch(() => {})
+      } else {
+        client?.stopListening()
+      }
+    } finally {
+      suppressingGateStoreSync = false
+    }
+  },
   pauseActiveVideo: () => { if (activeFootageVideo && !activeFootageVideo.paused) activeFootageVideo.pause() },
 })
 
@@ -104,6 +122,7 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
   // Footage & primary snippets live on the primary archive channel ('').
   const channel = ''
   const isPlaying = useStore(s => s.isPlaying)
+  const isRadioPlaying = useStore(s => s.radioFmActive && !s.radioFmPaused)
   const [approximate, setApproximate] = useState(false)
   const [matches, setMatches] = useState<FootageMatch[] | null>([])
   const [loading, setLoading] = useState(true)
@@ -112,8 +131,10 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
   const [browserOnly, setBrowserOnly] = useState<Set<string>>(new Set())
   const videoRef = useRef<HTMLVideoElement>(null)
   useEffect(() => {
-    if (active && isPlaying && !suppressingGateStoreSync) songModalVideoGate.musicTouched()
-  }, [active, isPlaying])
+    if (!active || suppressingGateStoreSync) return
+    const s = useStore.getState()
+    if (s.isPlaying || (s.radioFmActive && !s.radioFmPaused)) songModalVideoGate.musicTouched()
+  }, [active, isPlaying, isRadioPlaying])
   useEffect(() => {
     let stale = false
     setLoading(true)
@@ -194,15 +215,19 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
 function MusicVideoSection({ song, onLeave }: { song: JWApiSong; onLeave: () => void }): JSX.Element | null {
   const [videos, setVideos] = useState<MusicVideo[]>([])
   const [watching, setWatching] = useState<number | null>(null)
+  const isWatching = watching !== null
   const isPlaying = useStore(s => s.isPlaying)
+  const isRadioPlaying = useStore(s => s.radioFmActive && !s.radioFmPaused)
   useEffect(() => {
-    if (watching === null) return
+    if (!isWatching) return
     songModalVideoGate.videoWillPlay()
     return () => songModalVideoGate.videoDidClose()
-  }, [watching])
+  }, [isWatching])
   useEffect(() => {
-    if (watching !== null && isPlaying && !suppressingGateStoreSync) songModalVideoGate.musicTouched()
-  }, [watching, isPlaying])
+    if (!isWatching || suppressingGateStoreSync) return
+    const s = useStore.getState()
+    if (s.isPlaying || (s.radioFmActive && !s.radioFmPaused)) songModalVideoGate.musicTouched()
+  }, [isWatching, isPlaying, isRadioPlaying])
   // The administrators' default for every player: a video's path, '' for no video, null for none set.
   const [serverDefault, setServerDefault] = useState<string | null>(null)
   const [defaultsTurn, setDefaultsTurn] = useState(0)

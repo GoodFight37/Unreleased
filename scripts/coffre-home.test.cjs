@@ -9,11 +9,11 @@ const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/ren
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
 }).outputText
 
-function render({ catalogue = [], catalogueState = 'ready', recent = [], fileIndex = null, currentTrack = null, theme = 'glass-dark', adaptiveColors = false, effects = { reducedMotion: false, gameMode: false }, selectedEra = null, eraRecords = [] } = {}) {
+function render({ catalogue = [], catalogueState = 'ready', recent = [], fileIndex = null, currentTrack = null, isPlaying = false, theme = 'glass-dark', adaptiveColors = false, effects = { reducedMotion: false, gameMode: false }, selectedEra = null, eraRecords = [] } = {}) {
   let stateCalls = 0
   const calls = []
   const action = (name) => (...args) => calls.push({ name, args })
-  const state = { theme, adaptiveColors, currentTrack, playTrack: action('play'), playNext: action('next'), setActiveView: action('view'), setInfoSongId: action('info'), setApiTrackerCategory: action('category'), setApiTrackerEra: action('era'), setApiTrackerTab: action('tab') }
+  const state = { theme, adaptiveColors, currentTrack, isPlaying, setIsPlaying: action('setIsPlaying'), playTrack: action('play'), playNext: action('next'), setActiveView: action('view'), setInfoSongId: action('info'), setApiTrackerCategory: action('category'), setApiTrackerEra: action('era'), setApiTrackerTab: action('tab') }
   const jsx = (type, props) => ({ type, props })
   const exports = {}
   const loadTs = (rel, mocks = {}) => {
@@ -105,15 +105,57 @@ test('vault discovery includes playable unreleased tracks and sorts eras chronol
   assert.deepEqual(result.calls, [])
 })
 
-test('history drops unplayable metadata and the hero does not create a queue missing its current track', () => {
+test('history drops unplayable metadata and clicking the hero art resumes the current track like the Resume button', () => {
   const track = { id: 'local-one', title: 'One', path: 'one.mp3' }
   const hero = { id: 'local-two', title: 'Two', path: 'two.mp3' }
-  const result = render({ recent: [track, { id: 'missing', title: 'Metadata only', path: '' }], currentTrack: hero })
+  const result = render({ recent: [track, { id: 'missing', title: 'Metadata only', path: '' }], currentTrack: hero, isPlaying: false })
   assert.equal(result.find('coffre-cover-card').length, 1)
   result.find('coffre-hero-art')[0].props.onClick()
-  assert.equal(result.calls[0].name, 'play')
-  assert.equal(result.calls[0].args.length, 1)
-  assert.equal(result.calls[0].args[0], hero)
+  result.find('coffre-primary')[0].props.onClick()
+  assert.deepEqual(result.calls, [
+    { name: 'setIsPlaying', args: [true] },
+    { name: 'setIsPlaying', args: [true] },
+  ])
+})
+
+test('hero cover art matches the primary button for pause, resume, play and studio-footage hero layouts', () => {
+  const track = { id: 'local-one', title: 'One', path: 'one.mp3' }
+  const hero = { id: 'local-two', title: 'Two', path: 'two.mp3' }
+  const fileIndex = {
+    items: [{ entry: { type: 'file', name: 'Condone It (Studio Session).mp4', path: 'Footage/Condone It (Studio Session).mp4' } }],
+  }
+
+  // Paused current track in both layouts: Resume via setIsPlaying(true), never playTrack
+  for (const extra of [{}, { fileIndex }]) {
+    const paused = render({ recent: [track], currentTrack: hero, isPlaying: false, ...extra })
+    paused.find('coffre-hero-art')[0].props.onClick()
+    const primary = paused.find('coffre-primary').at(-1)
+    primary.props.onClick()
+    assert.deepEqual(paused.calls, [
+      { name: 'setIsPlaying', args: [true] },
+      { name: 'setIsPlaying', args: [true] },
+    ])
+    assert.equal(paused.find('coffre-hero-art')[0].props['aria-label'], 'Resume Two')
+
+    // Playing current track: Pause via setIsPlaying(false)
+    const playing = render({ recent: [track], currentTrack: hero, isPlaying: true, ...extra })
+    playing.find('coffre-hero-art')[0].props.onClick()
+    playing.find('coffre-primary').at(-1).props.onClick()
+    assert.deepEqual(playing.calls, [
+      { name: 'setIsPlaying', args: [false] },
+      { name: 'setIsPlaying', args: [false] },
+    ])
+    assert.equal(playing.find('coffre-hero-art')[0].props['aria-label'], 'Pause Two')
+  }
+
+  // No current track: clicking the cover starts playback with the same queue as the primary button
+  const fresh = render({ recent: [track], currentTrack: null })
+  fresh.find('coffre-hero-art')[0].props.onClick()
+  fresh.find('coffre-primary')[0].props.onClick()
+  assert.deepEqual(fresh.calls, [
+    { name: 'play', args: [track, [track]] },
+    { name: 'play', args: [track, [track]] },
+  ])
 })
 
 test('an empty vault still opens the complete catalogue without pretending a track can play', () => {

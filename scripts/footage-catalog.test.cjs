@@ -50,6 +50,7 @@ const {
   createAudibleVideoGate,
   buildVideoTitleKeySet,
   songHasVideoMatch,
+  videoHasNoSound,
 } = load('lib/footageCatalog.ts', {
   './juicewrldApi': api,
   './musicVideos': musicVideos,
@@ -204,6 +205,76 @@ test('createAudibleVideoGate enforces one audible source at a time without resum
   assert.equal(playing, false)
 })
 
+test('createAudibleVideoGate pauses and resumes 999 FM radio without touching music', () => {
+  let musicPlaying = false
+  let radioPlaying = true
+  let radioStarts = 0
+  let radioStops = 0
+  const gate = createAudibleVideoGate({
+    isMusicPlaying: () => musicPlaying,
+    setMusicPlaying: (next) => { musicPlaying = next },
+    isRadioPlaying: () => radioPlaying,
+    setRadioPlaying: (next) => {
+      radioPlaying = next
+      if (next) radioStarts++
+      else radioStops++
+    },
+  })
+
+  // Radio -> video -> close -> radio resumes live, music stays off
+  gate.videoWillPlay()
+  assert.equal(radioPlaying, false)
+  assert.equal(radioStops, 1)
+  assert.equal(musicPlaying, false)
+  assert.equal(gate.isMusicPausedByVideo(), true)
+
+  gate.videoDidClose()
+  assert.equal(radioPlaying, true)
+  assert.equal(radioStarts, 1)
+  assert.equal(musicPlaying, false)
+  assert.equal(gate.isMusicPausedByVideo(), false)
+})
+
+test('createAudibleVideoGate Watch flow pauses music and resumes on close, cancelling on manual touch', () => {
+  let musicPlaying = true
+  let radioPlaying = false
+  let videoPaused = 0
+  const gate = createAudibleVideoGate({
+    isMusicPlaying: () => musicPlaying,
+    setMusicPlaying: (next) => { musicPlaying = next },
+    isRadioPlaying: () => radioPlaying,
+    setRadioPlaying: (next) => { radioPlaying = next },
+    pauseActiveVideo: () => { videoPaused++ },
+  })
+
+  // Music -> Watch -> music paused then resumed
+  gate.videoWillPlay()
+  assert.equal(musicPlaying, false)
+  assert.equal(radioPlaying, false)
+  assert.equal(gate.isMusicPausedByVideo(), true)
+
+  gate.videoDidClose()
+  assert.equal(musicPlaying, true)
+  assert.equal(radioPlaying, false)
+
+  // Manual radio or music action during video -> no auto-resume on close
+  radioPlaying = true
+  musicPlaying = false
+  gate.videoWillPlay()
+  assert.equal(radioPlaying, false)
+  assert.equal(gate.isMusicPausedByVideo(), true)
+
+  radioPlaying = true
+  gate.musicTouched()
+  assert.equal(videoPaused, 1)
+  assert.equal(gate.isMusicPausedByVideo(), false)
+
+  radioPlaying = false
+  gate.videoDidClose()
+  assert.equal(radioPlaying, false)
+  assert.equal(musicPlaying, false)
+})
+
 test('formatFootageMenuLabel separates studio footage from snippets and omits rights-blocked items', () => {
   assert.equal(formatFootageMenuLabel([
     { entry: { path: 'Footage/Music Box Juice WRLD Into the Abyss.mp4', name: 'Music Box Juice WRLD Into the Abyss.mp4' } },
@@ -252,4 +323,14 @@ test('buildVideoTitleKeySet and songHasVideoMatch exclude rights-blocked videos 
   assert.equal(songHasVideoMatch({ name: 'Condone It (v1)' }, keys), true)
   assert.equal(songHasVideoMatch({ name: 'Wishing Well' }, keys), false)
   assert.equal(songHasVideoMatch({ name: 'Music Box Juice WRLD Into the Abyss' }, keys), false)
+})
+
+test('videoHasNoSound only flags a playing, unmuted video that decoded no audio', () => {
+  const base = { muted: false, paused: false, currentTime: 3, webkitAudioDecodedByteCount: 0 }
+  assert.equal(videoHasNoSound(base), true)
+  assert.equal(videoHasNoSound({ ...base, webkitAudioDecodedByteCount: 4096 }), false)
+  assert.equal(videoHasNoSound({ ...base, muted: true }), false)
+  assert.equal(videoHasNoSound({ ...base, paused: true }), false)
+  assert.equal(videoHasNoSound({ ...base, currentTime: 0.5 }), false)
+  assert.equal(videoHasNoSound({ muted: false, paused: false, currentTime: 3 }), false)
 })

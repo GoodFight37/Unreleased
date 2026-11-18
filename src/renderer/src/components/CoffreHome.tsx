@@ -354,8 +354,8 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
             >
               <button
                 className="coffre-hero-art"
-                onClick={() => hero ? playTrack(hero) : openCatalogue()}
-                aria-label={hero ? `Play ${hero.title}` : 'Explore the catalogue'}
+                onClick={handleHeroPrimary}
+                aria-label={hero ? `${heroPlaying ? 'Pause' : isHeroCurrent ? 'Resume' : 'Play'} ${hero.title}` : 'Explore the catalogue'}
                 onContextMenu={hero ? (event) => openContext(hero, event) : undefined}
               >
                 {hero ? <AlbumArtThumbnail track={hero} fill eager res={512} className="coffre-hero-cover" /> : <Disc3 size={68} aria-hidden />}
@@ -416,8 +416,8 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
           >
             <button
               className="coffre-hero-art"
-              onClick={() => hero ? playTrack(hero) : openCatalogue()}
-              aria-label={hero ? `Play ${hero.title}` : 'Explore the catalogue'}
+              onClick={handleHeroPrimary}
+              aria-label={hero ? `${heroPlaying ? 'Pause' : isHeroCurrent ? 'Resume' : 'Play'} ${hero.title}` : 'Explore the catalogue'}
               onContextMenu={hero ? (event) => openContext(hero, event) : undefined}
             >
               {hero ? <AlbumArtThumbnail track={hero} fill eager res={512} className="coffre-hero-cover" /> : <Disc3 size={68} aria-hidden />}

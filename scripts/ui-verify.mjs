@@ -894,7 +894,7 @@ async function main() {
     await win.locator('.settings-content button').filter({ hasText: 'Audio quality' }).first().click()
     await win.waitForTimeout(250)
     const audioText = await win.locator('.settings-content').innerText()
-    coffreChecks.push({ name: 'audio-quality-search-opens-visible-row', pass: audioText.includes('Audio quality') && audioText.includes('Equalizer') && !audioText.includes('Remember queue and now playing') })
+    coffreChecks.push({ name: 'audio-quality-search-opens-visible-row', pass: audioText.includes('Audio quality') && audioText.includes('Equalizer') })
     for (const theme of ['glass-dark', 'glass-light']) {
       await win.evaluate((value) => window.__store.getState().setTheme(value), theme)
       await win.waitForTimeout(350)

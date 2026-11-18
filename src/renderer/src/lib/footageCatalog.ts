@@ -249,9 +249,9 @@ export function formatFootageMenuLabel(
   return `Watch footage (${studio})`
 }
 
-/** One audible source at a time: pauses music when a video with sound starts,
- *  and resumes music on close only if it was playing and the user didn't touch
- *  the music controls while the video was open. */
+/** One audible source at a time: pauses music and 999 FM radio when a video
+ *  with sound starts, and resumes whichever was playing on close only if the
+ *  user didn't touch audio controls while the video was open. */
 export interface AudibleVideoGate {
   videoWillPlay: () => void
   videoDidClose: () => void
@@ -262,36 +262,48 @@ export interface AudibleVideoGate {
 export function createAudibleVideoGate(deps: {
   isMusicPlaying: () => boolean
   setMusicPlaying: (playing: boolean) => void
+  isRadioPlaying?: () => boolean
+  setRadioPlaying?: (playing: boolean) => void
   pauseActiveVideo?: () => void
 }): AudibleVideoGate {
-  let resumeAfterVideo = false
+  let resumeMusicAfterVideo = false
+  let resumeRadioAfterVideo = false
   let touchedDuringVideo = false
   let videoOpen = false
   return {
     videoWillPlay: () => {
+      const musicPlaying = deps.isMusicPlaying()
+      const radioPlaying = deps.isRadioPlaying?.() ?? false
       if (!videoOpen) {
-        resumeAfterVideo = deps.isMusicPlaying()
+        resumeMusicAfterVideo = musicPlaying
+        resumeRadioAfterVideo = radioPlaying
         touchedDuringVideo = false
         videoOpen = true
-      } else if (deps.isMusicPlaying()) {
-        resumeAfterVideo = true
+      } else {
+        if (musicPlaying) resumeMusicAfterVideo = true
+        if (radioPlaying) resumeRadioAfterVideo = true
       }
-      if (deps.isMusicPlaying()) deps.setMusicPlaying(false)
+      if (musicPlaying) deps.setMusicPlaying(false)
+      if (radioPlaying) deps.setRadioPlaying?.(false)
     },
     videoDidClose: () => {
       if (!videoOpen) return
-      const shouldResume = resumeAfterVideo && !touchedDuringVideo
+      const shouldResumeMusic = resumeMusicAfterVideo && !touchedDuringVideo
+      const shouldResumeRadio = resumeRadioAfterVideo && !touchedDuringVideo
       videoOpen = false
-      resumeAfterVideo = false
+      resumeMusicAfterVideo = false
+      resumeRadioAfterVideo = false
       touchedDuringVideo = false
-      if (shouldResume) deps.setMusicPlaying(true)
+      if (shouldResumeMusic) deps.setMusicPlaying(true)
+      if (shouldResumeRadio) deps.setRadioPlaying?.(true)
     },
     musicTouched: () => {
       if (!videoOpen) return
       touchedDuringVideo = true
       deps.pauseActiveVideo?.()
     },
-    isMusicPausedByVideo: () => videoOpen && resumeAfterVideo && !touchedDuringVideo,
+    isMusicPausedByVideo: () =>
+      videoOpen && (resumeMusicAfterVideo || resumeRadioAfterVideo) && !touchedDuringVideo,
   }
 }
 
@@ -326,4 +338,10 @@ export function songHasVideoMatch(song: Pick<JWApiSong, 'name' | 'track_titles'>
     if (videoKeys.has(cleanFootageTitleKey(alias))) return true
   }
   return false
+}
+
+/** True once a video that has played for a moment, with sound on, has decoded no audio at all: the file has no
+ *  audio track (or one this player can't decode). Chromium's `webkitAudioDecodedByteCount` is the only signal. */
+export function videoHasNoSound(v: { muted: boolean; paused: boolean; currentTime: number; webkitAudioDecodedByteCount?: number }): boolean {
+  return !v.muted && !v.paused && v.currentTime > 1.5 && v.webkitAudioDecodedByteCount === 0
 }

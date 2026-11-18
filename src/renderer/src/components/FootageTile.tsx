@@ -7,9 +7,11 @@ import { liveVisualsAllowed, useEffectsState } from '../lib/effectsPreference'
 import { videoFrameShape, windowForPath, type PreviewWindowResult, type VideoFrameShape } from '../lib/previewWindow'
 import {
   createAudibleVideoGate,
+  videoHasNoSound,
   type FootageFamily,
   type FootageSongLink,
 } from '../lib/footageCatalog'
+import { getActiveRadioClient } from '../lib/radioSocketService'
 import { useStore } from '../store/useStore'
 
 export interface FootageTileItem {
@@ -76,6 +78,23 @@ export const footageModalVideoGate = createAudibleVideoGate({
   setMusicPlaying: (playing) => {
     suppressingGateSync = true
     try { useStore.getState().setIsPlaying(playing) } finally { suppressingGateSync = false }
+  },
+  isRadioPlaying: () => {
+    const s = useStore.getState()
+    return s.radioFmActive && !s.radioFmPaused
+  },
+  setRadioPlaying: (playing) => {
+    suppressingGateSync = true
+    try {
+      const client = getActiveRadioClient()
+      if (playing) {
+        if (useStore.getState().radioFmActive) void client?.startListening().catch(() => {})
+      } else {
+        client?.stopListening()
+      }
+    } finally {
+      suppressingGateSync = false
+    }
   },
   pauseActiveVideo: () => {
     if (activeModalVideo && !activeModalVideo.paused) activeModalVideo.pause()
@@ -488,10 +507,13 @@ export function FootagePlayerModal({
 }): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const isPlaying = useStore((s) => s.isPlaying)
+  const isRadioPlaying = useStore((s) => s.radioFmActive && !s.radioFmPaused)
   const { reducedMotion } = useEffectsState()
   const [musicPausedByVideo, setMusicPausedByVideo] = useState(false)
+  const [noSound, setNoSound] = useState(false)
 
   useEffect(() => {
+    setNoSound(false)
     stopActiveHoverPreview()
     footageModalVideoGate.videoWillPlay()
     setMusicPausedByVideo(footageModalVideoGate.isMusicPausedByVideo())
@@ -505,11 +527,13 @@ export function FootagePlayerModal({
   }, [item.path])
 
   useEffect(() => {
-    if (isPlaying && !suppressingGateSync) {
+    if (suppressingGateSync) return
+    const s = useStore.getState()
+    if (s.isPlaying || (s.radioFmActive && !s.radioFmPaused)) {
       footageModalVideoGate.musicTouched()
       setMusicPausedByVideo(footageModalVideoGate.isMusicPausedByVideo())
     }
-  }, [isPlaying])
+  }, [isPlaying, isRadioPlaying])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -545,6 +569,7 @@ export function FootagePlayerModal({
             footageModalVideoGate.videoWillPlay()
             setMusicPausedByVideo(footageModalVideoGate.isMusicPausedByVideo())
           }}
+          onTimeUpdate={(e) => { if (!noSound && videoHasNoSound(e.currentTarget)) setNoSound(true) }}
         />
         <div className="coffre-vplay-bar">
           {musicPausedByVideo && (
@@ -559,6 +584,7 @@ export function FootagePlayerModal({
               </button>
             </>
           )}
+          {noSound && <span className="coffre-chip" title="The archive file has no audio track">No sound in this file</span>}
           <span className="font-semibold truncate">{cleanFootageDisplayTitle(item.title)}</span>
         </div>
       </div>
