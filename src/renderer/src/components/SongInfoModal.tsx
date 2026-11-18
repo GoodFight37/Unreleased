@@ -11,7 +11,8 @@ import { useStore, useStorePick, IS_FLOAT_WINDOW } from '../store/useStore'
 import { useDragToDismiss } from '../hooks/useDragToDismiss'
 import { useCanEdit } from '../hooks/useChannelRoles'
 import { attachToMainWindow, sendPlayerCommand } from '../lib/windowSync'
-import { JWApiSong, CATEGORY_LABELS, CATEGORY_COLORS, buildImageUrl, parseDuration, getSongById, loadAllSongs, resolvePrefCoverUrl } from '../lib/juicewrldApi'
+import { SongTruthLineLive } from './SongTruthLine'
+import { JWApiSong, buildImageUrl, parseDuration, getSongById, loadAllSongs, resolvePrefCoverUrl } from '../lib/juicewrldApi'
 import { isReleasedPath, loadMusicVideoIndex, videoFromPath, videosFor, VIDEO_KIND_LABEL, type MusicVideo } from '../lib/musicVideos'
 import { clearMusicVideoDefault, getMusicVideoDefaults, onMusicVideoDefaultsChange, setMusicVideoDefault } from '../lib/musicVideoDefaultsApi'
 import { openInFiles } from './SongContextMenu'
@@ -431,8 +432,6 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
   // because it happened to sort first.
   const altTitles = (displaySong.track_titles ?? []).filter(t => t && t !== apiPrimaryTitle)
   const duration = formatDuration(parseDuration(displaySong.length), '—')
-  const catColor = CATEGORY_COLORS[displaySong.category] ?? 'bg-surface-overlay text-text-muted border-[var(--border)]'
-  const catLabel = CATEGORY_LABELS[displaySong.category] ?? displaySong.category
 
   const hasInstrumentals = displaySong.instrumentals || displaySong.instrumental_names
   const hasSession = displaySong.session_titles || displaySong.session_tracking
@@ -603,21 +602,11 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
             </div>
             <div className="flex-1 min-w-0 pb-0.5">
               <h2 className="text-white font-bold text-xl leading-tight">{primaryTitle}</h2>
-              {altTitles.length > 0 && (
-                <p className="text-white/50 text-xs mt-0.5 truncate italic">aka {altTitles.join(' · ')}</p>
-              )}
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${catColor}`}>
-                  {catLabel}
-                </span>
+              <SongTruthLineLive song={displaySong} className="mt-1.5" />
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                 {displaySong.era?.name && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/60 border border-white/15">
                     {displaySong.era.name}
-                  </span>
-                )}
-                {displaySong.leak_type && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full text-white/60 border border-white/20">
-                    {displaySong.leak_type}
                   </span>
                 )}
                 {!!parseDuration(displaySong.length) && (

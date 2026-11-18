@@ -199,6 +199,7 @@ test('unverified sessionedit:// markers on other songs are NOT treated as availa
     useVirtualWindow: () => ({ start: 0, end: 3, totalHeight: 150 }),
     groupCategory: () => 'unreleased',
     hasDirectAudioPath: (s) => !!s.path && !s.path.startsWith('sessionedit://'),
+    songTruth: () => ({ kindLabel: 'Unreleased' }),
     songToTrack,
     CompactGroupRow: 'CompactGroupRow',
     SongRow: 'SongRow',

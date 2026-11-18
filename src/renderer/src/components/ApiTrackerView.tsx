@@ -42,6 +42,7 @@ import { useVirtualWindow, useVariableVirtualWindow } from '../hooks/useVirtualW
 import { runLog } from '../lib/runLog'
 import { showAppToast } from '../lib/appToast'
 import { useSongAvailability } from '../hooks/useSongAvailability'
+import { songTruth } from '../lib/songTruth'
 import { hasDirectAudioPath, isPlayableSong } from '../lib/songVersions'
 import { isSessionEditPlaceholder } from '../lib/sessionEditLinksMirror'
 import { formatDuration, displayDate, dateSortValue, compareDates } from '../lib/format'
@@ -1079,7 +1080,7 @@ function CompactGroupList({
                 onToggle={() => onToggleGroup(row.group)}
                 onContextMenu={(e) => onGroupContextMenu(row.group, e)}
                 onPlay={canPlayLead ? () => onPlay(lead) : undefined}
-                categoryLabel={CATEGORY_LABELS[cat] ?? cat}
+                categoryLabel={cat === lead.category ? songTruth(lead, canPlayLead).kindLabel : (CATEGORY_LABELS[cat] ?? cat)}
                 categoryClassName={CATEGORY_COLORS[cat]}
               />
             </div>

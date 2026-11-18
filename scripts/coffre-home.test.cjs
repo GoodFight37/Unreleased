@@ -9,7 +9,8 @@ const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/ren
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
 }).outputText
 
-function render({ catalogue = [], catalogueState = 'ready', recent = [], fileIndex = null, currentTrack = null, theme = 'glass-dark', adaptiveColors = false, effects = { reducedMotion: false, gameMode: false } } = {}) {
+function render({ catalogue = [], catalogueState = 'ready', recent = [], fileIndex = null, currentTrack = null, theme = 'glass-dark', adaptiveColors = false, effects = { reducedMotion: false, gameMode: false }, selectedEra = null, eraRecords = [] } = {}) {
+  let stateCalls = 0
   const calls = []
   const action = (name) => (...args) => calls.push({ name, args })
   const state = { theme, adaptiveColors, currentTrack, playTrack: action('play'), playNext: action('next'), setActiveView: action('view'), setInfoSongId: action('info'), setApiTrackerCategory: action('category'), setApiTrackerEra: action('era'), setApiTrackerTab: action('tab') }
@@ -36,13 +37,15 @@ function render({ catalogue = [], catalogueState = 'ready', recent = [], fileInd
     exports,
     require: (name) => {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
-      if (name === 'react') return { useMemo: (fn) => fn(), useState: (init) => [typeof init === 'function' ? false : init, () => {}], useEffect: () => {}, useRef: (v) => ({ current: v }) }
+      if (name === 'react') return { useMemo: (fn) => fn(), useState: (init) => [stateCalls++ === 3 ? selectedEra : (typeof init === 'function' ? false : init), () => {}], useEffect: () => {}, useRef: (v) => ({ current: v }) }
       if (name.endsWith('/useStore')) return { useStorePick: () => state, useStore: { getState: () => state } }
       if (name.endsWith('/useChannelRoles')) return { useCanEdit: () => false }
       if (name.endsWith('/juicewrldApi')) return { buildImageUrl: (url) => url, songToTrack: (song) => ({ id: `jw-${song.id}`, title: song.name, path: song.path, era: song.era?.name }) }
       if (name.endsWith('/eraLook')) return require('../src/renderer/src/lib/eraLook.ts')
       if (name.endsWith('/apiTrackerShared')) return { saveTrackerSearch: () => {} }
-      if (name.endsWith('/eras')) return { eraLabel: (name) => name }
+      if (name.endsWith('/eras')) return { eraLabel: (name) => name, listEras: () => eraRecords, loadEraFullNames: async () => {} }
+      if (name.endsWith('/songVersions')) return { hasDirectAudioPath: (song) => !!song.path }
+      if (name.endsWith('/SongTruthLine')) return { SongTruthLine: () => null, SongTruthLineLive: () => null }
       if (name.endsWith('/userApi')) return { trackIdToSongId: (id) => /^jw-\d+$/.test(id) ? Number(id.slice(3)) : null }
       if (name.endsWith('/skins')) return require('../src/renderer/src/lib/skins.ts')
       if (name.endsWith('/effectsPreference')) return { useEffectsState: () => effects }
@@ -97,8 +100,9 @@ test('vault discovery includes playable unreleased tracks and sorts eras chronol
   assert.equal(cards.length, 2)
   assert.deepEqual(cards.map((card) => card.props['aria-label']), ['Play Song 1', 'Play Song 5'])
   assert.equal(result.find('coffre-era').length, 2)
+  // an era click opens the inline era panel now; the Catalogue is reached through its "Open in Catalogue" button
   result.find('coffre-era')[0].props.onClick()
-  assert.deepEqual(result.calls.map((call) => [call.name, ...call.args]), [['category', 'unreleased'], ['era', 'GB&GR'], ['tab', 'songs'], ['view', 'api-tracker']])
+  assert.deepEqual(result.calls, [])
 })
 
 test('history drops unplayable metadata and the hero does not create a queue missing its current track', () => {
@@ -201,4 +205,21 @@ test('thisWeekRecorded includes recorded dates within +/-3 days, excludes File E
   const result = render({ catalogue: weekSongs, fileIndex })
   assert.equal(result.find('coffre-discover-hero coffre-reveal').length, 1)
   assert.ok(result.nodes.some((node) => node.type === 'h2' && node.props.id === 'coffre-studio-head'))
+})
+
+test('an opened era shows the API description and period, and Open in Catalogue keeps the old path', () => {
+  const eraRecords = [{ id: 1, name: 'GB&GR', description: 'API era text', time_frame: 'API period' }]
+  const result = render({ catalogue: [song(5, 'unreleased', 'five.mp3', 'GB&GR')], selectedEra: 'GB&GR', eraRecords })
+  const text = (node) => Array.isArray(node) ? node.map(text).join(' ') : typeof node === 'string' ? node : node?.props ? text(node.props.children) : ''
+  const panel = result.nodes.find((node) => node.props.role === 'region')
+  assert.ok(panel, 'panel is rendered')
+  assert.match(text(panel), /API era text/)
+  assert.match(text(panel), /API period/)
+  const open = result.nodes.find((node) => node.props.className === 'coffre-secondary' && /Open in Catalogue/.test(text(node)))
+  open.props.onClick()
+  assert.deepEqual(result.calls.map((call) => [call.name, ...call.args]), [['category', 'unreleased'], ['era', 'GB&GR'], ['tab', 'songs'], ['view', 'api-tracker']])
+})
+test('no era panel until an era is selected', () => {
+  const result = render({ catalogue: [song(5, 'unreleased', 'five.mp3', 'GB&GR')] })
+  assert.equal(result.nodes.find((node) => node.props.role === 'region'), undefined)
 })
