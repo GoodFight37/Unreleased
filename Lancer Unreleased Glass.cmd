@@ -9,8 +9,15 @@ if not exist "node_modules\electron\dist\electron.exe" (
   pause
   exit /b 1
 )
-if not exist "dist\index.html" (
-  echo Preparation du premier lancement...
+rem Reconstruit dist si absent, ou si un fichier de src\ ou electron\ est plus recent que lui.
+set "REBUILD="
+if not exist "dist\index.html" set "REBUILD=1"
+if not defined REBUILD (
+  powershell -NoProfile -Command "$d=(Get-Item 'dist\index.html').LastWriteTime; if (Get-ChildItem src,electron,package.json -Recurse -File | Where-Object { $_.LastWriteTime -gt $d } | Select-Object -First 1) { exit 1 }"
+  if errorlevel 1 set "REBUILD=1"
+)
+if defined REBUILD (
+  echo Mise a jour de l'application avec les derniers changements...
   call npm run build
   if errorlevel 1 (
     pause
