@@ -47,6 +47,33 @@ export const WRLD_FAN_LYRICS: readonly { id: WrldFanLyricId; label: string; subt
   { id: 'fisheye', label: '999', subtitle: '3D lyric-edit lens' },
 ]
 
+/** Post frames: how WRLD's lyrics are laid out once Post hides the player. */
+export type WrldFrameId = 'classic' | 'word' | 'quiet' | '999'
+export const WRLD_FRAMES: readonly { id: WrldFrameId; label: string }[] = [
+  { id: 'classic', label: 'Classic' },
+  { id: 'word', label: 'Word' },
+  { id: 'quiet', label: 'Quiet' },
+  { id: '999', label: '999' },
+]
+export const normalizeWrldFrame = (v: unknown): WrldFrameId => WRLD_FRAMES.find((f) => f.id === v)?.id ?? 'classic'
+
+/** The words' color in Post: white unless the user turns on one of the two others. */
+export type WrldInk = 'white' | 'accent' | 'yellow'
+export const normalizeWrldInk = (v: unknown): WrldInk => (v === 'accent' || v === 'yellow' ? v : 'white')
+
+/** Classic frame: a word-timed line cut into pieces of at most `max` words, evenly, so no 1-2 word tail is left. */
+export function chunkWords<T>(words: readonly T[], max = 6): T[][] {
+  const count = Math.ceil(words.length / max)
+  const out: T[][] = []
+  let at = 0
+  for (let i = 0; i < count; i++) {
+    const size = Math.ceil((words.length - at) / (count - i))
+    out.push(words.slice(at, at + size))
+    at += size
+  }
+  return out
+}
+
 export function normalizeWrldBackdrop(v: unknown): WrldBackdropMode {
   if (v === 'off' || v === 'glass' || v === 'mesh') return v
   return 'mesh'

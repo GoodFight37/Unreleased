@@ -46,5 +46,6 @@ export const FACES = [
 ]
 export const STANDARD_FACE = 'Georgia'
 
+// A key with a comma is a whole font stack (lib/fonts.ts), as WRLD's Post frames pass the user's font.
 export const faceCSS = (key: string, size: number): string =>
-  (FACES.find((f) => f.key === key) || FACES[0]).css.replace('{size}', size.toFixed(2))
+  (FACES.find((f) => f.key === key)?.css ?? (key.includes(',') ? `700 {size}px ${key}` : FACES[0].css)).replace('{size}', size.toFixed(2))

@@ -27,9 +27,11 @@ interface Props {
   syncedLines: SyncedLyricLine[]
   artUrl: string | null | undefined
   lightBg?: boolean
+  /** A font stack to set the style in instead of its own face (WRLD's Post font picker). */
+  face?: string
 }
 
-export default function LyricStageView({ look, trackId, title, artist, duration, rawLyrics, isSynced, syncedLines, artUrl, lightBg }: Props): JSX.Element {
+export default function LyricStageView({ look, trackId, title, artist, duration, rawLyrics, isSynced, syncedLines, artUrl, lightBg, face }: Props): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<LyricStage | null>(null)
   const lyricsOffset = useStore((s) => s.lyricsOffset)
@@ -90,8 +92,8 @@ export default function LyricStageView({ look, trackId, title, artist, duration,
     stage.use(look)
     // Out of sight it's emptied rather than kept up: even setting a new song's words out costs a frame or two.
     if (!seen || !song.lyrics.lines.length || !clock) { stage.stop(); return }
-    stage.show(song, { clock, isSeen: true, colors, face: lyricFontFor(fonts, stage.look), scale, tune, seek })
-  }, [look, song, clock, seen, colors, fonts, scale, tune, seek])
+    stage.show(song, { clock, isSeen: true, colors, face: face ?? lyricFontFor(fonts, stage.look), scale, tune, seek })
+  }, [look, song, clock, seen, colors, fonts, scale, tune, seek, face])
 
   return (
     <div className="relative flex-1 min-h-0" onWheel={(e) => stageRef.current?.scrollBy(e.deltaY)}>

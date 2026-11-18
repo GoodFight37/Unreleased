@@ -1,5 +1,8 @@
 import { effectsMotionMedia, useEffectsState } from '../lib/effectsPreference'
-import { isWrldFanLyricId, resolveWrldEra } from '../lib/wrldAtmospheres'
+import { chunkWords, isWrldFanLyricId, resolveWrldEra } from '../lib/wrldAtmospheres'
+import { getFont } from '../lib/fonts'
+import { useAlbumColors } from '../desktop/artColors'
+import { hsbToRgb } from '../desktop/light/engine'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
 import SongFootagePill from './SongFootagePill'
 import { SwapIcon } from './PlayerMotion'
@@ -313,7 +316,9 @@ export default function WrldView(): JSX.Element {
   const developerMode = useStore(s => s.developerMode)
   const savedWrldWidgets = useVizStore(s => s.wrldWidgets)
   const wrldWidgets = developerMode && savedWrldWidgets
-  const hideForViz = wrldWidgets ? { display: 'none' } : undefined
+  // Post: the lyrics alone on the stage (WrldPostFrame); the player, cover, title and menus step aside.
+  const postOn = useVizStore(s => s.wrldPost !== 'off')
+  const hideForViz = wrldWidgets || postOn ? { display: 'none' } : undefined
 
   const videoShown = useVizStore(s => s.wrldVideoShown)
   const artTextIsDark = useArtTextContrast(artSrc, artError, isDarkSkin, radioFmActive, useThemeBackground ? !isDarkSkin : null)
@@ -814,8 +819,9 @@ export default function WrldView(): JSX.Element {
               needs something solid behind it here, because unlike mobile this
               page renders over a still-mounted bgView (App.tsx), so the page
               you came from bled through those corners. */}
-          <div className={`absolute inset-0 overflow-hidden ${!useThemeBackground && textIsDark ? 'bg-[#f4f3f7]' : 'bg-black'}`} style={{ contain: 'strict' }}>
-            {useThemeBackground ? (
+          {/* Post always gets the art/mesh stage under a dark veil, so its white words stay readable on a light cover. */}
+          <div className={`absolute inset-0 overflow-hidden ${!useThemeBackground && textIsDark && !postOn ? 'bg-[#f4f3f7]' : 'bg-black'}`} style={{ contain: 'strict' }}>
+            {useThemeBackground && !postOn ? (
               <div
                 className="absolute inset-0 bg-surface"
                 style={gradientsEnabled ? {
@@ -836,17 +842,18 @@ export default function WrldView(): JSX.Element {
                 artUrl={artSrc && !artError ? artSrc : null}
                 eraAsset={stageEra.eraAsset}
                 atmosphere={stageEra.atmosphere}
-                isDark={!textIsDark}
+                isDark={postOn || !textIsDark}
                 playing={playbackActive}
                 animated={stageAnimated && wrldAtmosphere === 'mesh'}
               />
             )}
-            {!useThemeBackground && (
+            {(!useThemeBackground || postOn) && (
               <>
-                <div className={`absolute inset-0 pointer-events-none ${textIsDark ? 'mesh-vignette--light' : 'mesh-vignette'}`} />
+                <div className={`absolute inset-0 pointer-events-none ${textIsDark && !postOn ? 'mesh-vignette--light' : 'mesh-vignette'}`} />
                 <div className="app-grain" />
               </>
             )}
+            {postOn && <div className="absolute inset-0 pointer-events-none bg-black/30" />}
           </div>
 
           <WrldVisualizer
@@ -867,8 +874,11 @@ export default function WrldView(): JSX.Element {
               onPopOutMini={isElectronApp ? () => elFullscreen?.openFloatWindow?.('mini-player') : undefined}
             />
 
-          {wrldWidgets && <WrldWidgets />}
-          {wrldWidgets && <WrldFmWidget />}
+          {wrldWidgets && !postOn && <WrldWidgets />}
+          {wrldWidgets && !postOn && <WrldFmWidget />}
+          {postOn && (
+            <WrldPostFrame rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} currentTrack={currentTrack} artUrl={artSrc && !artError ? artSrc : null} />
+          )}
 
           {/* Mobile layout */}
           <div className="md:hidden relative z-20 flex flex-col h-full min-h-0" style={hideForViz}>
@@ -2316,7 +2326,7 @@ const ProgressBar = memo(function ProgressBar({ txtPri, txtTer, trackBg }: { txt
 
 // ── LyricsPanel - module-level component so it has its own Zustand selector ──
 
-import type { SyncedLyricLine, Track } from '../types'
+import type { SyncedLyricLine, SyncedLyricWord, Track } from '../types'
 
 interface LyricsPanelProps {
   rawLyrics: string | null
@@ -2701,6 +2711,145 @@ const LyricsPanel = memo(function LyricsPanel({
       >{splitAdLibs(rawLyrics).map((seg, si) => (
         <span key={si} style={seg.adLib ? { opacity: ADLIB_OPACITY } : undefined}>{seg.text}</span>
       ))}</pre>
+    </div>
+  )
+})
+
+// ── Post frame - WRLD's lyrics alone on the stage, ready to screen-record and post ──
+// Classic: the sung line, at most six words at a time. Word: the word being sung, very large, the line small under
+// it. Quiet: one line, Serif, lots of air. 999: the fisheye as it is. Story crops the same frame to 9:16.
+
+const INK_WHITE = '255 255 255'
+const INK_YELLOW = '255 214 10'
+
+const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedLines, currentTrack, artUrl }: {
+  rawLyrics: string | null
+  isSynced: boolean
+  syncedLines: SyncedLyricLine[]
+  currentTrack: Track | null
+  artUrl: string | null
+}): JSX.Element {
+  const { frame, ink, postFont, story } = useVizStore(useShallow(s => ({
+    frame: s.wrldFrame, ink: s.wrldInk, postFont: s.wrldPostFont, story: s.wrldPost === 'story',
+  })))
+  const lyricsFont = useStore(s => s.lyricsFont)
+  const lyricsOffset = useStore(s => s.lyricsOffset)
+  // The cover's color as the lyric styles already measure it; only looked up when Accent is on.
+  const colors = useAlbumColors(ink === 'accent' ? artUrl : null)
+
+  const timed = isSynced && syncedLines.length > 0
+  const [pos, setPos] = useState({ line: -1, word: -1 })
+  useEffect(() => {
+    if (!timed || frame === '999') return
+    let raf = 0
+    const tick = (): void => {
+      if (document.hidden) { raf = 0; return }
+      // shortcut: the live play position, not LyricsPanel's 999 FM pause hold; the FM pause only freezes lines there.
+      const t = playingSeconds() - lyricsOffset
+      const line = getCurrentLineIndex(syncedLines, t)
+      const words = syncedLines[line]?.words
+      let word = -1
+      if (words) while (word + 1 < words.length && words[word + 1].start <= t) word++
+      setPos(p => (p.line === line && p.word === word ? p : { line, word }))
+      raf = requestAnimationFrame(tick)
+    }
+    const onVis = (): void => {
+      if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
+      else if (!raf) raf = requestAnimationFrame(tick)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    raf = requestAnimationFrame(tick)
+    return () => { document.removeEventListener('visibilitychange', onVis); cancelAnimationFrame(raf) }
+  }, [timed, frame, syncedLines, lyricsOffset])
+
+  const line = pos.line >= 0 ? syncedLines[pos.line] : null
+  const words = line?.words
+  const chunks = useMemo(() => (words ? chunkWords(words) : null), [words])
+
+  // The frame's own font unless one is picked: the lyrics font, Serif for Quiet, the fisheye's own face for 999.
+  const fontId = postFont ?? (frame === 'quiet' ? 'serif' : frame === '999' ? null : lyricsFont)
+  const stack = fontId ? getFont(fontId).stack : undefined
+
+  let inkRgb: string | null = INK_WHITE
+  if (ink === 'yellow') inkRgb = INK_YELLOW
+  else if (ink === 'accent') {
+    // Lifted so the color still reads as text over the dark stage.
+    inkRgb = colors
+      ? hsbToRgb({ ...colors.primary, saturation: Math.min(colors.primary.saturation, 0.8), brightness: Math.max(colors.primary.brightness, 0.92) })
+          .map(v => Math.round(v * 255)).join(' ')
+      : null
+  }
+  // WordLyricLine's fill and glow mix in --accent, so the ink is scoped there too.
+  const inkStyle = (inkRgb
+    ? { color: `rgb(${inkRgb})`, '--accent': `rgb(${inkRgb})`, '--accent-rgb': inkRgb }
+    : { color: 'var(--accent)' }) as React.CSSProperties
+
+  const sing = (ws: SyncedLyricWord[]): JSX.Element =>
+    <WordLyricLine words={ws} active getTime={playingSeconds} offset={lyricsOffset} fill />
+
+  let body: React.ReactNode = null
+  if (frame === '999') {
+    body = currentTrack && rawLyrics ? (
+      <div className="absolute inset-x-0 top-[12%] bottom-[12%] flex flex-col">
+        <LyricStageView look="fisheye" trackId={currentTrack.id} title={currentTrack.title} artist={currentTrack.artist}
+          duration={currentTrack.duration} rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines}
+          artUrl={artUrl} lightBg={false} face={stack} />
+      </div>
+    ) : null
+  } else if (!timed) {
+    body = rawLyrics
+      ? <p className="text-sm text-white/70" style={{ fontFamily: 'var(--font-app)' }}>These lyrics aren’t timed. The 999 frame can still sing them.</p>
+      : null
+  } else if (line?.text) {
+    if (frame === 'word') {
+      const cur = words?.[Math.max(pos.word, 0)]
+      body = cur ? (
+        <>
+          {/* The length term keeps a long word inside a narrow (Story) frame. */}
+          <p key={`${pos.line}-${pos.word}`} style={{ fontSize: `max(40px, min(22cqi, 22cqh, ${(160 / Math.max(cur.text.length, 1)).toFixed(1)}cqi))`, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em' }}>
+            {sing([cur])}
+          </p>
+          <p className="mt-[4cqh] max-w-[80%]" style={{ fontSize: 'max(14px, min(4.6cqi, 3.4cqh))', fontWeight: 500, lineHeight: 1.35, opacity: 0.72 }}>
+            {sing(words!)}
+          </p>
+        </>
+      ) : (
+        <p className="max-w-[86%]" style={{ fontSize: 'max(24px, min(10cqi, 7cqh))', fontWeight: 700, lineHeight: 1.15 }}>{line.text}</p>
+      )
+    } else if (frame === 'quiet') {
+      body = (
+        <p className="max-w-[72%]" style={{ fontSize: 'max(18px, min(5.2cqi, 4.2cqh))', fontWeight: 400, lineHeight: 1.45 }}>
+          {words ? sing(words) : line.text}
+        </p>
+      )
+    } else {
+      let ci = 0
+      if (chunks) for (let seen = 0, w = Math.max(pos.word, 0); ci < chunks.length - 1 && seen + chunks[ci].length <= w; ci++) seen += chunks[ci].length
+      body = (
+        <p key={`${pos.line}-${ci}`} className="max-w-[86%]" style={{ fontSize: 'max(24px, min(10cqi, 7cqh))', fontWeight: 700, lineHeight: 1.15, letterSpacing: '-0.01em' }}>
+          {chunks ? sing(chunks[ci]) : line.text}
+        </p>
+      )
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+      <div
+        className="relative flex flex-col items-center justify-center text-center overflow-hidden"
+        style={{
+          containerType: 'size',
+          // No text-shadow here: the sung word's fill is a transparent text fill, and a shadow would show through it.
+          fontFamily: stack ?? 'var(--font-lyrics)',
+          ...inkStyle,
+          // Story: the same frame in 9:16 with room above and below; the rest of the stage is veiled to show the crop.
+          ...(story
+            ? { height: 'calc(100% - 20vh)', aspectRatio: '9 / 16', boxShadow: '0 0 0 100vmax rgb(0 0 0 / 0.6)' }
+            : { width: '100%', height: '100%' }),
+        }}
+      >
+        {body}
+      </div>
     </div>
   )
 })

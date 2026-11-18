@@ -15,6 +15,8 @@ interface Props {
   getTime: () => number
   /** The lyrics offset, subtracted from getTime the way the line index is. */
   offset: number
+  /** Keep the sung word's fill when game mode or reduced motion turns the lift off (WRLD's Post frames). */
+  fill?: boolean
 }
 
 /**
@@ -22,10 +24,11 @@ interface Props {
  * word reveals with a damped spring and sweeps with an accent-kissed luminous
  * gradient across the active syllable without causing layout reflow.
  */
-export default memo(function WordLyricLine({ words, active, getTime, offset }: Props): JSX.Element {
+export default memo(function WordLyricLine({ words, active, getTime, offset, fill }: Props): JSX.Element {
   const { reducedMotion, gameMode } = useEffectsState()
   const wrldAnimations = useVizStore((s) => s.wrldAnimations)
   const liftWords = active && !reducedMotion && !gameMode && wrldAnimations
+  const fillWord = liftWords || (active && !!fill)
   const runs = useMemo(() => wordRuns(words), [words])
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([])
 
@@ -47,7 +50,7 @@ export default memo(function WordLyricLine({ words, active, getTime, offset }: P
       let n = 0
       while (n < words.length && words[n].start <= t) n++
       if (n !== last) { last = n; setSung(n) }
-      if (liftWords && n > 0 && n <= words.length) {
+      if (fillWord && n > 0 && n <= words.length) {
         const curIdx = n - 1
         const start = words[curIdx].start
         const nextStart = curIdx + 1 < words.length ? words[curIdx + 1].start : start + 0.45
@@ -68,13 +71,13 @@ export default memo(function WordLyricLine({ words, active, getTime, offset }: P
       document.removeEventListener('visibilitychange', onVis)
       cancelAnimationFrame(raf)
     }
-  }, [active, words, offset, getTime, liftWords])
+  }, [active, words, offset, getTime, fillWord])
 
   return (
     <>
       {runs.map((run, i) => {
         const isSung = i < sung
-        const isCurrent = liftWords && isSung && i === sung - 1 && !run.color
+        const isCurrent = fillWord && isSung && i === sung - 1 && !run.color
         return (
           <Fragment key={i}>
             {i > 0 && ' '}

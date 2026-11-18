@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft, Sparkles, Eye, EyeOff, Palette, Clapperboard } from 'lucide-react'
+import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft, Sparkles, Eye, EyeOff, Palette, Clapperboard, Smartphone, X } from 'lucide-react'
 import { Visualizer, VISUALIZERS, needsWebGL, type VizLayout } from '../lib/viz'
-import { WRLD_BACKDROPS, WRLD_CURATED_LYRICS, WRLD_FAN_LYRICS, resolveWrldEra } from '../lib/wrldAtmospheres'
+import { WRLD_BACKDROPS, WRLD_CURATED_LYRICS, WRLD_FAN_LYRICS, WRLD_FRAMES, resolveWrldEra } from '../lib/wrldAtmospheres'
+import { allFonts, listCustomFonts, subscribeCustomFonts } from '../lib/fonts'
 import { useEffectsState } from '../lib/effectsPreference'
 import { getAnalysisTap, resumeEffectsContext } from '../lib/audioEffects'
 import { smallCoverUrl } from '../lib/juicewrldApi'
@@ -290,7 +291,7 @@ export default function WrldVisualizer({
     setIdle(false)
     window.clearTimeout(idleTimer.current)
     idleTimer.current = window.setTimeout(() => {
-      if (!overToolbar.current && !toolbarRef.current?.contains(document.activeElement)) setIdle(true)
+      if (!overToolbar.current && !toolbarRef.current?.contains(document.activeElement) && !postBarRef.current?.contains(document.activeElement)) setIdle(true)
     }, IDLE_MS)
   }, [])
   useEffect(() => {
@@ -394,8 +395,18 @@ export default function WrldVisualizer({
     seenPanel.current = panel
     announce(panel === 'queue' ? 'Queue' : panel === 'radio' ? 'Radio' : panel === 'chat' ? 'Chat' : panel === 'lyrics' ? 'Lyrics' : 'Panel off')
   }, [panel, announce])
-  // Reset clean capture overlay when leaving WRLD so controls are never stuck hidden on next visit.
-  useEffect(() => () => { setWrldCleanView(false) }, [setWrldCleanView])
+  // Reset clean capture overlay and Post when leaving WRLD so controls are never stuck hidden on next visit.
+  useEffect(() => () => { setWrldCleanView(false); useVizStore.getState().setWrldPost('off') }, [setWrldCleanView])
+
+  // Post: the frame, font, ink and Story picks; Esc goes back to listening.
+  const { post, frame, ink, postFont, setWrldPost, setWrldFrame, setWrldInk, setWrldPostFont } = useVizStore(useShallow((s) => ({
+    post: s.wrldPost, frame: s.wrldFrame, ink: s.wrldInk, postFont: s.wrldPostFont,
+    setWrldPost: s.setWrldPost, setWrldFrame: s.setWrldFrame, setWrldInk: s.setWrldInk, setWrldPostFont: s.setWrldPostFont,
+  })))
+  useEscapeToClose(() => setWrldPost('off'), post !== 'off')
+  // Re-render when a font is added or removed elsewhere.
+  useSyncExternalStore(subscribeCustomFonts, listCustomFonts)
+  const postBarRef = useRef<HTMLDivElement>(null)
 
   // ←/→ in fullscreen and C for Clean stage. Capture phase so these run before
   // the Player's document-level hotkeys; anything else (Space, L, Escape) falls through.
@@ -468,6 +479,70 @@ export default function WrldVisualizer({
             held={covered}
             onUnsupported={() => setOverlayFailed(true)}
           />
+        </div>
+      )}
+
+      {/* Post's own bar: frame, font, word color, Story. Fades with the toolbar so a recording stays clean. */}
+      {/* Positioned by the wrapper: the GPU glass rule makes every .glass-bar position: relative. */}
+      {post !== 'off' && (
+        <div className="absolute bottom-6 inset-x-4 z-40 flex justify-center pointer-events-none">
+        <div
+          ref={postBarRef}
+          role="toolbar"
+          aria-label="Post frame"
+          className={`glass-bar pointer-events-auto flex items-center gap-0.5 p-[5px] max-w-full overflow-x-auto rounded-[14px] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl border border-[var(--border)] transition-[opacity,transform] duration-200 ${
+            idle ? 'opacity-0 translate-y-1.5 pointer-events-none' : ''
+          }`}
+          onMouseEnter={() => { overToolbar.current = true }}
+          onMouseLeave={() => { overToolbar.current = false; wake() }}
+        >
+          {WRLD_FRAMES.map((f) => (
+            <button
+              key={f.id}
+              className={`h-9 px-3 shrink-0 rounded-[10px] text-xs font-semibold transition-colors ${frame === f.id ? toolOn : toolIdle}`}
+              onClick={() => setWrldFrame(f.id)}
+              aria-pressed={frame === f.id}
+            >
+              {f.label}
+            </button>
+          ))}
+          <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
+          <select
+            value={postFont ?? ''}
+            onChange={(e) => setWrldPostFont(e.target.value || null)}
+            aria-label="Font"
+            title="Font"
+            className="h-9 px-2 shrink-0 max-w-[9rem] rounded-[10px] bg-transparent text-xs text-text-primary hover:bg-[var(--fill-strong)] [&>option]:bg-[var(--surface)]"
+          >
+            <option value="">Frame font</option>
+            {allFonts().map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+          <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
+          {(['accent', 'yellow'] as const).map((c) => (
+            <button
+              key={c}
+              className={`h-9 px-3 shrink-0 rounded-[10px] text-xs font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none ${ink === c ? toolOn : toolIdle}`}
+              onClick={() => setWrldInk(ink === c ? 'white' : c)}
+              disabled={frame === '999'}
+              aria-pressed={ink === c}
+              title={frame === '999' ? '999 keeps its own colors' : c === 'accent' ? 'Words in the cover color (off: white)' : 'Words in yellow (off: white)'}
+            >
+              {c === 'accent' ? 'Accent' : 'Yellow'}
+            </button>
+          ))}
+          <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
+          <button
+            className={`h-9 px-3 shrink-0 flex items-center gap-1.5 rounded-[10px] text-xs font-semibold transition-colors ${post === 'story' ? toolOn : toolIdle}`}
+            onClick={() => setWrldPost(post === 'story' ? 'post' : 'story')}
+            aria-pressed={post === 'story'}
+            title="Story: the same frame in 9:16"
+          >
+            <Smartphone size={14} />Story
+          </button>
+          <button className={`${tool} shrink-0 ${toolIdle}`} onClick={() => setWrldPost('off')} title="Back to listening (Esc)" aria-label="Back to listening">
+            <X size={16} />
+          </button>
+        </div>
         </div>
       )}
 
@@ -603,6 +678,22 @@ export default function WrldVisualizer({
           aria-pressed={wrldCleanView}
         >
           {wrldCleanView ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+        <button
+          className={`h-9 px-2.5 flex items-center rounded-[10px] text-[11px] font-semibold tracking-[0.06em] transition-colors disabled:opacity-30 disabled:pointer-events-none ${post !== 'off' ? toolOn : toolIdle}`}
+          onClick={() => {
+            const next = post === 'off' ? 'post' : 'off'
+            setWrldPost(next)
+            setShowAmbiance(false)
+            setShowSettings(false)
+            announce(next === 'post' ? 'Post' : 'Back to listening')
+          }}
+          disabled={!hasLyrics && post === 'off'}
+          title={post !== 'off' ? 'Back to listening (Esc)' : hasLyrics ? 'Post: the lyrics alone, ready to record' : 'Post needs lyrics'}
+          aria-label="Post"
+          aria-pressed={post !== 'off'}
+        >
+          Post
         </button>
         {developerMode && <>
         <span className="w-px h-5 mx-1 bg-[var(--border)]" />

@@ -4,6 +4,10 @@ import { normalizeMode, EDGE_PREFIX, type Boost, type Quality } from '../lib/viz
 import {
   normalizeWrldBackdrop,
   isWrldCuratedLyricId,
+  normalizeWrldFrame,
+  normalizeWrldInk,
+  type WrldFrameId,
+  type WrldInk,
   type WrldBackdropMode,
   type WrldCuratedLyricId,
 } from '../lib/wrldAtmospheres'
@@ -136,7 +140,19 @@ interface VizState {
   wrldLyricLook: WrldCuratedLyricId
   /** Hides chrome and playback controls in WRLD for clean screen-recording/captures. */
   wrldCleanView: boolean
+  /** Post frame, saved. */
+  wrldFrame: WrldFrameId
+  /** Post word color, saved. */
+  wrldInk: WrldInk
+  /** Post font id (lib/fonts.ts), or null for the frame's own. Saved. */
+  wrldPostFont: string | null
+  /** Post hides the player around the lyrics; Story crops the same frame to 9:16. Never saved. */
+  wrldPost: 'off' | 'post' | 'story'
 
+  setWrldFrame: (id: WrldFrameId) => void
+  setWrldInk: (ink: WrldInk) => void
+  setWrldPostFont: (id: string | null) => void
+  setWrldPost: (mode: 'off' | 'post' | 'story') => void
   setWrldAtmosphere: (id: WrldBackdropMode) => void
   setWrldAnimations: (on: boolean) => void
   setWrldLyricLook: (look: WrldCuratedLyricId) => void
@@ -173,6 +189,10 @@ export const useVizStore = create<VizState>((set) => ({
     return isWrldCuratedLyricId(v) ? v : 'classic'
   })(),
   wrldCleanView: false,
+  wrldFrame: normalizeWrldFrame(ls.get<unknown>('wrldFrame')),
+  wrldInk: normalizeWrldInk(ls.get<unknown>('wrldInk')),
+  wrldPostFont: ls.get<string>('wrldPostFont') ?? null,
+  wrldPost: 'off',
   wrldVideos: pick(ls.get('wrldVideos'), VIDEO_CHOICES, 'off'),
   wrldVideoShown: false,
   wrldVideoPicks: videoPicks(ls.get('wrldVideoPicks')),
@@ -227,6 +247,10 @@ export const useVizStore = create<VizState>((set) => ({
     }
   },
   setWrldCleanView: (wrldCleanView) => set({ wrldCleanView }),
+  setWrldFrame: (wrldFrame) => { set({ wrldFrame }); ls.set('wrldFrame', wrldFrame) },
+  setWrldInk: (wrldInk) => { set({ wrldInk }); ls.set('wrldInk', wrldInk) },
+  setWrldPostFont: (wrldPostFont) => { set({ wrldPostFont }); ls.set('wrldPostFont', wrldPostFont) },
+  setWrldPost: (wrldPost) => set({ wrldPost }),
   setWrldVideos: (wrldVideos) => { set({ wrldVideos }); ls.set('wrldVideos', wrldVideos) },
   setWrldVideoShown: (wrldVideoShown) => set({ wrldVideoShown }),
   setWrldVideoPick: (songPath, pick) => set((s) => {
@@ -267,6 +291,9 @@ if (typeof window !== 'undefined') {
       case 'wrldAtmosphere': useVizStore.setState({ wrldAtmosphere: normalizeWrldBackdrop(value) }); break
       case 'wrldAnimations': useVizStore.setState({ wrldAnimations: value !== false }); break
       case 'wrldLyricLook': if (isWrldCuratedLyricId(value)) useVizStore.setState({ wrldLyricLook: value }); break
+      case 'wrldFrame': useVizStore.setState({ wrldFrame: normalizeWrldFrame(value) }); break
+      case 'wrldInk': useVizStore.setState({ wrldInk: normalizeWrldInk(value) }); break
+      case 'wrldPostFont': useVizStore.setState({ wrldPostFont: typeof value === 'string' ? value : null }); break
       case 'wrldVideos': useVizStore.setState({ wrldVideos: pick(value, VIDEO_CHOICES, 'off') }); break
       case 'wrldVideoPicks': useVizStore.setState({ wrldVideoPicks: videoPicks(value) }); break
     }
