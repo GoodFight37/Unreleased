@@ -25,9 +25,15 @@ Footage shows a real frame from each video, loaded as you scroll, with a plain "
 
 The interface adds translucent glass controls and cover-inspired backgrounds. WRLD brings artwork and lyrics into one listening view, with clear ways to return to your music or change the atmosphere.
 
-## Windows installation
+## Installation
 
-Open [Releases](https://github.com/GoodFight37/Unreleased/releases), download the Windows installer and run it. Then open **Unreleased Glass** from the Start menu.
+Open [Releases](https://github.com/GoodFight37/Unreleased/releases) and download the file for your system:
+
+- **Windows:** the `.exe` installer. Run it, then open **Unreleased Glass** from the Start menu. Installed versions update themselves.
+- **Linux:** the `.AppImage`. Make it executable (`chmod +x`) and run it. The AppImage also updates itself.
+- **macOS:** the `.dmg` (Apple silicon and Intel). The app is not code-signed, so macOS may ask you to confirm the first launch. Updates are manual: download the new `.dmg` and replace the app.
+
+Windows is the platform that is used and tested the most. Linux builds are tested in CI; macOS builds are produced by CI but have not been checked on a real Mac. See [validation results and known limits](docs/VALIDATION.md).
 
 Installed versions check this repository for updates. Glass uses its own profile and keeps the original Unreleased installation separate. Before the first launch, close the original player so Glass can import its preferences. Imported offline files are copied, which can require extra disk space.
 
@@ -49,15 +55,24 @@ npm run build
 npm run electron:dev
 ```
 
-For a local Windows installer:
+On Linux, pick the display server explicitly if the default one gives trouble:
+
+```bash
+npm run electron:dev:wayland
+npm run electron:dev:x11
+```
+
+For a local installer, build on the matching system (a macOS `.dmg` cannot be built from Windows):
 
 ```bash
 npm run electron:build -- --win --publish never
+npm run electron:build -- --linux --publish never
+npm run electron:build -- --mac --publish never
 ```
 
 Build output goes to `release/`. Releases are deliberate; a push to `app` does not publish an installer.
 
-See [release instructions](docs/RELEASING.md), [validation results and known limits](docs/VALIDATION.md) and [the agent guide](AGENTS.md) for architecture and checks. The [WRLD sharing proposal](docs/WRLD-STORIES.md) describes future work and is not a shipped feature.
+See [release instructions](docs/RELEASING.md), [validation results and known limits](docs/VALIDATION.md) and [the developer guide](AGENTS.md) for architecture and checks. The [WRLD sharing proposal](docs/WRLD-STORIES.md) describes future work and is not a shipped feature.
 
 ## Credits and license
 
