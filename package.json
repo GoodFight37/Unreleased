@@ -1,6 +1,6 @@
 {
   "name": "unreleased",
-  "version": "2.6.51",
+  "version": "2.6.52",
   "description": "Desktop player for the Juice WRLD catalogue, with playlists, synced lyrics and cover-inspired themes.",
   "desktopName": "com.juicewrldapi.player.desktop",
   "main": "electron/main.js",
