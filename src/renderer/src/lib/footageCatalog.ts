@@ -29,6 +29,14 @@ const RIGHTS_EXCLUDED_NAMES = new Set([
 /** Priorityfeatured paths chosen by Malik (empty by default; always ranked first when populated). */
 export const FEATURED_FOOTAGE_PATHS: string[] = []
 
+/** Archive videos that have no audio track, mapped to a copy of the same piece that has sound (another channel). */
+export const FOOTAGE_AUDIO_REPLACEMENTS: Record<string, { path: string; channel: string }> = {
+  'Footage/Flex (with Polo G).mp4': {
+    path: 'Snippets/Polo G - Flex (feat. Juice WRLD)/Polo G - Flex (feat. Juice WRLD) (1).mov',
+    channel: 'legacy',
+  },
+}
+
 export function isVideoPath(path: string): boolean {
   return VIDEO_EXT_RE.test(path) && !/\.temp\.\w+$/i.test(path)
 }

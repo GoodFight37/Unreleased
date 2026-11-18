@@ -7,6 +7,7 @@ import {
   buildFootageSongIndex,
   classifyFootageEntry,
   excludedFootageReason,
+  FOOTAGE_AUDIO_REPLACEMENTS,
   linkFootageToCatalogue,
   parseFreestyleName,
   scoreStudioFootage,
@@ -94,7 +95,7 @@ function FeaturedFootageBanner({
     videoRef,
     canvasRef,
     item.path,
-    channel,
+    item.streamChannel ?? channel,
     true,
     undefined,
     1280,
@@ -160,7 +161,7 @@ function FeaturedFootageBanner({
       }
       if (!v.getAttribute('src')) {
         v.preload = 'metadata'
-        v.src = buildStreamUrl(item.path, channel || undefined)
+        v.src = buildStreamUrl(item.path, (item.streamChannel ?? channel) || undefined)
         v.addEventListener('loadedmetadata', startPlay, { once: true })
       } else if (v.readyState >= 3) {
         startPlay()
@@ -304,13 +305,16 @@ export default function FootageView(): JSX.Element {
       if (fam === 'studio') {
         const link = linkFootageToCatalogue(entry, songIndex)
         const fileDate = /(\d{4}-\d{2}-\d{2})/.exec(entry.name || entry.path)?.[1] ?? null
+        const swap = FOOTAGE_AUDIO_REPLACEMENTS[entry.path]
         const item: FootageTileItem = {
-          path: entry.path,
+          path: swap?.path ?? entry.path,
+          streamChannel: swap?.channel,
           title: entry.name || entry.path.split('/').pop() || entry.path,
           family: 'studio',
           dateLabel: fileDate ? `file date ${fileDate}` : (entry.modified ? `file date ${entry.modified.slice(0, 10)}` : null),
           linked: link,
-          duration: entry.duration ?? null,
+          // The replacement has its own length: let the player measure it.
+          duration: swap ? null : entry.duration ?? null,
         }
         studioRoot.push(item)
         if (!browserOnly) {

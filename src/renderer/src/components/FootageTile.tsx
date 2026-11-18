@@ -23,6 +23,8 @@ export interface FootageTileItem {
   thumbUrl?: string | null
   youtubeUrl?: string | null
   channel?: string | null
+  /** Overrides the channel the stream is read from (e.g. an audio replacement kept on another channel). */
+  streamChannel?: string
 }
 
 interface PosterCacheEntry {
@@ -326,7 +328,7 @@ export function FootageTile({
     videoRef,
     canvasRef,
     item.path,
-    channel,
+    item.streamChannel ?? channel,
     useLiveFrame,
   )
 
@@ -393,7 +395,7 @@ export function FootageTile({
       }
       if (!v.getAttribute('src')) {
         v.preload = 'metadata'
-        v.src = buildStreamUrl(item.path, channel || undefined)
+        v.src = buildStreamUrl(item.path, (item.streamChannel ?? channel) || undefined)
         // play() right at metadata: the seek to the preview start (if any) is already queued, and no seek happens when it starts at 0.
         v.addEventListener('loadedmetadata', startPlay, { once: true })
       } else if (v.readyState >= 3) {
@@ -538,7 +540,7 @@ export function FootagePlayerModal({
           autoPlay
           preload="metadata"
           playsInline
-          src={buildStreamUrl(item.path, channel || undefined)}
+          src={buildStreamUrl(item.path, (item.streamChannel ?? channel) || undefined)}
           onPlay={() => {
             footageModalVideoGate.videoWillPlay()
             setMusicPausedByVideo(footageModalVideoGate.isMusicPausedByVideo())
