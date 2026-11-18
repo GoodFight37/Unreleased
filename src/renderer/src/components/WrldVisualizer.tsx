@@ -403,7 +403,6 @@ export default function WrldVisualizer({
     post: s.wrldPost, frame: s.wrldFrame, ink: s.wrldInk, postFont: s.wrldPostFont,
     setWrldPost: s.setWrldPost, setWrldFrame: s.setWrldFrame, setWrldInk: s.setWrldInk, setWrldPostFont: s.setWrldPostFont,
   })))
-  useEscapeToClose(() => setWrldPost('off'), post !== 'off')
   // Re-render when a font is added or removed elsewhere.
   useSyncExternalStore(subscribeCustomFonts, listCustomFonts)
   const postBarRef = useRef<HTMLDivElement>(null)
@@ -416,6 +415,14 @@ export default function WrldVisualizer({
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       // A dialog or menu open over the fullscreen view owns the keyboard.
       if (hasEscapeLayer()) return
+      // Esc leaves Post before WrldView's own Esc closes WRLD (that listener skips a prevented event). Not an
+      // escape layer, which would also silence C and the arrows while Post is up.
+      if (e.key === 'Escape' && useVizStore.getState().wrldPost !== 'off') {
+        useVizStore.getState().setWrldPost('off')
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
       const combo = eventToCombo(e)
       if (combo === 'KeyC') {
         const next = !useVizStore.getState().wrldCleanView

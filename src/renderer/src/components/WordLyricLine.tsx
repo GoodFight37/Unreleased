@@ -53,7 +53,9 @@ export default memo(function WordLyricLine({ words, active, getTime, offset, fil
       if (fillWord && n > 0 && n <= words.length) {
         const curIdx = n - 1
         const start = words[curIdx].start
-        const nextStart = curIdx + 1 < words.length ? words[curIdx + 1].start : start + 0.45
+        // A Post frame can hand over part of a line (one word, a chunk): its last word then runs to its own end.
+        const nextStart = curIdx + 1 < words.length ? words[curIdx + 1].start
+          : fill && words[curIdx].end > start ? words[curIdx].end : start + 0.45
         const span = Math.max(0.14, nextStart - start)
         const pct = Math.min(100, Math.max(0, ((t - start) / span) * 100))
         const el = wordRefs.current[curIdx]
@@ -71,7 +73,7 @@ export default memo(function WordLyricLine({ words, active, getTime, offset, fil
       document.removeEventListener('visibilitychange', onVis)
       cancelAnimationFrame(raf)
     }
-  }, [active, words, offset, getTime, fillWord])
+  }, [active, words, offset, getTime, fillWord, fill])
 
   return (
     <>
