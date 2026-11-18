@@ -20,6 +20,7 @@ import { addSongsInBackground, addTracksInBackground } from '../lib/optimisticPl
 import { isPrivateEntry, playlistTrackIds, trackToPlaylistEntry } from '../lib/playlistItems'
 import { downloadFileSmart } from '../lib/cdn'
 import { loadSongFootage } from '../lib/footageIndex'
+import { formatFootageMenuLabel } from '../lib/footageCatalog'
 import { showAppToast } from '../lib/appToast'
 
 // Staff-only (it pulls in the chat store) - fetched when opened.
@@ -170,14 +171,14 @@ export default function SongContextMenu({
   const { track, songId } = state
   const footageChannel = useStore(s => s.activeChannel) ?? ''
   const developerMode = useStore(s => s.developerMode)
-  const [footageCount, setFootageCount] = useState(0)
+  const [footageLabel, setFootageLabel] = useState<string | null>(null)
   const footageTitle = song?.name ?? track.apiTitle ?? track.title
   useEffect(() => {
     let stale = false
-    setFootageCount(0)
+    setFootageLabel(null)
     if (songId != null && songId > 0) {
       loadSongFootage(footageTitle, footageChannel).then(matches => {
-        if (!stale) setFootageCount(matches?.length ?? 0)
+        if (!stale) setFootageLabel(matches ? formatFootageMenuLabel(matches) : null)
       }).catch(() => {})
     }
     return () => { stale = true }
@@ -458,7 +459,7 @@ export default function SongContextMenu({
         onPlay && canQueue && { icon: ListEnd, label: 'Play', onSelect: onPlay },
         onPlayNext && canQueue && { icon: ListEnd, label: 'Play next', onSelect: onPlayNext },
         hasValidSong && { icon: Info, label: 'Song info', onSelect: onInfo },
-        footageCount > 0 && { icon: Clapperboard, label: `Watch footage (${footageCount})`, onSelect: onInfo },
+        !!footageLabel && { icon: Clapperboard, label: footageLabel, onSelect: onInfo },
         onSelect && { icon: CheckSquare2, label: 'Select', onSelect },
         onAddToQueue && canQueue && { icon: ListPlus, label: 'Add to queue', onSelect: onAddToQueue },
         canAddToPlaylist && {

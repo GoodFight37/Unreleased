@@ -23,6 +23,7 @@ import { copyCoverImage, saveCoverImage } from '../lib/coverImage'
 import SongPrefsSection from './SongPrefsSection'
 import { ProgressiveCover } from './ProgressiveCover'
 import { loadSongFootage, footageBrowserOnly, type FootageMatch } from '../lib/footageIndex'
+import { classifyFootageEntry, createAudibleVideoGate, excludedFootageReason } from '../lib/footageCatalog'
 import { buildStreamUrl } from '../lib/juicewrldApi'
 import { glassPillButton } from './glassControls'
 import { showAppToast } from '../lib/appToast'
@@ -73,6 +74,16 @@ function SubVal({ label, value }: { label: string; value: string | null | undefi
 }
 
 let activeFootageVideo: HTMLVideoElement | null = null
+let suppressingGateStoreSync = false
+const songModalVideoGate = createAudibleVideoGate({
+  isMusicPlaying: () => !!useStore.getState().isPlaying,
+  setMusicPlaying: (playing) => {
+    suppressingGateStoreSync = true
+    try { useStore.getState().setIsPlaying(playing) } finally { suppressingGateStoreSync = false }
+  },
+  pauseActiveVideo: () => { if (activeFootageVideo && !activeFootageVideo.paused) activeFootageVideo.pause() },
+})
+
 function releaseFootage(video: HTMLVideoElement): void {
   video.pause()
   video.removeAttribute('src')
@@ -80,8 +91,16 @@ function releaseFootage(video: HTMLVideoElement): void {
   if (activeFootageVideo === video) activeFootageVideo = null
 }
 
+const FAMILY_BADGE_LABELS: Record<string, string> = {
+  studio: 'Studio',
+  freestyle: 'Freestyle',
+  official: 'Official clip',
+  snippet: 'Snippet',
+}
+
 function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
   const channel = useStore(s => s.activeChannel) ?? ''
+  const isPlaying = useStore(s => s.isPlaying)
   const [approximate, setApproximate] = useState(false)
   const [matches, setMatches] = useState<FootageMatch[] | null>([])
   const [loading, setLoading] = useState(true)
@@ -89,6 +108,9 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
   const [active, setActive] = useState<FootageMatch | null>(null)
   const [browserOnly, setBrowserOnly] = useState<Set<string>>(new Set())
   const videoRef = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    if (active && isPlaying && !suppressingGateStoreSync) songModalVideoGate.musicTouched()
+  }, [active, isPlaying])
   useEffect(() => {
     let stale = false
     setLoading(true)
@@ -104,7 +126,11 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
     if (!video) return
     if (activeFootageVideo && activeFootageVideo !== video) releaseFootage(activeFootageVideo)
     activeFootageVideo = video
-    return () => releaseFootage(video)
+    songModalVideoGate.videoWillPlay()
+    return () => {
+      releaseFootage(video)
+      songModalVideoGate.videoDidClose()
+    }
   }, [active])
   return (
     <Section icon={Clapperboard} label="Footage & Sessions">
@@ -118,7 +144,9 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
         : <ul className="space-y-3 max-h-80 overflow-y-auto" aria-label="Matching footage">
           {matches.map(match => {
             const { entry } = match
-            const guarded = footageBrowserOnly(entry) || browserOnly.has(entry.path)
+            const rightsBlocked = excludedFootageReason(entry) === 'rights'
+            const guarded = rightsBlocked || footageBrowserOnly(entry) || browserOnly.has(entry.path)
+            const fam = classifyFootageEntry(entry)
             return <li key={entry.path} className="flex gap-3 items-start">
               {/* The song artwork is a fallback, never a downloaded video frame. */}
               <div className="w-12 h-12 rounded-lg overflow-hidden bg-[var(--fill)] shrink-0" title="Song artwork">
@@ -126,12 +154,17 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
               </div>
               <div className="min-w-0 flex-1 text-xs text-text-primary">
                 <p className="font-medium break-words">{entry.name}</p>
-                <p className="mt-1">{entry.duration || 'Duration unavailable'} · <span className="rounded px-1 bg-[var(--fill)]">{match.level === 'exact' ? 'Exact' : `${match.confidence}%${match.level === 'approximate' ? ' · Approximate' : ''}`}</span></p>
+                <p className="mt-1">
+                  {fam && FAMILY_BADGE_LABELS[fam] && (
+                    <><span className="rounded px-1.5 py-0.5 bg-[var(--fill-strong)] font-semibold">{FAMILY_BADGE_LABELS[fam]}</span> · </>
+                  )}
+                  {entry.duration || 'Duration unavailable'} · <span className="rounded px-1 bg-[var(--fill)]">{match.level === 'exact' ? 'Exact' : `${match.confidence}%${match.level === 'approximate' ? ' · Approximate' : ''}`}</span>
+                </p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {!guarded && <button className={glassPillButton(active?.entry.path === entry.path)} onClick={() => setActive(active?.entry.path === entry.path ? null : match)}><Play size={12} />{active?.entry.path === entry.path ? 'Close video' : 'Watch here'}</button>}
-                  <a href={buildStreamUrl(entry.path, channel || undefined)} target="_blank" rel="noopener noreferrer" className={glassPillButton(false)}><ExternalLink size={12} />Open in browser</a>
+                  {!rightsBlocked && <a href={buildStreamUrl(entry.path, channel || undefined)} target="_blank" rel="noopener noreferrer" className={glassPillButton(false)}><ExternalLink size={12} />Open in browser</a>}
                 </div>
-                {guarded && <p className="mt-1">Use your browser for this video.</p>}
+                {rightsBlocked ? <p className="mt-1">Not playable while its rights are being clarified.</p> : guarded && <p className="mt-1">Use your browser for this video.</p>}
               </div>
             </li>
           })}
@@ -139,6 +172,7 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
       {active && <video key={`${channel}:${active.entry.path}`} ref={videoRef} preload="none" controls playsInline
         aria-label={active.entry.name} src={buildStreamUrl(active.entry.path, channel || undefined)}
         className="w-full max-h-80 rounded-xl mt-3"
+        onPlay={() => songModalVideoGate.videoWillPlay()}
         onLoadedMetadata={e => {
           if (!Number.isFinite(e.currentTarget.duration) || e.currentTarget.duration > 3600) {
             releaseFootage(e.currentTarget)
@@ -157,6 +191,15 @@ function FootageSection({ song }: { song: JWApiSong }): JSX.Element {
 function MusicVideoSection({ song, onLeave }: { song: JWApiSong; onLeave: () => void }): JSX.Element | null {
   const [videos, setVideos] = useState<MusicVideo[]>([])
   const [watching, setWatching] = useState<number | null>(null)
+  const isPlaying = useStore(s => s.isPlaying)
+  useEffect(() => {
+    if (watching === null) return
+    songModalVideoGate.videoWillPlay()
+    return () => songModalVideoGate.videoDidClose()
+  }, [watching])
+  useEffect(() => {
+    if (watching !== null && isPlaying && !suppressingGateStoreSync) songModalVideoGate.musicTouched()
+  }, [watching, isPlaying])
   // The administrators' default for every player: a video's path, '' for no video, null for none set.
   const [serverDefault, setServerDefault] = useState<string | null>(null)
   const [defaultsTurn, setDefaultsTurn] = useState(0)
