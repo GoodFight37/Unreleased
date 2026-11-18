@@ -142,6 +142,18 @@ button.coffre-week-card:hover { background:color-mix(in srgb,var(--surface-raise
 .coffre-vpanel { position:fixed;z-index:9500;width:340px;max-width:calc(100vw - 24px);border-radius:18px;padding:14px;border:1px solid var(--border);box-shadow:0 24px 60px rgba(0,0,0,.5) }
 .coffre-vpanel-row { width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:10px;background:var(--fill);border:1px solid transparent;text-align:left;color:var(--text-primary);transition:background-color 140ms,border-color 140ms }
 .coffre-vpanel-row:hover { background:var(--fill-strong);border-color:var(--border) }
+.coffre-amb-pop { position:fixed;z-index:9500;width:440px;max-width:calc(100vw - 24px);border-radius:22px;padding:16px;border:1px solid var(--border);box-shadow:0 24px 60px rgba(0,0,0,.5) }
+.coffre-tp-switch { display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:650 }
+.coffre-tp-switch i { width:32px;height:18px;border-radius:9px;background:var(--fill-strong);position:relative;transition:background-color 140ms ease }
+.coffre-tp-switch i::after { content:'';position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--text-primary);transition:transform 140ms cubic-bezier(.23,1,.32,1) }
+.coffre-tp-switch[aria-checked="true"] i { background:var(--accent) }
+.coffre-tp-switch[aria-checked="true"] i::after { transform:translateX(14px);background:#fff }
+.coffre-tp-grid { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px }
+.coffre-tp-tile { text-align:center;font-size:11px;font-weight:600;line-height:1.25;color:var(--text-primary) }
+.coffre-tp-thumb { display:block;width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;border:2px solid transparent;background:var(--fill);transition:transform 140ms cubic-bezier(.23,1,.32,1),border-color 140ms ease }
+.coffre-tp-tile:hover .coffre-tp-thumb { transform:translateY(-2px) }
+.coffre-tp-tile[aria-pressed="true"] .coffre-tp-thumb { border-color:var(--accent) }
+.coffre-tp-tile>span:last-child { display:block;margin-top:6px }
 .coffre-catalogue { background:transparent }
 .coffre-catalogue h1 { font-size:30px;font-weight:750;letter-spacing:-.03em;margin-bottom:6px }
 .catalogue-intro { color:var(--text-secondary);font-size:12px;margin-bottom:20px }
@@ -176,5 +188,8 @@ button.coffre-week-card:hover { background:color-mix(in srgb,var(--surface-raise
 :where(html[data-effects-motion="reduce"]) .coffre-vt-play,
 :where(html[data-effects-motion="reduce"]) .coffre-ftab,
 :where(html[data-effects-motion="reduce"]) .coffre-vpill,
+:where(html[data-effects-motion="reduce"]) .coffre-tp-switch i,
+:where(html[data-effects-motion="reduce"]) .coffre-tp-switch i::after,
+:where(html[data-effects-motion="reduce"]) .coffre-tp-thumb,
 :where(html[data-effects-motion="reduce"]) .coffre-vpanel-row { transition:none }
-@media (prefers-reduced-motion:reduce) { .coffre-reveal,.coffre-vplay-box.animate-in,.coffre-context-badge.is-live .coffre-context-dot{animation:none}.coffre-primary,.coffre-secondary,.coffre-hero-art,.coffre-banner-play,.coffre-cover,.coffre-card-play,.coffre-era,.coffre-liked-flat,.coffre-week-card,.coffre-hero-media video,.coffre-vt-frame,.coffre-vt-frame video,.coffre-vt-play,.coffre-ftab,.coffre-vpill,.coffre-vpanel-row{transition:none} }
+@media (prefers-reduced-motion:reduce) { .coffre-reveal,.coffre-vplay-box.animate-in,.coffre-context-badge.is-live .coffre-context-dot{animation:none}.coffre-primary,.coffre-secondary,.coffre-hero-art,.coffre-banner-play,.coffre-cover,.coffre-card-play,.coffre-era,.coffre-liked-flat,.coffre-week-card,.coffre-hero-media video,.coffre-vt-frame,.coffre-vt-frame video,.coffre-vt-play,.coffre-ftab,.coffre-vpill,.coffre-tp-switch i,.coffre-tp-switch i::after,.coffre-tp-thumb,.coffre-vpanel-row{transition:none} }

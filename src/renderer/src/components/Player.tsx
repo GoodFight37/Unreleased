@@ -20,7 +20,6 @@ import {
   Radio,
   Info,
   SlidersHorizontal,
-  Palette,
 } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
 import { useVizStore } from '../store/vizStore'
@@ -58,6 +57,7 @@ import { runLog } from '../lib/runLog'
 import { isOfflineCopyUnreadable, markOfflineCopyUnreadable } from '../lib/offlineCopies'
 import { CoverFade, LikePop, SwapIcon, TrackSwap } from './PlayerMotion'
 import SongFootagePill from './SongFootagePill'
+import AmbiencePicker from './AmbiencePicker'
 import { PopLayer } from './PopLayer'
 import { useGlassSurface, useGlassCompositorReady, setCompositorPlayEl, setCompositorLens, setCompositorSlider, scheduleGlassCompositor } from '../lib/glass/compositor'
 import { useEffectsState } from '../lib/effectsPreference'
@@ -475,7 +475,7 @@ export default function Player(): JSX.Element {
     toggleLike,
     setActiveView,
     activeView,
-    playNext, account, updateLibraryTrack, theme, adaptiveColors, setAdaptiveColors } = useStorePick('currentTrack', 'currentTrackFull', 'isPlaying', 'volume', 'shuffle', 'repeat', 'setIsPlaying', 'setVolume', 'setProgress', 'setCurrentTime', 'setCurrentTrackFull', 'toggleShuffle', 'toggleRepeat', 'setRepeat', 'nextTrack', 'prevTrack', 'setShowNowPlaying', 'showNowPlaying', 'showQueue', 'setShowQueue', 'queue', 'queueIndex', 'crossfadeEnabled', 'crossfadeDuration', 'sleepTimerEnd', 'setSleepTimer', 'audioOutput', 'setAudioOutput', 'playbackSpeed', 'setPlaybackSpeed', 'likedTrackIds', 'toggleLike', 'setActiveView', 'activeView', 'playNext', 'account', 'updateLibraryTrack', 'theme', 'adaptiveColors', 'setAdaptiveColors')
+    playNext, account, updateLibraryTrack, theme } = useStorePick('currentTrack', 'currentTrackFull', 'isPlaying', 'volume', 'shuffle', 'repeat', 'setIsPlaying', 'setVolume', 'setProgress', 'setCurrentTime', 'setCurrentTrackFull', 'toggleShuffle', 'toggleRepeat', 'setRepeat', 'nextTrack', 'prevTrack', 'setShowNowPlaying', 'showNowPlaying', 'showQueue', 'setShowQueue', 'queue', 'queueIndex', 'crossfadeEnabled', 'crossfadeDuration', 'sleepTimerEnd', 'setSleepTimer', 'audioOutput', 'setAudioOutput', 'playbackSpeed', 'setPlaybackSpeed', 'likedTrackIds', 'toggleLike', 'setActiveView', 'activeView', 'playNext', 'account', 'updateLibraryTrack', 'theme')
   const canEditSong = useCanEdit()
   // The bar grows into WRLD (lib/wrldExpand.ts).
   const expandToWrld = useCallback(() => runWrldExpand(() => setActiveView('wrld'), useStore.getState().activeView), [setActiveView])
@@ -3159,20 +3159,7 @@ export default function Player(): JSX.Element {
             <Maximize2 size={16} />
           </button>}
 
-          {(() => {
-            const active = adaptiveColors
-            return (
-              <button
-                onClick={() => setAdaptiveColors(!adaptiveColors)}
-                aria-label="Cover colors"
-                aria-pressed={active}
-                title={active ? 'Cover colors: on' : 'Cover colors: off'}
-                className={`transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${active ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
-              >
-                <Palette size={16} />
-              </button>
-            )
-          })()}
+          <AmbiencePicker />
           </div>
 
           {/* Volume: mute + slider + output picker */}
