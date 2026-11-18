@@ -54,5 +54,9 @@ jobs:
           test -f "$installer"
           test -f "$installer.blockmap"
           test -f release/latest.yml
+          # GitHub turns spaces in asset names into dots, but latest.yml names the file with hyphens: upload under that name or the updater gets a 404.
+          cp "$installer" "release/Unreleased-Glass-Setup-$version.exe"
+          cp "$installer.blockmap" "release/Unreleased-Glass-Setup-$version.exe.blockmap"
+          installer="release/Unreleased-Glass-Setup-$version.exe"
           gh release upload "$RELEASE_TAG" "$installer" "$installer.blockmap" --clobber --repo "$GITHUB_REPOSITORY"
           gh release upload "$RELEASE_TAG" release/latest.yml --clobber --repo "$GITHUB_REPOSITORY"
