@@ -88,3 +88,48 @@ test('album back stays in Collection while retaining the expert return behavior'
     assert.deepEqual(calls, [expected])
   }
 })
+
+test('pickLeadPlaylist prioritises explicit pins, then recent synced playlists, then non-empty playlists', () => {
+  const store = new Map()
+  const mod = {}
+  const src = fs.readFileSync(path.join(__dirname, '../src/renderer/src/lib/recentPlaylists.ts'), 'utf8')
+  vm.runInNewContext(ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, {
+    exports: mod,
+    require: (id) => {
+      if (id.endsWith('/persist')) return {
+        ls: {
+          get: (k) => store.get(k) ?? null,
+          set: (k, v) => store.set(k, v),
+          remove: (k) => store.delete(k),
+        },
+      }
+      return {}
+    },
+  })
+
+  const api = [{ id: 10, name: 'Empty API', track_count: 0 }, { id: 20, name: 'Studio Nights', track_count: 14 }]
+  const local = [{ id: 'loc-1', name: 'Road Trip', trackIds: ['a', 'b', 'c'] }]
+
+  // 1. Pinned local playlist wins over everything
+  mod.savePinnedPlaylistKey('local:loc-1')
+  assert.equal(mod.loadPinnedPlaylistKey(), 'local:loc-1')
+  assert.deepEqual({ ...mod.pickLeadPlaylist(api, local, mod.loadPinnedPlaylistKey(), [20]) }, {
+    kind: 'local', key: 'local:loc-1', id: 'loc-1', name: 'Road Trip', trackCount: 3, pinned: true,
+  })
+
+  // 2. Stale pin falls back to most-recently-opened synced playlist
+  mod.savePinnedPlaylistKey('api:999')
+  assert.deepEqual({ ...mod.pickLeadPlaylist(api, local, mod.loadPinnedPlaylistKey(), [20]) }, {
+    kind: 'api', key: 'api:20', id: 20, name: 'Studio Nights', trackCount: 14, pinned: false,
+  })
+
+  // 3. No pin and no recent history falls back to first non-empty playlist
+  mod.savePinnedPlaylistKey(null)
+  assert.equal(mod.loadPinnedPlaylistKey(), null)
+  assert.deepEqual({ ...mod.pickLeadPlaylist(api, local, null, []) }, {
+    kind: 'api', key: 'api:20', id: 20, name: 'Studio Nights', trackCount: 14, pinned: false,
+  })
+
+  // 4. Empty collections return null without inventing content
+  assert.equal(mod.pickLeadPlaylist([], [], null, []), null)
+})

@@ -16,7 +16,7 @@ import {
   X, Check, Heart, Shuffle, Music2, Clock, GripVertical, Rss,
   ListPlus, Download, Archive, Info, FolderInput, MoreHorizontal,
   Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ImageOff, Globe, Lock, Link, ListEnd, HardDrive, CircleArrowDown, Layers,
-  CheckSquare2, Square, FileUp, FileDown, FileText, LayoutGrid, Rows3,
+  CheckSquare2, Square, FileUp, FileDown, FileText, LayoutGrid, Rows3, Pin,
 } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
 import { getSkin } from '../lib/skins'
@@ -25,7 +25,9 @@ import { addTracksInBackground, addEntriesInBackground, addPlaylistInBackground,
 import { playlistItemsToTracks, playlistSongIds, playlistItemToEntry, isServerFileTrack } from '../lib/playlistItems'
 import type { PlaylistEntryInput } from '../lib/userApi'
 import { showAppToast } from '../lib/appToast'
-import { rememberRecentPlaylist } from '../lib/recentPlaylists'
+import { loadPinnedPlaylistKey, loadRecentPlaylistIds, pickLeadPlaylist, rememberRecentPlaylist, savePinnedPlaylistKey } from '../lib/recentPlaylists'
+import { loadRecentTracks } from '../lib/recentTracks'
+import { filterListeningPlaysByDays } from '../lib/listeningPlays'
 import type { PlaylistDetail, PlaylistSummary } from '../lib/userApi'
 import { useCanEdit } from '../hooks/useChannelRoles'
 import { useSongFieldSearch } from '../hooks/useSongFieldSearch'
@@ -593,7 +595,7 @@ export default function PlaylistsView(): JSX.Element {
     // Subscribed purely so the track memo below re-derives when a custom
     // name/cover changes — liteSongToTrack bakes the override in at conversion
     // time, so without this the rows keep the old name until a refetch.
-    songPrefs, openBulkEditor, fullEraNames, theme, playlistHeroEnabledDark, playlistHeroEnabledLight } = useStorePick('account', 'playlists', 'refreshPlaylists', 'playTrack', 'shufflePlay', 'playNext', 'playCollection', 'addToQueue', 'setShowUserAuth', 'likedTrackIds', 'toggleLike', 'setActiveView', 'setPendingEditorSongId', 'localPlaylists', 'libraryTracks', 'libraryArt', 'loadLibrary', 'deleteLocalPlaylist', 'renameLocalPlaylist', 'updateLocalPlaylist', 'addToLocalPlaylist', 'importM3uEntriesLocal', 'exportLocalPlaylistM3u', 'pendingPlaylistId', 'setPendingPlaylistId', 'playlistsSelectedId', 'setPlaylistsSelectedId', 'playlistsSelectedLocalId', 'setPlaylistsSelectedLocalId', 'playlistsSort', 'setPlaylistsSort', 'playlistsOpenFolderId', 'setPlaylistsOpenFolderId', 'offlinePlaylists', 'offlineSync', 'offlineTracks', 'downloadPlaylistOffline', 'removePlaylistOffline', 'followedPlaylists', 'followPlaylist', 'unfollowPlaylist', 'updateFollowedPlaylistMeta', 'playlistFolders', 'createFolder', 'renameFolder', 'deleteFolder', 'movePlaylistsToFolder', 'appTextScale', 'songPrefs', 'openBulkEditor', 'fullEraNames', 'theme', 'playlistHeroEnabledDark', 'playlistHeroEnabledLight')
+    songPrefs, openBulkEditor, fullEraNames, theme, playlistHeroEnabledDark, playlistHeroEnabledLight, listeningPlays } = useStorePick('account', 'playlists', 'refreshPlaylists', 'playTrack', 'shufflePlay', 'playNext', 'playCollection', 'addToQueue', 'setShowUserAuth', 'likedTrackIds', 'toggleLike', 'setActiveView', 'setPendingEditorSongId', 'localPlaylists', 'libraryTracks', 'libraryArt', 'loadLibrary', 'deleteLocalPlaylist', 'renameLocalPlaylist', 'updateLocalPlaylist', 'addToLocalPlaylist', 'importM3uEntriesLocal', 'exportLocalPlaylistM3u', 'pendingPlaylistId', 'setPendingPlaylistId', 'playlistsSelectedId', 'setPlaylistsSelectedId', 'playlistsSelectedLocalId', 'setPlaylistsSelectedLocalId', 'playlistsSort', 'setPlaylistsSort', 'playlistsOpenFolderId', 'setPlaylistsOpenFolderId', 'offlinePlaylists', 'offlineSync', 'offlineTracks', 'downloadPlaylistOffline', 'removePlaylistOffline', 'followedPlaylists', 'followPlaylist', 'unfollowPlaylist', 'updateFollowedPlaylistMeta', 'playlistFolders', 'createFolder', 'renameFolder', 'deleteFolder', 'movePlaylistsToFolder', 'appTextScale', 'songPrefs', 'openBulkEditor', 'fullEraNames', 'theme', 'playlistHeroEnabledDark', 'playlistHeroEnabledLight', 'listeningPlays')
   // Cast back to the component's own SortField union — the store keeps the
   // field as a plain string so it doesn't have to import this component's type.
   const sort = sortRaw as SortState
@@ -611,6 +613,14 @@ export default function PlaylistsView(): JSX.Element {
   const playlistHeroEnabled = isDarkSkin ? playlistHeroEnabledDark : playlistHeroEnabledLight
 
   const [showLiked, setShowLiked] = useState(false)
+  const [pinnedPlaylistKey, setPinnedPlaylistKey] = useState<string | null>(() => loadPinnedPlaylistKey())
+  const togglePinPlaylist = useCallback((key: string): void => {
+    setPinnedPlaylistKey(prev => {
+      const next = prev === key ? null : key
+      savePinnedPlaylistKey(next)
+      return next
+    })
+  }, [])
 
   // Inline "quick view" expansion — clicking a card in the grid expands a
   // panel below its row (Apple Music-style) instead of navigating away.
@@ -1685,6 +1695,11 @@ export default function PlaylistsView(): JSX.Element {
         /* ── Local playlist menu ── */
         { icon: Play, label: 'Open', onSelect: () => setLocalSelectedId(localPl.id) },
         {
+          icon: Pin,
+          label: pinnedPlaylistKey === `local:${localPl.id}` ? 'Unpin from top' : 'Pin to top',
+          onSelect: () => togglePinPlaylist(`local:${localPl.id}`),
+        },
+        {
           icon: Shuffle,
           label: 'Play all',
           onSelect: () => {
@@ -1727,6 +1742,11 @@ export default function PlaylistsView(): JSX.Element {
       : [
         /* ── API playlist menu ── */
         { icon: Play, label: 'Open', onSelect: () => setSelectedId(apiPl.id) },
+        {
+          icon: Pin,
+          label: pinnedPlaylistKey === `api:${apiPl.id}` ? 'Unpin from top' : 'Pin to top',
+          onSelect: () => togglePinPlaylist(`api:${apiPl.id}`),
+        },
         {
           icon: Shuffle,
           label: 'Play all',
@@ -2267,6 +2287,214 @@ export default function PlaylistsView(): JSX.Element {
     )
   }
 
+  const renderCollectionOverview = (): React.ReactNode => {
+    const lead = pickLeadPlaylist(account ? playlists : [], localPlaylists, pinnedPlaylistKey, loadRecentPlaylistIds())
+    const leadApi = lead?.kind === 'api' ? playlists.find(p => p.id === lead.id) ?? null : null
+    const leadLocal = lead?.kind === 'local' ? localPlaylists.find(lp => lp.id === lead.id) ?? null : null
+    const playLead = async (shuffle: boolean): Promise<void> => {
+      if (!lead) return
+      if (lead.kind === 'local' && leadLocal) {
+        const byId = new Map(libraryTracks.map(t => [t.id, t]))
+        const qt = leadLocal.trackIds.map(id => byId.get(id)).filter((t): t is LibraryTrack => !!t).map(libTrackToTrack)
+        if (!qt.length) { showAppToast(`Nothing in "${leadLocal.name}" can be played`, { tone: 'info' }); return }
+        if (shuffle) await shufflePlay(qt)
+        else playCollection(qt)
+        return
+      }
+      if (lead.kind === 'api' && leadApi) {
+        const d = await userApi.getPlaylist(leadApi.id).catch(() => null)
+        if (!d) { showAppToast(`Couldn't load "${leadApi.name}"`); return }
+        const qt = playlistItemsToTracks(d.items).filter(t => t.path)
+        if (!qt.length) { showAppToast(`Nothing in "${leadApi.name}" can be played`, { tone: 'info' }); return }
+        if (shuffle) await shufflePlay(qt)
+        else playCollection(qt)
+      }
+    }
+    const openLead = (): void => {
+      if (!lead) return
+      if (lead.kind === 'local') setLocalSelectedId(String(lead.id))
+      else setSelectedId(Number(lead.id))
+    }
+
+    const cachedFavs = account ? (userApi.peekFavorites() ?? []) : []
+    const likedSet = new Set(likedTrackIds)
+    const favTrackMap = new Map<string, Track>()
+    for (const f of cachedFavs) {
+      const t = userApi.liteSongToTrack(f.song)
+      favTrackMap.set(t.id, t)
+    }
+    for (const lt of libraryTracks) {
+      if (likedSet.has(lt.id) && !favTrackMap.has(lt.id)) favTrackMap.set(lt.id, libTrackToTrack(lt))
+    }
+    for (const id of likedTrackIds) {
+      if (favTrackMap.has(id)) continue
+      const ref = apiFileIdToRef(id)
+      if (ref) favTrackMap.set(id, apiFileRefToTrack(ref))
+    }
+    const likedCount = Math.max(favTrackMap.size, likedTrackIds.length)
+    const likedPreviewTracks = [...favTrackMap.values()].slice(0, 4)
+
+    const recentPlayed = loadRecentTracks().filter(t => !!t.path || !!t.streamUrl).slice(0, 6)
+    const weekPlays = filterListeningPlaysByDays(listeningPlays ?? [], 7).length
+    const eraCounts = new Map<string, number>()
+    for (const t of recentPlayed) {
+      if (t.era) eraCounts.set(t.era, (eraCounts.get(t.era) ?? 0) + 1)
+    }
+    let topEra: string | null = null
+    let topEraMax = 0
+    for (const [era, count] of eraCounts) {
+      if (count > topEraMax) { topEra = era; topEraMax = count }
+    }
+
+    return (
+      <>
+        <div className="coffre-coll-lead">
+          <div className="coffre-pl-hero coffre-lead-glass" data-glass-lead="true">
+            {lead ? (
+              <>
+                <button type="button" onClick={openLead} className="coffre-pl-hero-cover cursor-pointer text-left" aria-label={`Open ${lead.name}`}>
+                  {leadApi ? apiCoverNode(leadApi) : leadLocal ? (
+                    leadLocal.coverImage
+                      ? <img src={leadLocal.coverImage} alt="" className="w-full h-full object-cover" />
+                      : <LocalPlaylistMosaic trackIds={leadLocal.trackIds} className="w-full h-full" />
+                  ) : null}
+                </button>
+                <div className="coffre-pl-hero-body">
+                  <div className="coffre-pl-hero-head">
+                    <span className="coffre-chip">{lead.pinned ? 'Pinned' : 'Featured playlist'}</span>
+                    <button
+                      type="button"
+                      onClick={() => togglePinPlaylist(lead.key)}
+                      aria-pressed={lead.pinned}
+                      title={lead.pinned ? 'Unpin playlist' : 'Pin playlist to top'}
+                      className="coffre-secondary !py-1 !px-2.5 !text-[11px]"
+                    >
+                      <Pin size={12} /> {lead.pinned ? 'Pinned' : 'Pin'}
+                    </button>
+                  </div>
+                  <button type="button" onClick={openLead} className="text-left">
+                    <h2 className="text-text-primary text-2xl font-extrabold tracking-tight truncate">{lead.name}</h2>
+                  </button>
+                  <p className="text-text-secondary text-xs">
+                    {lead.trackCount.toLocaleString()} {lead.trackCount === 1 ? 'song' : 'songs'}
+                    {lead.kind === 'local' ? ' · on this device' : ''}
+                  </p>
+                  <div className="flex items-center gap-2.5 flex-wrap mt-3">
+                    <button type="button" onClick={() => { void playLead(false) }} className="coffre-primary">
+                      <Play size={14} fill="currentColor" /> Play
+                    </button>
+                    {lead.trackCount > 1 && (
+                      <button type="button" onClick={() => { void playLead(true) }} className="coffre-secondary">
+                        <Shuffle size={14} /> Shuffle
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="coffre-pl-hero-cover flex items-center justify-center">
+                  <ListMusic size={44} className="text-accent/60" />
+                </div>
+                <div className="coffre-pl-hero-body">
+                  <span className="coffre-chip w-fit">Playlists</span>
+                  <h2 className="text-text-primary text-2xl font-extrabold tracking-tight">Start your first playlist</h2>
+                  <p className="text-text-secondary text-xs">Keep favourite sessions, eras, or local files together in one place.</p>
+                  <div className="flex items-center gap-2.5 flex-wrap mt-3">
+                    <button
+                      type="button"
+                      onClick={() => { if (account) setCreating(true); else setActiveView('library') }}
+                      className="coffre-primary"
+                    >
+                      <Plus size={14} /> {account ? 'New playlist' : 'Browse local files'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveView('liked')}
+            className="coffre-liked-flat cursor-pointer"
+            aria-label="Open Liked songs"
+          >
+            <div className="min-w-0">
+              <span className="coffre-chip">
+                <Heart size={11} className="text-accent" fill="currentColor" /> Liked songs
+              </span>
+              <h2 className="text-text-primary text-2xl font-extrabold tracking-tight mt-2 truncate">
+                {likedCount.toLocaleString()} {likedCount === 1 ? 'song' : 'songs'}
+              </h2>
+              <p className="text-text-secondary text-xs mt-1">Your favourites, one tap away</p>
+            </div>
+            {likedPreviewTracks.length > 0 ? (
+              <div className="coffre-liked-minis" aria-hidden="true">
+                {likedPreviewTracks.map(t => (
+                  <span key={t.id}>
+                    <AlbumArtThumbnail track={t} fill res={120} className="w-full h-full object-cover" />
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-2xl bg-accent/15 flex items-center justify-center shrink-0" aria-hidden="true">
+                <Heart size={24} className="text-accent" fill="currentColor" />
+              </div>
+            )}
+          </button>
+        </div>
+
+        {recentPlayed.length > 0 && (
+          <section className="mb-8" aria-label="Recently played">
+            <div className="coffre-section-heading">
+              <h2>Recently played</h2>
+            </div>
+            <div className="coffre-cover-row">
+              {recentPlayed.map(track => (
+                <button
+                  key={track.id}
+                  type="button"
+                  onClick={() => playTrack(track, recentPlayed)}
+                  onContextMenu={e => openTrackMenu(track, e)}
+                  className="coffre-cover-card"
+                  aria-label={`Play ${track.title}`}
+                >
+                  <span className="coffre-cover">
+                    <AlbumArtThumbnail track={track} fill res={320} className="w-full h-full object-cover" />
+                    <span className="coffre-card-play" aria-hidden="true"><Play size={16} fill="currentColor" /></span>
+                  </span>
+                  <strong>{track.title}</strong>
+                  <span>{track.era ? eraLabel(track.era, true) : (track.artist || 'Juice WRLD')}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="mb-8" aria-label="Your week">
+          <div className="coffre-section-heading">
+            <h2>Your week</h2>
+          </div>
+          <div className="coffre-week-grid">
+            <div className="coffre-week-card">
+              <b>{weekPlays.toLocaleString()}</b>
+              <span>{weekPlays === 1 ? 'play this week' : 'plays this week'}</span>
+            </div>
+            <div className="coffre-week-card">
+              <b>{topEra ? eraLabel(topEra, true) : likedCount.toLocaleString()}</b>
+              <span>{topEra ? 'most played era' : (likedCount === 1 ? 'liked song' : 'liked songs')}</span>
+            </div>
+            <button type="button" onClick={() => setActiveView('stats')} className="coffre-week-card cursor-pointer">
+              <b>Wrapped →</b>
+              <span>your year so far</span>
+            </button>
+          </div>
+        </section>
+      </>
+    )
+  }
+
   // ── Liked Songs ────────────────────────────────────────────────────────────
 
   if (showLiked) {
@@ -2354,23 +2582,18 @@ export default function PlaylistsView(): JSX.Element {
     }
     return (
       <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] pb-player">
-        <div className="px-5 pt-5 pb-8">
-          <h1 className="text-text-primary text-3xl font-black tracking-tight">Your Library</h1>
-          <p className="text-text-muted text-sm mt-1 mb-7">Local playlists</p>
+        <div className="px-6 pt-6 pb-10">
+          <div className="mb-7">
+            <h1 className="text-text-primary text-3xl font-black tracking-tight">Collection</h1>
+            <p className="text-text-muted text-sm mt-1">Playlists, favourites and listening activity</p>
+          </div>
+          {renderCollectionOverview()}
+          <h2 className={SECTION_TITLE}>On This Device</h2>
           {localPlaylists.length === 0 ? (
             <p className="text-text-muted text-sm">No local playlists yet. Add music to your library first.</p>
           ) : (
             <>
-              {/* Folders sit right in the same grid as the playlists they
-                  group, rather than a separate section. They work logged out
-                  too — membership is device-local (the API only ever stores
-                  synced-playlist ids) — folders holding only synced
-                  playlists are hidden here since their members can't render
-                  without an account. */}
-              {/* Inline margin: .pl-grid's own negative one would otherwise
-                  fight a utility class for margin-bottom. 1rem here + the last
-                  row's own 1rem = the 2rem (mb-8) this grid always had. */}
-              <div ref={setAuthGridEl} className="grid pl-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', '--pl-row-gap': '1rem', marginBottom: '1rem' } as React.CSSProperties} {...gridBackgroundDropProps}>
+              <div ref={setAuthGridEl} className="grid pl-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', '--pl-row-gap': '1rem', marginBottom: '1rem' } as React.CSSProperties} {...gridBackgroundDropProps}>
                 {layoutGridEntries([...folderTileEntries(true), ...ungroupedLocal.map(lp => localEntry(lp))], authGridCols)}
               </div>
             </>
@@ -3398,8 +3621,8 @@ export default function PlaylistsView(): JSX.Element {
       <div className="px-6 pt-6 pb-10">
         <div className="flex items-center justify-between mb-7">
           <div>
-            <h1 className="text-text-primary text-3xl font-black tracking-tight">Your Library</h1>
-            <p className="text-text-muted text-sm mt-1">Playlists and saved songs</p>
+            <h1 className="text-text-primary text-3xl font-black tracking-tight">Collection</h1>
+            <p className="text-text-muted text-sm mt-1">Playlists, favourites and listening activity</p>
           </div>
           {!creating && !creatingFolder && (
             <div className="flex items-center gap-2">
@@ -3520,10 +3743,12 @@ export default function PlaylistsView(): JSX.Element {
           </div>
         )}
 
+        {renderCollectionOverview()}
+
         {/* ── Playlists section — folders sit right in the same grid as the
             playlists they group, rather than a separate section above it. ── */}
         <h2 className={SECTION_TITLE}>Playlists</h2>
-        <div ref={setMainGridEl} className="grid pl-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }} {...gridBackgroundDropProps}>
+        <div ref={setMainGridEl} className="grid pl-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }} {...gridBackgroundDropProps}>
           {layoutGridEntries([
             {
               key: 'liked',
@@ -3573,7 +3798,7 @@ export default function PlaylistsView(): JSX.Element {
         {followedPlaylists.length > 0 && (
           <>
             <h2 className={`${SECTION_TITLE} mt-10`}>Following</h2>
-            <div className="grid gap-x-4 gap-y-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+            <div className="grid gap-x-4 gap-y-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
               {followedPlaylists.map(renderFollowedCard)}
             </div>
           </>
@@ -3584,7 +3809,7 @@ export default function PlaylistsView(): JSX.Element {
         {ungroupedLocal.length > 0 && (
           <>
             <h2 className={`${SECTION_TITLE} mt-10`}>On This Device</h2>
-            <div ref={setDeviceGridEl} className="grid pl-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }} {...gridBackgroundDropProps}>
+            <div ref={setDeviceGridEl} className="grid pl-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }} {...gridBackgroundDropProps}>
               {layoutGridEntries(ungroupedLocal.map(lp => localEntry(lp)), deviceGridCols)}
             </div>
           </>
