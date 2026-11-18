@@ -15,7 +15,7 @@ const KIND_LABELS: Record<SongTruthKind, string> = {
   released: 'Released',
   unreleased: 'Unreleased',
   snippet: 'Snippet',
-  'name-only': 'Name only',
+  'name-only': 'Unsurfaced',
   session: 'Session',
   'no-audio': 'No audio',
 }

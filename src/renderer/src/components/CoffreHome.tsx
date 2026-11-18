@@ -543,8 +543,8 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
       {nameOnly.length > 0 && <section className="coffre-reveal" aria-labelledby="coffre-name-only">
         <div className="coffre-section-heading">
           <div>
-            <h2 id="coffre-name-only">Name only</h2>
-            <p className="text-xs text-text-secondary mt-0.5">Titles that exist in the archive but have not surfaced. Nothing to play yet.</p>
+            <h2 id="coffre-name-only">Unsurfaced</h2>
+            <p className="text-xs text-text-secondary mt-0.5">Hasn't leaked. Nothing to play yet.</p>
           </div>
         </div>
         <div className="coffre-vt-grid">{nameOnly.map((song) => <div key={song.id} className="coffre-cover-card" style={{ cursor: 'default' }}>

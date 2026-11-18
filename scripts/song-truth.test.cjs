@@ -30,9 +30,9 @@ test('leak_type containing snippet is a Snippet, any case; play only if playable
   assert.equal(songTruth(s({ category: 'unreleased', leak_type: 'snippet' }), true).leakLabel, null)
   assert.equal(songTruth(s({ category: 'unreleased', leak_type: 'LQ Snippet' }), true).leakLabel, 'LQ Snippet')
 })
-test('unsurfaced is Name only and never playable, even a snippet-looking one', () => {
+test('unsurfaced is labelled Unsurfaced and never playable, even a snippet-looking one', () => {
   const t = songTruth(s({ category: 'unsurfaced', leak_type: 'snippet' }), true)
-  assert.equal(t.kindLabel, 'Name only'); assert.equal(t.canPlay, false)
+  assert.equal(t.kindLabel, 'Unsurfaced'); assert.equal(t.canPlay, false)
 })
 test('session follows playable', () => {
   assert.deepEqual([songTruth(s({ category: 'recording_session' }), true).canPlay, songTruth(s({ category: 'recording_session' }), false).canPlay], [true, false])
