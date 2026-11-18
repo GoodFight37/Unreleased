@@ -967,7 +967,7 @@ async function main() {
       { width: 1920, height: 1080 },
     ]
     const matrixThemes = ['glass-dark', 'glass-light']
-    const matrixViews = ['home', 'api-tracker', 'api-files', 'library', 'playlists', 'wrld', 'settings']
+    const matrixViews = ['home', 'api-tracker', 'api-files', 'footage', 'library', 'playlists', 'wrld', 'settings']
     for (const vp of matrixViewports) {
       await win.setViewportSize(vp)
       for (const th of matrixThemes) {

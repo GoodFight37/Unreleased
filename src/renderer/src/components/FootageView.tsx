@@ -19,7 +19,6 @@ import { saveTrackerSearch } from '../lib/apiTrackerShared'
 import {
   cleanFootageDisplayTitle,
   FootageFamilyChip,
-  FootageLinkChip,
   FootagePlayerModal,
   FootageTile,
   formatVideoSeconds,
@@ -46,6 +45,35 @@ const ERA_KEY_BY_NUMBER: Record<number, string> = {
   11: 'POST',
 }
 
+/** Shows a page of tiles and grows by one page on demand, so a few hundred videos are never mounted (or fetched) at once. */
+function PagedGrid({
+  items,
+  pageSize = 24,
+  className = 'coffre-vt-grid',
+  render,
+}: {
+  items: FootageTileItem[]
+  pageSize?: number
+  className?: string
+  render: (item: FootageTileItem) => JSX.Element
+}): JSX.Element {
+  const [count, setCount] = useState(pageSize)
+  useEffect(() => setCount(pageSize), [items, pageSize])
+  const left = items.length - count
+  return (
+    <>
+      <div className={className}>{items.slice(0, count).map(render)}</div>
+      {left > 0 && (
+        <div className="coffre-more">
+          <button type="button" className="coffre-secondary" onClick={() => setCount((c) => c + pageSize)}>
+            Show {Math.min(left, pageSize).toLocaleString()} more · {left.toLocaleString()} left
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
 function FeaturedFootageBanner({
   item,
   channel,
@@ -62,12 +90,14 @@ function FeaturedFootageBanner({
   const wantRef = useRef(false)
   const playedRef = useRef(false)
 
-  const { shape, durationSec, windowRef, posterDrawnRef } = useVideoPosterFrame(
+  const { shape, durationSec, windowRef, posterState } = useVideoPosterFrame(
     videoRef,
     canvasRef,
     item.path,
     channel,
     true,
+    undefined,
+    1280,
   )
 
   useEffect(() => {
@@ -75,15 +105,6 @@ function FeaturedFootageBanner({
     if (!v) return
     const onTimeUpdate = (): void => {
       const w = windowRef.current
-      if (!posterDrawnRef.current && v.readyState >= 2 && v.currentTime >= w.start && canvasRef.current && v.videoWidth) {
-        const c = canvasRef.current
-        c.width = v.videoWidth
-        c.height = v.videoHeight
-        try {
-          c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height)
-          posterDrawnRef.current = true
-        } catch { /* ignore */ }
-      }
       if (v.paused) return
       const limit = Math.min(w.len, 5)
       if (v.currentTime - w.start >= limit) {
@@ -108,8 +129,9 @@ function FeaturedFootageBanner({
     const v = videoRef.current
     if (!v) return
     v.pause()
+    delete v.dataset.hover
     btnRef.current?.classList.remove('is-playing')
-    if (playedRef.current) {
+    if (playedRef.current || posterState === 'ready') {
       releaseVideoStream(v)
       playedRef.current = false
     } else if (v.getAttribute('src')) {
@@ -126,6 +148,7 @@ function FeaturedFootageBanner({
       const v = videoRef.current
       if (!wantRef.current || !v || !liveVisualsAllowed()) return
       stopActiveHoverPreview()
+      v.dataset.hover = '1'
       const startPlay = (): void => {
         if (!wantRef.current || !liveVisualsAllowed()) return
         playedRef.current = true
@@ -138,7 +161,7 @@ function FeaturedFootageBanner({
       if (!v.getAttribute('src')) {
         v.preload = 'metadata'
         v.src = buildStreamUrl(item.path, channel || undefined)
-        v.addEventListener('seeked', startPlay, { once: true })
+        v.addEventListener('loadedmetadata', startPlay, { once: true })
       } else if (v.readyState >= 3) {
         startPlay()
       } else {
@@ -161,7 +184,7 @@ function FeaturedFootageBanner({
         onWatch(item, windowRef.current.start, btnRef.current?.querySelector('.coffre-vt-frame') as HTMLElement | null)
       }}
     >
-      <div className="coffre-vt-frame">
+      <div className={`coffre-vt-frame${posterState === 'failed' ? ' is-failed' : posterState !== 'ready' ? ' is-loading' : ''}`}>
         <canvas ref={canvasRef} className="vposter" data-shape={shape} aria-hidden="true" />
         <video
           ref={videoRef}
@@ -185,7 +208,6 @@ function FeaturedFootageBanner({
             <div className="flex flex-wrap items-center gap-2">
               <span className="coffre-chip">Today&apos;s pick</span>
               {displayDuration && <span className="coffre-chip">{displayDuration}</span>}
-              {item.linked && <FootageLinkChip link={item.linked} strict />}
             </div>
           </div>
           <span className="coffre-primary shrink-0">
@@ -408,10 +430,13 @@ export default function FootageView(): JSX.Element {
         linked: link,
         duration: entry.duration ?? null,
       })
-      if (items.length >= 48) break
+      if (items.length >= 400) break
     }
     return items
   }, [search, fileIndex, songIndex])
+
+  // Hero excluded; featured first, then the rest of the studio videos.
+  const studioGrid = useMemo(() => [...catalogued.featured.slice(1), ...catalogued.studioMore], [catalogued])
 
   const openRecordingSessions = (): void => {
     saveTrackerSearch('')
@@ -470,17 +495,17 @@ export default function FootageView(): JSX.Element {
             {searchResults.length === 0 ? (
               <p className="text-sm text-text-secondary">No matching videos found in the archive.</p>
             ) : (
-              <div className="coffre-vt-grid">
-                {searchResults.map((item) => (
+              <PagedGrid
+                items={searchResults}
+                render={(item) => (
                   <FootageTile
                     key={item.path}
                     item={item}
                     channel={channel}
-                    showFrame={item.family !== 'snippet'}
                     onWatch={(it, startAt) => setWatching({ item: it, startAt })}
                   />
-                ))}
-              </div>
+                )}
+              />
             )}
           </section>
         ) : (
@@ -537,26 +562,18 @@ export default function FootageView(): JSX.Element {
 
               {tab === 'studio' && (
                 <div className="space-y-8">
-                  <div className="coffre-vt-grid is-three">
-                    {catalogued.featured.slice(1).map((item) => (
+                  <PagedGrid
+                    items={studioGrid}
+                    className="coffre-vt-grid is-three"
+                    render={(item) => (
                       <FootageTile
                         key={item.path}
                         item={item}
                         channel={channel}
-                        showFrame
                         onWatch={(it, startAt) => setWatching({ item: it, startAt })}
                       />
-                    ))}
-                    {catalogued.studioMore.slice(0, 12).map((item) => (
-                      <FootageTile
-                        key={item.path}
-                        item={item}
-                        channel={channel}
-                        showFrame={false}
-                        onWatch={(it, startAt) => setWatching({ item: it, startAt })}
-                      />
-                    ))}
-                  </div>
+                    )}
+                  />
 
                   {catalogued.freestyles.length > 0 && (
                     <div>
@@ -568,36 +585,37 @@ export default function FootageView(): JSX.Element {
                           </p>
                         </div>
                       </div>
-                      <div className="coffre-vt-grid">
-                        {catalogued.freestyles.slice(0, 12).map((item) => (
+                      <PagedGrid
+                        items={catalogued.freestyles}
+                        pageSize={12}
+                        render={(item) => (
                           <FootageTile
                             key={item.path}
                             item={item}
                             channel={channel}
-                            showFrame
                             strictLink
                             onWatch={(it, startAt) => setWatching({ item: it, startAt })}
                           />
-                        ))}
-                      </div>
+                        )}
+                      />
                     </div>
                   )}
                 </div>
               )}
 
               {tab === 'official' && (
-                <div className="coffre-vt-grid">
-                  {catalogued.official.map((item) => (
+                <PagedGrid
+                  items={catalogued.official}
+                  render={(item) => (
                     <FootageTile
                       key={item.path}
                       item={item}
                       channel={channel}
-                      showFrame
                       hoverPreview={false}
                       onWatch={(it, startAt) => setWatching({ item: it, startAt })}
                     />
-                  ))}
-                </div>
+                  )}
+                />
               )}
 
               {tab === 'snippet' && (
@@ -614,17 +632,17 @@ export default function FootageView(): JSX.Element {
                         ← All snippet eras
                       </button>
                     </div>
-                    <div className="coffre-vt-grid">
-                      {activeSnippetEra.clips.slice(0, 36).map((item) => (
+                    <PagedGrid
+                      items={activeSnippetEra.clips}
+                      render={(item) => (
                         <FootageTile
                           key={item.path}
                           item={item}
                           channel={channel}
-                          showFrame={false}
                           onWatch={(it, startAt) => setWatching({ item: it, startAt })}
                         />
-                      ))}
-                    </div>
+                      )}
+                    />
                   </div>
                 ) : (
                   <div className="coffre-era-grid">

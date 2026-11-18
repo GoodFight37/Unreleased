@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Play, X } from 'lucide-react'
+import { Film, Music2, Play, X } from 'lucide-react'
+import { saveTrackerSearch } from '../lib/apiTrackerShared'
 import { buildStreamUrl } from '../lib/juicewrldApi'
 import { liveVisualsAllowed, useEffectsState } from '../lib/effectsPreference'
 import { videoFrameShape, windowForPath, type PreviewWindowResult, type VideoFrameShape } from '../lib/previewWindow'
@@ -32,6 +33,38 @@ interface PosterCacheEntry {
 }
 
 const posterCache = new Map<string, PosterCacheEntry>()
+const POSTER_CACHE_MAX = 120
+const POSTER_MAX_CONCURRENT = 3
+const POSTER_TIMEOUT_MS = 12000
+let posterActive = 0
+const posterWaiting: Array<() => void> = []
+
+export type PosterState = 'idle' | 'loading' | 'ready' | 'failed'
+
+/** Runs `start` when one of a few shared slots is free, so scrolling a long page never opens hundreds of video streams.
+ *  The returned function cancels a waiting job, or frees the slot of a running one. */
+function queuePoster(start: () => void): () => void {
+  let state: 'wait' | 'run' | 'done' = 'wait'
+  const job = (): void => { state = 'run'; posterActive++; start() }
+  if (posterActive < POSTER_MAX_CONCURRENT) job()
+  else posterWaiting.push(job)
+  return () => {
+    if (state === 'wait') {
+      const i = posterWaiting.indexOf(job)
+      if (i >= 0) posterWaiting.splice(i, 1)
+    } else if (state === 'run') {
+      posterActive--
+      posterWaiting.shift()?.()
+    }
+    state = 'done'
+  }
+}
+
+function cachePoster(key: string, entry: PosterCacheEntry): void {
+  posterCache.delete(key)
+  posterCache.set(key, entry)
+  if (posterCache.size > POSTER_CACHE_MAX) posterCache.delete(posterCache.keys().next().value as string)
+}
 let activeHoverVideo: HTMLVideoElement | null = null
 let activeModalVideo: HTMLVideoElement | null = null
 let suppressingGateSync = false
@@ -94,29 +127,35 @@ export function FootageFamilyChip({ family }: { family: FootageFamily }): JSX.El
   return <span className={`coffre-chip ${info.cls}`}>{info.label}</span>
 }
 
+/** Opens the catalogue searched on the song title. Never opens "a" version: the catalogue lists every candidate and the user picks. */
+function openSongSearch(name: string): void {
+  const s = useStore.getState()
+  saveTrackerSearch(name)
+  s.setApiTrackerCategory('')
+  s.setApiTrackerEra('')
+  s.setApiTrackerTab('songs')
+  s.setActiveView('api-tracker')
+}
+
+/** One plain action instead of match jargon. A reliable match says "View song"; a weak one (strict = false only) says "Find in catalogue" and claims nothing. */
 export function FootageLinkChip({ link, strict = false }: { link?: FootageSongLink | null; strict?: boolean }): JSX.Element | null {
   if (!link) return null
-  if (link.level === 'possible') {
-    if (strict) return null
-    return (
-      <span className="coffre-chip is-warn" title="Same base title only: not verified">
-        Possible match: {link.name}
-      </span>
-    )
-  }
-  const suffix = link.entries > 1 ? ` · ${link.entries} entries` : ''
-  if (link.level === 'title+date') {
-    return (
-      <span className="coffre-chip is-strong" title="The file date equals the catalogue recording date">
-        Same title and date as {link.name}{suffix}
-      </span>
-    )
-  }
-  const label = link.via === 'alias' ? `Listed as ${link.name}${suffix}` : `Same title as ${link.name}${suffix}`
-  const title = link.via === 'alias'
-    ? `The catalogue lists this as another title of ${link.name} (no date to compare)`
-    : 'Same title as a catalogue entry (no date to compare)'
-  return <span className="coffre-chip" title={title}>{label}</span>
+  const weak = link.level === 'possible'
+  if (weak && strict) return null
+  const label = weak ? 'Find in catalogue' : 'View song'
+  const go = (e: React.SyntheticEvent): void => { e.stopPropagation(); e.preventDefault(); openSongSearch(link.name) }
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      className="coffre-songlink"
+      title={weak ? `Search the catalogue for “${link.name}”` : `Open “${link.name}” in the catalogue`}
+      onClick={go}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') go(e) }}
+    >
+      <Music2 size={12} aria-hidden="true" /> {label}
+    </span>
+  )
 }
 
 export function useVideoPosterFrame(
@@ -126,10 +165,13 @@ export function useVideoPosterFrame(
   channel: string,
   enabled: boolean,
   onMeta?: (meta: { duration: number; shape: VideoFrameShape; window: PreviewWindowResult }) => void,
+  maxWidth = 480,
 ) {
-  const [shape, setShape] = useState<VideoFrameShape>(() => posterCache.get(path)?.shape ?? 'wide')
-  const [durationSec, setDurationSec] = useState<number | null>(() => posterCache.get(path)?.duration ?? null)
-  const windowRef = useRef<PreviewWindowResult>(posterCache.get(path)?.window ?? windowForPath(0, path))
+  const cacheKey = `${path}|${maxWidth}`
+  const [shape, setShape] = useState<VideoFrameShape>(() => posterCache.get(cacheKey)?.shape ?? 'wide')
+  const [durationSec, setDurationSec] = useState<number | null>(() => posterCache.get(cacheKey)?.duration ?? null)
+  const [posterState, setPosterState] = useState<PosterState>(() => (posterCache.has(cacheKey) ? 'ready' : 'idle'))
+  const windowRef = useRef<PreviewWindowResult>(posterCache.get(cacheKey)?.window ?? windowForPath(0, path))
   const posterDrawnRef = useRef(false)
 
   useEffect(() => {
@@ -138,38 +180,58 @@ export function useVideoPosterFrame(
     const c = canvasRef.current
     if (!v || !c) return
 
-    const cached = posterCache.get(path)
-    if (cached) {
-      c.width = cached.canvas.width
-      c.height = cached.canvas.height
-      const ctx = c.getContext('2d')
-      try { ctx?.drawImage(cached.canvas, 0, 0) } catch { /* ignore */ }
+    const paintFromCache = (hit: PosterCacheEntry): void => {
+      c.width = hit.canvas.width
+      c.height = hit.canvas.height
+      try { c.getContext('2d')?.drawImage(hit.canvas, 0, 0) } catch { /* ignore */ }
       posterDrawnRef.current = true
-      windowRef.current = cached.window
-      setShape(cached.shape)
-      setDurationSec(cached.duration)
+      windowRef.current = hit.window
+      setShape(hit.shape)
+      setDurationSec(hit.duration)
+      setPosterState('ready')
       v.style.opacity = '0'
-      onMeta?.({ duration: cached.duration, shape: cached.shape, window: cached.window })
+      onMeta?.({ duration: hit.duration, shape: hit.shape, window: hit.window })
+    }
+
+    const cached = posterCache.get(cacheKey)
+    if (cached) {
+      paintFromCache(cached)
       return
     }
 
+    let cancelQueue: (() => void) | null = null
+    let timeout: number | null = null
+
+    // Frees the slot and the connection as soon as the still frame is drawn (or has failed); hover reopens the stream itself.
+    const finish = (state: PosterState): void => {
+      if (timeout !== null) { window.clearTimeout(timeout); timeout = null }
+      cancelQueue?.()
+      cancelQueue = null
+      setPosterState(state)
+      if (v.dataset.hover !== '1') releaseVideoStream(v)
+    }
+
+    // currentTime already reports the seek target while seeking, so a decoded frame (readyState >= 2, not seeking) is the real test.
     const drawPoster = (): void => {
-      if (posterDrawnRef.current || !v.videoWidth || !v.videoHeight) return
-      c.width = v.videoWidth
-      c.height = v.videoHeight
+      if (posterDrawnRef.current || !v.videoWidth || !v.videoHeight || v.seeking || v.readyState < 2) return
+      const scale = Math.min(1, maxWidth / v.videoWidth)
+      c.width = Math.round(v.videoWidth * scale)
+      c.height = Math.round(v.videoHeight * scale)
       try {
-        const ctx = c.getContext('2d')
-        ctx?.drawImage(v, 0, 0, c.width, c.height)
-        posterDrawnRef.current = true
+        c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height)
+      } catch {
+        finish('failed')
+        return
+      }
+      posterDrawnRef.current = true
+      if (Number.isFinite(v.duration) && v.duration > 0) {
         const off = document.createElement('canvas')
         off.width = c.width
         off.height = c.height
         off.getContext('2d')?.drawImage(c, 0, 0)
-        if (Number.isFinite(v.duration) && v.duration > 0) {
-          const s = videoFrameShape(v.videoWidth, v.videoHeight)
-          posterCache.set(path, { canvas: off, window: windowRef.current, duration: v.duration, shape: s })
-        }
-      } catch { /* ignore cross-origin or decode race */ }
+        cachePoster(cacheKey, { canvas: off, window: windowRef.current, duration: v.duration, shape: videoFrameShape(v.videoWidth, v.videoHeight) })
+      }
+      finish('ready')
     }
 
     const onLoadedMeta = (): void => {
@@ -184,52 +246,57 @@ export function useVideoPosterFrame(
         try { v.currentTime = w.start } catch { /* ignore */ }
       }
     }
-
-    const onSeeked = (): void => {
-      drawPoster()
-    }
+    const onSeeked = drawPoster
+    const onReady = drawPoster
+    const onError = (): void => { if (!posterDrawnRef.current && v.getAttribute('src')) finish('failed') }
 
     v.addEventListener('loadedmetadata', onLoadedMeta)
     v.addEventListener('seeked', onSeeked)
+    v.addEventListener('loadeddata', onReady)
+    v.addEventListener('canplay', onReady)
+    v.addEventListener('error', onError)
+
+    const begin = (): void => {
+      setPosterState('loading')
+      v.preload = 'metadata'
+      v.src = buildStreamUrl(path, channel || undefined)
+      timeout = window.setTimeout(() => { if (!posterDrawnRef.current) finish('failed') }, POSTER_TIMEOUT_MS)
+    }
+    const request = (): void => {
+      if (cancelQueue || posterDrawnRef.current) return
+      const hit = posterCache.get(cacheKey)
+      if (hit) { paintFromCache(hit); return }
+      setPosterState('loading')
+      cancelQueue = queuePoster(begin)
+    }
+    const leave = (): void => {
+      // Scrolled away before its turn: give the slot back; a running load is left to finish.
+      if (cancelQueue && !v.getAttribute('src')) { cancelQueue(); cancelQueue = null; setPosterState('idle') }
+    }
 
     const io = typeof IntersectionObserver !== 'undefined'
       ? new IntersectionObserver((entries) => {
-          for (const entry of entries) {
-            if (!entry.isIntersecting) continue
-            io?.unobserve(v)
-            const hit = posterCache.get(path)
-            if (hit) {
-              c.width = hit.canvas.width
-              c.height = hit.canvas.height
-              try { c.getContext('2d')?.drawImage(hit.canvas, 0, 0) } catch { /* ignore */ }
-              posterDrawnRef.current = true
-              windowRef.current = hit.window
-              setShape(hit.shape)
-              setDurationSec(hit.duration)
-              v.style.opacity = '0'
-              onMeta?.({ duration: hit.duration, shape: hit.shape, window: hit.window })
-              return
-            }
-            v.preload = 'metadata'
-            v.src = buildStreamUrl(path, channel || undefined)
-          }
-        }, { rootMargin: '300px' })
+          for (const entry of entries) entry.isIntersecting ? request() : leave()
+        }, { rootMargin: '200px' })
       : null
 
     if (io) io.observe(v)
-    else {
-      v.preload = 'metadata'
-      v.src = buildStreamUrl(path, channel || undefined)
-    }
+    else request()
 
     return () => {
       io?.disconnect()
+      if (timeout !== null) window.clearTimeout(timeout)
+      cancelQueue?.()
+      if (!posterDrawnRef.current) releaseVideoStream(v)
       v.removeEventListener('loadedmetadata', onLoadedMeta)
       v.removeEventListener('seeked', onSeeked)
+      v.removeEventListener('loadeddata', onReady)
+      v.removeEventListener('canplay', onReady)
+      v.removeEventListener('error', onError)
     }
   }, [path, channel, enabled])
 
-  return { shape, durationSec, windowRef, posterDrawnRef }
+  return { shape, durationSec, windowRef, posterDrawnRef, posterState }
 }
 
 export function FootageTile({
@@ -255,7 +322,7 @@ export function FootageTile({
   const playedRef = useRef(false)
 
   const useLiveFrame = showFrame && !item.thumbUrl
-  const { shape, durationSec, windowRef, posterDrawnRef } = useVideoPosterFrame(
+  const { shape, durationSec, windowRef, posterState } = useVideoPosterFrame(
     videoRef,
     canvasRef,
     item.path,
@@ -268,15 +335,6 @@ export function FootageTile({
     if (!v || !useLiveFrame) return
     const onTimeUpdate = (): void => {
       const w = windowRef.current
-      if (!posterDrawnRef.current && v.readyState >= 2 && v.currentTime >= w.start && canvasRef.current && v.videoWidth) {
-        const c = canvasRef.current
-        c.width = v.videoWidth
-        c.height = v.videoHeight
-        try {
-          c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height)
-          posterDrawnRef.current = true
-        } catch { /* ignore */ }
-      }
       if (v.paused) return
       const limit = Math.min(w.len, 5)
       if (v.currentTime - w.start >= limit) {
@@ -302,8 +360,9 @@ export function FootageTile({
     const v = videoRef.current
     if (!v) return
     v.pause()
+    delete v.dataset.hover
     btnRef.current?.classList.remove('is-playing')
-    if (playedRef.current) {
+    if (playedRef.current || posterState === 'ready') {
       releaseVideoStream(v)
       playedRef.current = false
     } else if (v.getAttribute('src')) {
@@ -321,6 +380,7 @@ export function FootageTile({
       const v = videoRef.current
       if (!wantRef.current || !v || !liveVisualsAllowed()) return
       if (activeHoverVideo && activeHoverVideo !== v) stopActiveHoverPreview()
+      v.dataset.hover = '1'
       const startPlay = (): void => {
         if (!wantRef.current || !liveVisualsAllowed()) return
         activeHoverVideo = v
@@ -334,7 +394,8 @@ export function FootageTile({
       if (!v.getAttribute('src')) {
         v.preload = 'metadata'
         v.src = buildStreamUrl(item.path, channel || undefined)
-        v.addEventListener('seeked', startPlay, { once: true })
+        // play() right at metadata: the seek to the preview start (if any) is already queued, and no seek happens when it starts at 0.
+        v.addEventListener('loadedmetadata', startPlay, { once: true })
       } else if (v.readyState >= 3) {
         startPlay()
       } else {
@@ -363,7 +424,7 @@ export function FootageTile({
         onWatch(item, windowRef.current.start, btnRef.current?.querySelector('.coffre-vt-frame') as HTMLElement | null)
       }}
     >
-      <div className="coffre-vt-frame">
+      <div className={`coffre-vt-frame${useLiveFrame && posterState !== 'ready' ? ` is-${posterState === 'failed' ? 'failed' : 'loading'}` : ''}`}>
         {item.thumbUrl ? (
           <img src={item.thumbUrl} alt="" loading="lazy" />
         ) : showFrame ? (
@@ -378,9 +439,15 @@ export function FootageTile({
               aria-hidden="true"
               tabIndex={-1}
             />
+            {posterState === 'failed' && (
+              <div className="coffre-vt-neutral is-failed">
+                <Film size={20} aria-hidden="true" />
+                Preview unavailable
+              </div>
+            )}
           </>
         ) : (
-          <div className="coffre-vt-neutral">Studio archive clip</div>
+          <div className="coffre-vt-neutral">No preview</div>
         )}
         <span className="coffre-vt-badge">
           <FootageFamilyChip family={item.family} />
@@ -392,11 +459,7 @@ export function FootageTile({
       </div>
       <div className="coffre-vt-title">{cleanFootageDisplayTitle(item.title)}</div>
       {metaParts.length > 0 && <div className="coffre-vt-meta">{metaParts.join(' · ')}</div>}
-      {item.linked && (
-        <div className="mt-1.5">
-          <FootageLinkChip link={item.linked} strict={strictLink} />
-        </div>
-      )}
+      {item.linked && <FootageLinkChip link={item.linked} strict={strictLink} />}
       {item.youtubeUrl && (
         <a
           href={item.youtubeUrl}
