@@ -247,3 +247,53 @@ export async function loadDaySongs(month: number, day: number, now = new Date())
   }
   return songs
 }
+
+export interface WeekRecordedEntry {
+  song: JWApiSong
+  year: number
+  month: number
+  day: number
+  title: string
+  dateText: string
+}
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** Songs with a plain Recorded date within `±radiusDays` of `now`'s month/day, deduplicated by base title. */
+export function thisWeekRecorded(
+  songs: ReadonlyArray<JWApiSong>,
+  now = new Date(),
+  radiusDays = 3,
+): WeekRecordedEntry[] {
+  const windowDays = new Set<string>()
+  for (let offset = -radiusDays; offset <= radiusDays; offset++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset)
+    windowDays.add(`${d.getMonth() + 1}-${d.getDate()}`)
+  }
+  const byTitle = new Map<string, WeekRecordedEntry>()
+  const sorted = [...songs].sort((a, b) =>
+    Number(hasAudio(b)) - Number(hasAudio(a))
+    || Number(!!b.image_url) - Number(!!a.image_url)
+    || songOrder(a, b),
+  )
+  for (const song of sorted) {
+    for (const d of songDates(song)) {
+      if (d.kind !== 'recorded') continue
+      if (!windowDays.has(`${d.month}-${d.day}`)) continue
+      if (new Date(d.year, d.month - 1, d.day) > now) continue
+      const title = baseTitle(song.name)
+      const key = normalizeForSearch(title)
+      if (!key || byTitle.has(key)) continue
+      byTitle.set(key, {
+        song,
+        year: d.year,
+        month: d.month,
+        day: d.day,
+        title,
+        dateText: `${SHORT_MONTHS[d.month - 1]} ${d.day}, ${d.year}`,
+      })
+      break
+    }
+  }
+  return [...byTitle.values()].sort((a, b) => b.year - a.year || a.month - b.month || a.day - b.day || a.title.localeCompare(b.title))
+}

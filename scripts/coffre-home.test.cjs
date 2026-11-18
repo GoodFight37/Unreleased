@@ -9,17 +9,34 @@ const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/ren
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
 }).outputText
 
-function render({ catalogue = [], catalogueState = 'ready', recent = [], currentTrack = null, theme = 'glass-dark', adaptiveColors = false, effects = { reducedMotion: false, gameMode: false } } = {}) {
+function render({ catalogue = [], catalogueState = 'ready', recent = [], fileIndex = null, currentTrack = null, theme = 'glass-dark', adaptiveColors = false, effects = { reducedMotion: false, gameMode: false } } = {}) {
   const calls = []
   const action = (name) => (...args) => calls.push({ name, args })
   const state = { theme, adaptiveColors, currentTrack, playTrack: action('play'), playNext: action('next'), setActiveView: action('view'), setInfoSongId: action('info'), setApiTrackerCategory: action('category'), setApiTrackerEra: action('era'), setApiTrackerTab: action('tab') }
   const jsx = (type, props) => ({ type, props })
   const exports = {}
+  const loadTs = (rel, mocks = {}) => {
+    const out = {}
+    const src = ts.transpileModule(fs.readFileSync(path.join(__dirname, rel), 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText
+    vm.runInNewContext(src, { exports: out, require: (id) => mocks[id] ?? {} })
+    return out
+  }
+  const onThisDayMod = loadTs('../src/renderer/src/lib/onThisDay.ts', {
+    './juicewrldApi': { loadAllSongs: async () => [], normalizeForSearch: (s) => String(s ?? '').toLowerCase().trim() },
+    './apiTrackerShared': { MIN_PLAUSIBLE_RECORD_YEAR: 2015 },
+  })
+  const footageCatalogMod = loadTs('../src/renderer/src/lib/footageCatalog.ts', {
+    './juicewrldApi': { normalizeForSearch: (s) => String(s ?? '').toLowerCase().trim(), parseDuration: () => 0 },
+    './musicVideos': { parseVideoName: () => null },
+    './onThisDay': onThisDayMod,
+  })
   vm.runInNewContext(code, {
     exports,
     require: (name) => {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
-      if (name === 'react') return { useMemo: (fn) => fn(), useState: () => [null, () => {}], useEffect: () => {} }
+      if (name === 'react') return { useMemo: (fn) => fn(), useState: (init) => [typeof init === 'function' ? false : init, () => {}], useEffect: () => {}, useRef: (v) => ({ current: v }) }
       if (name.endsWith('/useStore')) return { useStorePick: () => state, useStore: { getState: () => state } }
       if (name.endsWith('/useChannelRoles')) return { useCanEdit: () => false }
       if (name.endsWith('/juicewrldApi')) return { buildImageUrl: (url) => url, songToTrack: (song) => ({ id: `jw-${song.id}`, title: song.name, path: song.path, era: song.era?.name }) }
@@ -31,10 +48,22 @@ function render({ catalogue = [], catalogueState = 'ready', recent = [], current
       if (name.endsWith('/effectsPreference')) return { useEffectsState: () => effects }
       if (name.endsWith('/wrldAtmospheres')) return require('../src/renderer/src/lib/wrldAtmospheres.ts')
       if (name.endsWith('/lazyView')) return { lazyOverlay: () => () => null }
+      if (name.endsWith('/onThisDay')) return onThisDayMod
+      if (name.endsWith('/footageCatalog')) return footageCatalogMod
+      if (name.endsWith('/FootageTile')) return {
+        FootageTile: () => null,
+        FootagePlayerModal: () => null,
+        FootageFamilyChip: () => null,
+        FootageLinkChip: () => null,
+        cleanFootageDisplayTitle: (s) => s,
+        formatVideoSeconds: (n) => `${n}s`,
+        releaseVideoStream: () => {},
+        useVideoPosterFrame: () => ({ shape: 'wide', durationSec: null, windowRef: { current: { start: 0, len: 8 } }, posterDrawnRef: { current: false } }),
+      }
       return {}
     },
   })
-  const tree = exports.default({ data: { catalogue, catalogueState, recent, albumRow: [] } })
+  const tree = exports.default({ data: { catalogue, catalogueState, recent, fileIndex, channel: '', albumRow: [] } })
   const all = []
   function walk(node) {
     if (Array.isArray(node)) { node.forEach(walk); return }
@@ -138,4 +167,38 @@ test('loading and failed catalogues have explicit feedback and a safe catalogue 
     open.props.onClick()
     assert.equal(result.calls.at(-1).args[0], 'api-tracker')
   }
+})
+
+test('thisWeekRecorded includes recorded dates within +/-3 days, excludes File Exported, and Discover renders studio footage hero when fileIndex has studio clips', () => {
+  const mod = {}
+  const src = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/renderer/src/lib/onThisDay.ts'), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText
+  vm.runInNewContext(src, {
+    exports: mod,
+    require: (id) => id === './juicewrldApi'
+      ? { loadAllSongs: async () => [], normalizeForSearch: (s) => String(s ?? '').toLowerCase().trim() }
+      : { MIN_PLAUSIBLE_RECORD_YEAR: 2015 },
+  })
+
+  const nov18 = new Date(2026, 10, 18, 12, 0, 0)
+  const weekSongs = [
+    { id: 10, name: 'Condone It (v1)', category: 'unreleased', path: 'a.mp3', record_dates: 'Recorded\nNovember 19, 2018.' },
+    { id: 11, name: 'Condone It (v2)', category: 'recording_session', path: 'b.mp3', record_dates: 'Recorded\nNovember 19, 2018.' },
+    { id: 12, name: 'Export Only', category: 'unreleased', path: 'c.mp3', record_dates: 'File Exported\nNovember 19, 2021.' },
+    { id: 13, name: 'Too Far', category: 'unreleased', path: 'd.mp3', record_dates: 'Recorded\nNovember 25, 2018.' },
+  ]
+  const hits = mod.thisWeekRecorded(weekSongs, nov18, 3)
+  assert.deepEqual(JSON.parse(JSON.stringify(hits.map((h) => [h.song.id, h.dateText]))), [[10, 'Nov 19, 2018']])
+
+  const fileIndex = {
+    items: [
+      { entry: { type: 'file', name: 'Condone It (Studio Session).mp4', path: 'Footage/Condone It (Studio Session).mp4' } },
+      { entry: { type: 'file', name: 'Other (Behind The Scenes).mp4', path: 'Footage/Other (Behind The Scenes).mp4' } },
+      { entry: { type: 'file', name: 'Music Box Juice WRLD Into the Abyss.mp4', path: 'Footage/Music Box Juice WRLD Into the Abyss.mp4' } },
+    ],
+  }
+  const result = render({ catalogue: weekSongs, fileIndex })
+  assert.equal(result.find('coffre-discover-hero coffre-reveal').length, 1)
+  assert.ok(result.nodes.some((node) => node.type === 'h2' && node.props.id === 'coffre-studio-head'))
 })

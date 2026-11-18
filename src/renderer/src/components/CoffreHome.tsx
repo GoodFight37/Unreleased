@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ArrowRight, ArrowUpRight, Disc3, Music2, Pause, Play } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
 import type { useHomeData } from '../hooks/useHomeData'
 import { useCanEdit } from '../hooks/useChannelRoles'
-import { buildImageUrl, songToTrack } from '../lib/juicewrldApi'
+import { buildImageUrl, songToTrack, type JWApiSong } from '../lib/juicewrldApi'
 import { ERA_LOOK, eraStart } from '../lib/eraLook'
 import { saveTrackerSearch } from '../lib/apiTrackerShared'
 import { eraLabel, loadEraFullNames } from '../lib/eras'
@@ -12,9 +12,29 @@ import { backdropArt, getSkin } from '../lib/skins'
 import { useEffectsState } from '../lib/effectsPreference'
 import { ERA_TIME_FRAMES, resolveWrldEra } from '../lib/wrldAtmospheres'
 import { lazyOverlay } from '../lib/lazyView'
+import { thisWeekRecorded } from '../lib/onThisDay'
+import {
+  buildFootageSongIndex,
+  classifyFootageEntry,
+  excludedFootageReason,
+  linkFootageToCatalogue,
+  parseFreestyleName,
+  scoreStudioFootage,
+} from '../lib/footageCatalog'
 import { AlbumArtThumbnail } from './AlbumArtThumbnail'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
 import { ProgressiveCover } from './ProgressiveCover'
+import {
+  cleanFootageDisplayTitle,
+  FootageFamilyChip,
+  FootageLinkChip,
+  FootagePlayerModal,
+  FootageTile,
+  formatVideoSeconds,
+  releaseVideoStream,
+  useVideoPosterFrame,
+  type FootageTileItem,
+} from './FootageTile'
 import type { Track } from '../types'
 import type { SongContextMenuState } from './SongContextMenu'
 
@@ -23,6 +43,100 @@ const SongContextMenu = lazyOverlay(() => import('./SongContextMenu'))
 const cleanMeta = (v: string | null | undefined): string | null => {
   const s = v?.trim()
   return s && s.toLowerCase() !== 'null' ? s : null
+}
+
+function firstStudioLocation(song: JWApiSong): string {
+  const raw = cleanMeta(song.recording_locations)
+  if (!raw) return ''
+  return raw.split(/\r?\n/)[0]?.trim() ?? ''
+}
+
+function DiscoverHeroVideo({
+  item,
+  channel,
+  still,
+  modalOpen,
+  onMetaDur,
+}: {
+  item: FootageTileItem
+  channel: string
+  still: boolean
+  modalOpen: boolean
+  onMetaDur: (durSec: number) => void
+}): JSX.Element {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const doneRef = useRef(false)
+
+  const { shape, windowRef, posterDrawnRef } = useVideoPosterFrame(
+    videoRef,
+    canvasRef,
+    item.path,
+    channel,
+    true,
+    (meta) => {
+      if (meta.duration > 0) onMetaDur(meta.duration)
+    },
+  )
+
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    doneRef.current = false
+    const onTimeUpdate = (): void => {
+      const w = windowRef.current
+      if (!posterDrawnRef.current && v.readyState >= 2 && v.currentTime >= w.start && canvasRef.current && v.videoWidth) {
+        const c = canvasRef.current
+        c.width = v.videoWidth
+        c.height = v.videoHeight
+        try {
+          c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height)
+          posterDrawnRef.current = true
+        } catch { /* ignore */ }
+      }
+      if (v.paused) return
+      const limit = Math.min(w.len, 6)
+      if (v.currentTime - w.start >= limit) {
+        doneRef.current = true
+        releaseVideoStream(v)
+      }
+    }
+    v.addEventListener('timeupdate', onTimeUpdate)
+    return () => {
+      v.removeEventListener('timeupdate', onTimeUpdate)
+      releaseVideoStream(v)
+    }
+  }, [item.path])
+
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || doneRef.current) return
+    const sync = (): void => {
+      if (doneRef.current) return
+      if (!still && !modalOpen && !document.hidden) {
+        v.style.opacity = '1'
+        v.play().catch(() => {})
+      } else {
+        v.pause()
+        v.style.opacity = '0'
+      }
+    }
+    sync()
+    const onVis = (): void => sync()
+    document.addEventListener('visibilitychange', onVis)
+    v.addEventListener('seeked', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      v.removeEventListener('seeked', sync)
+    }
+  }, [still, modalOpen, item.path])
+
+  return (
+    <div className="coffre-hero-media" aria-hidden="true">
+      <canvas ref={canvasRef} className="vposter" data-shape={shape} />
+      <video ref={videoRef} muted playsInline preload="none" data-shape={shape} tabIndex={-1} />
+    </div>
+  )
 }
 
 export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeData> }): JSX.Element {
@@ -34,6 +148,8 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
     'setActiveView', 'setApiTrackerCategory', 'setApiTrackerEra', 'setApiTrackerTab',
   )
   const [context, setContext] = useState<SongContextMenuState | null>(null)
+  const [watching, setWatching] = useState<{ item: FootageTileItem; startAt: number } | null>(null)
+  const [heroVideoDur, setHeroVideoDur] = useState<number>(0)
   const canEdit = useCanEdit()
   const effects = typeof useEffectsState === 'function' ? useEffectsState() : { reducedMotion: false, gameMode: false }
   const [systemReduced, setSystemReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
@@ -46,7 +162,10 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
   }, [])
   const still = effects.reducedMotion || effects.gameMode || systemReduced
   const isDarkTheme = typeof getSkin === 'function' ? getSkin(theme ?? 'glass-dark').dark : true
+  const channel = data.channel ?? ''
+
   const available = useMemo(() => data.catalogue.filter((song) => song.category === 'unreleased' && !!song.path), [data.catalogue])
+  const sessionCount = useMemo(() => data.catalogue.filter((song) => song.category === 'recording_session').length, [data.catalogue])
   const discoveries = useMemo(() => {
     const firstByEra = new Map<string, typeof available[number]>()
     for (const song of available) if (!firstByEra.has(song.era?.name ?? '')) firstByEra.set(song.era?.name ?? '', song)
@@ -90,6 +209,53 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
 
   const humanLine = cleanMeta(heroSong?.additional_information) ?? cleanMeta(heroSong?.notes)
 
+  const studioMoments = useMemo<FootageTileItem[]>(() => {
+    if (!data.fileIndex || typeof buildFootageSongIndex !== 'function') return []
+    const songIndex = buildFootageSongIndex(data.catalogue)
+    const scored: { item: FootageTileItem; score: number }[] = []
+    for (const { entry } of data.fileIndex.items) {
+      if (excludedFootageReason(entry)) continue
+      const fam = classifyFootageEntry(entry)
+      if (fam !== 'studio' && fam !== 'freestyle') continue
+      const link = linkFootageToCatalogue(entry, songIndex)
+      const score = scoreStudioFootage(entry, link)
+      if (score <= 0) continue
+      const parsed = fam === 'freestyle' ? parseFreestyleName(entry.name || entry.path) : null
+      const fileDate = parsed?.date ?? /(\d{4}-\d{2}-\d{2})/.exec(entry.name || entry.path)?.[1] ?? null
+      scored.push({
+        score,
+        item: {
+          path: entry.path,
+          title: parsed ? parsed.title : (entry.name || entry.path.split('/').pop() || entry.path),
+          family: fam,
+          dateLabel: fileDate ? `file date ${fileDate}` : null,
+          with: parsed?.with,
+          linked: link,
+          duration: entry.duration ?? null,
+        },
+      })
+    }
+    scored.sort((a, b) => b.score - a.score || a.item.path.localeCompare(b.item.path))
+    return scored.slice(0, 5).map((x) => x.item)
+  }, [data.fileIndex, data.catalogue])
+
+  const heroFootage = studioMoments[0] ?? null
+  const studioRow = studioMoments.slice(1, 5)
+
+  const weekEntries = useMemo(
+    () => (typeof thisWeekRecorded === 'function' ? thisWeekRecorded(data.catalogue) : []),
+    [data.catalogue],
+  )
+  const weekPick = useMemo(() => {
+    if (weekEntries.length <= 4) return weekEntries
+    return [
+      weekEntries[0],
+      weekEntries[Math.floor(weekEntries.length / 3)],
+      weekEntries[Math.floor((2 * weekEntries.length) / 3)],
+      weekEntries[weekEntries.length - 1],
+    ]
+  }, [weekEntries])
+
   const eras = useMemo(() => {
     const groups = new Map<string, { name: string; cover: string | undefined; accent: string | undefined; count: number }>()
     for (const song of available) {
@@ -105,9 +271,9 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
       .slice(0, 6)
   }, [available])
 
-  const openCatalogue = (era = ''): void => {
+  const openCatalogue = (era = '', category: string = 'unreleased'): void => {
     saveTrackerSearch('')
-    setApiTrackerCategory('unreleased')
+    setApiTrackerCategory(category)
     setApiTrackerEra(era)
     setApiTrackerTab('songs')
     setActiveView('api-tracker')
@@ -142,65 +308,214 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
       <div className={`coffre-stage-vignette ${isDarkTheme ? 'is-dark' : 'is-light'}`} />
     </div>}
     <div className="coffre-home-inner">
-      <header className="coffre-hero-head coffre-reveal">
-        <div className="coffre-hero-titles">
-          <span className="coffre-kicker"><span className="coffre-kicker-dot" aria-hidden />999 — THE VAULT</span>
-          <h1>Beyond the albums.</h1>
-          <p>Unreleased tracks, studio sessions and alternate versions from Juice WRLD’s archive.</p>
-        </div>
-        <button className="coffre-secondary" onClick={() => openCatalogue()}>Explore the unreleased <ArrowUpRight size={15} /></button>
-      </header>
+      {heroFootage ? (
+        <section className="coffre-discover-hero coffre-reveal" aria-label="Featured studio footage">
+          <DiscoverHeroVideo
+            item={heroFootage}
+            channel={channel}
+            still={still}
+            modalOpen={watching !== null}
+            onMetaDur={setHeroVideoDur}
+          />
+          <div className="coffre-discover-hero-grid">
+            <div className="coffre-hero-titles text-white">
+              <span className="coffre-kicker"><span className="coffre-kicker-dot" aria-hidden />999 — THE VAULT</span>
+              <h1 className="!text-white">Beyond the albums.</h1>
+              <p className="!text-white/85">Unreleased songs, studio sessions and footage from Juice WRLD’s archive.</p>
+              <div className="flex flex-wrap items-center gap-2.5 mt-4">
+                <button type="button" className="coffre-primary !bg-white !text-black" onClick={() => setWatching({ item: heroFootage, startAt: 0 })}>
+                  <Play size={15} fill="currentColor" /> Watch in the studio
+                </button>
+                <button type="button" className="coffre-secondary !bg-white/15 !text-white !border-white/25" onClick={() => setActiveView('footage')}>
+                  All footage <ArrowRight size={15} />
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-3 text-xs text-white/80">
+                <FootageFamilyChip family={heroFootage.family} />
+                <span>
+                  {cleanFootageDisplayTitle(heroFootage.title)}
+                  {heroVideoDur > 0 ? ` · ${formatVideoSeconds(heroVideoDur)}` : heroFootage.duration ? ` · ${heroFootage.duration}` : ''}
+                </span>
+                {heroFootage.linked && <FootageLinkChip link={heroFootage.linked} strict />}
+              </div>
+            </div>
 
-      <article
-        className="coffre-banner coffre-reveal"
-        style={{ '--coffre-reveal-delay': '40ms', ...(heroEraLook?.accent ? { '--era-accent': heroEraLook.accent } : {}) } as CSSProperties}
-        aria-label="Behind the track"
-      >
-        <button
-          className="coffre-hero-art"
-          onClick={() => hero ? playTrack(hero) : openCatalogue()}
-          aria-label={hero ? `Play ${hero.title}` : 'Explore the catalogue'}
-          onContextMenu={hero ? (event) => openContext(hero, event) : undefined}
-        >
-          {hero ? <AlbumArtThumbnail track={hero} fill eager res={512} className="coffre-hero-cover" /> : <Disc3 size={68} aria-hidden />}
-          <span className="coffre-banner-play" aria-hidden>
-            {heroPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-          </span>
-        </button>
-
-        <div className="coffre-banner-body">
-          <div className="coffre-banner-top">
-            <span className={`coffre-context-badge ${heroPlaying ? 'is-live' : ''}`}>
-              <span className="coffre-context-dot" aria-hidden />
-              {contextLabel}
-            </span>
-            {heroMetaParts.length > 0 && <span className="coffre-banner-meta">{heroMetaParts.join(' · ')}</span>}
-          </div>
-
-          <h2 className="coffre-banner-title">{hero?.title ?? 'Juice WRLD Archive'}</h2>
-
-          {humanLine && <p className="coffre-track-note">{humanLine}</p>}
-
-          <div className="coffre-banner-actions">
-            <button className="coffre-primary" onClick={handleHeroPrimary}>
-              {heroPlaying
-                ? <><Pause size={15} fill="currentColor" /> Pause</>
-                : isHeroCurrent
-                  ? <><Play size={15} fill="currentColor" /> Resume</>
-                  : hero
-                    ? <><Play size={15} fill="currentColor" /> Play track</>
-                    : <>Explore the unreleased <ArrowUpRight size={16} /></>}
-            </button>
-            {heroSongId != null && (
-              <button className="coffre-secondary" onClick={() => useStore.getState().setInfoSongId(heroSongId)}>
-                Full song details <ArrowUpRight size={14} />
+            <article
+              className="coffre-banner coffre-lead-glass coffre-reveal"
+              style={{ '--coffre-reveal-delay': '40ms', ...(heroEraLook?.accent ? { '--era-accent': heroEraLook.accent } : {}) } as CSSProperties}
+              aria-label="Behind the track"
+            >
+              <button
+                className="coffre-hero-art"
+                onClick={() => hero ? playTrack(hero) : openCatalogue()}
+                aria-label={hero ? `Play ${hero.title}` : 'Explore the catalogue'}
+                onContextMenu={hero ? (event) => openContext(hero, event) : undefined}
+              >
+                {hero ? <AlbumArtThumbnail track={hero} fill eager res={512} className="coffre-hero-cover" /> : <Disc3 size={68} aria-hidden />}
+                <span className="coffre-banner-play" aria-hidden>
+                  {heroPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                </span>
               </button>
-            )}
-          </div>
-        </div>
-      </article>
 
-      <section className="coffre-reveal" style={{ '--coffre-reveal-delay': '80ms' } as CSSProperties} aria-labelledby="coffre-resume">
+              <div className="coffre-banner-body">
+                <div className="coffre-banner-top">
+                  <span className={`coffre-context-badge ${heroPlaying ? 'is-live' : ''}`}>
+                    <span className="coffre-context-dot" aria-hidden />
+                    {contextLabel}
+                  </span>
+                  {heroMetaParts.length > 0 && <span className="coffre-banner-meta">{heroMetaParts.join(' · ')}</span>}
+                </div>
+
+                <h2 className="coffre-banner-title">{hero?.title ?? 'Juice WRLD Archive'}</h2>
+
+                {humanLine && <p className="coffre-track-note">{humanLine}</p>}
+
+                <div className="coffre-banner-actions">
+                  <button className="coffre-primary" onClick={handleHeroPrimary}>
+                    {heroPlaying
+                      ? <><Pause size={15} fill="currentColor" /> Pause</>
+                      : isHeroCurrent
+                        ? <><Play size={15} fill="currentColor" /> Resume</>
+                        : hero
+                          ? <><Play size={15} fill="currentColor" /> Play track</>
+                          : <>Explore the unreleased <ArrowUpRight size={16} /></>}
+                  </button>
+                  {heroSongId != null && (
+                    <button className="coffre-secondary" onClick={() => useStore.getState().setInfoSongId(heroSongId)}>
+                      Full song details <ArrowUpRight size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      ) : (
+        <>
+          <header className="coffre-hero-head coffre-reveal">
+            <div className="coffre-hero-titles">
+              <span className="coffre-kicker"><span className="coffre-kicker-dot" aria-hidden />999 — THE VAULT</span>
+              <h1>Beyond the albums.</h1>
+              <p>Unreleased tracks, studio sessions and alternate versions from Juice WRLD’s archive.</p>
+            </div>
+            <button className="coffre-secondary" onClick={() => openCatalogue()}>Explore the unreleased <ArrowUpRight size={15} /></button>
+          </header>
+
+          <article
+            className="coffre-banner coffre-reveal"
+            style={{ '--coffre-reveal-delay': '40ms', ...(heroEraLook?.accent ? { '--era-accent': heroEraLook.accent } : {}) } as CSSProperties}
+            aria-label="Behind the track"
+          >
+            <button
+              className="coffre-hero-art"
+              onClick={() => hero ? playTrack(hero) : openCatalogue()}
+              aria-label={hero ? `Play ${hero.title}` : 'Explore the catalogue'}
+              onContextMenu={hero ? (event) => openContext(hero, event) : undefined}
+            >
+              {hero ? <AlbumArtThumbnail track={hero} fill eager res={512} className="coffre-hero-cover" /> : <Disc3 size={68} aria-hidden />}
+              <span className="coffre-banner-play" aria-hidden>
+                {heroPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+              </span>
+            </button>
+
+            <div className="coffre-banner-body">
+              <div className="coffre-banner-top">
+                <span className={`coffre-context-badge ${heroPlaying ? 'is-live' : ''}`}>
+                  <span className="coffre-context-dot" aria-hidden />
+                  {contextLabel}
+                </span>
+                {heroMetaParts.length > 0 && <span className="coffre-banner-meta">{heroMetaParts.join(' · ')}</span>}
+              </div>
+
+              <h2 className="coffre-banner-title">{hero?.title ?? 'Juice WRLD Archive'}</h2>
+
+              {humanLine && <p className="coffre-track-note">{humanLine}</p>}
+
+              <div className="coffre-banner-actions">
+                <button className="coffre-primary" onClick={handleHeroPrimary}>
+                  {heroPlaying
+                    ? <><Pause size={15} fill="currentColor" /> Pause</>
+                    : isHeroCurrent
+                      ? <><Play size={15} fill="currentColor" /> Resume</>
+                      : hero
+                        ? <><Play size={15} fill="currentColor" /> Play track</>
+                        : <>Explore the unreleased <ArrowUpRight size={16} /></>}
+                </button>
+                {heroSongId != null && (
+                  <button className="coffre-secondary" onClick={() => useStore.getState().setInfoSongId(heroSongId)}>
+                    Full song details <ArrowUpRight size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </article>
+        </>
+      )}
+
+      {studioRow.length > 0 && (
+        <section className="coffre-reveal" style={{ '--coffre-reveal-delay': '60ms' } as CSSProperties} aria-labelledby="coffre-studio-head">
+          <div className="coffre-section-heading">
+            <div>
+              <h2 id="coffre-studio-head">In the studio</h2>
+              <p className="text-xs text-text-secondary mt-0.5">Hover a tile for a silent preview.</p>
+            </div>
+            <button type="button" onClick={() => setActiveView('footage')}>
+              All footage <ArrowRight size={16} />
+            </button>
+          </div>
+          <div className="coffre-vt-grid">
+            {studioRow.map((item) => (
+              <FootageTile
+                key={item.path}
+                item={item}
+                channel={channel}
+                showFrame
+                strictLink
+                onWatch={(it, startAt) => setWatching({ item: it, startAt })}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {weekPick.length > 0 && (
+        <section className="coffre-reveal" style={{ '--coffre-reveal-delay': '80ms' } as CSSProperties} aria-labelledby="coffre-week-head">
+          <div className="coffre-section-heading">
+            <div>
+              <h2 id="coffre-week-head">This week, years ago</h2>
+              <p className="text-xs text-text-secondary mt-0.5">Songs recorded around this week across the years, as dated in the catalogue.</p>
+            </div>
+            <button type="button" onClick={() => openCatalogue('', '')}>
+              See all {weekEntries.length} <ArrowRight size={16} />
+            </button>
+          </div>
+          <div className="coffre-vt-grid">
+            {weekPick.map((entry) => {
+              const track = songToTrack(entry.song)
+              const loc = firstStudioLocation(entry.song)
+              return (
+                <button
+                  key={entry.song.id}
+                  type="button"
+                  className="coffre-cover-card"
+                  onClick={() => entry.song.path ? playTrack(track, weekPick.filter((e) => !!e.song.path).map((e) => songToTrack(e.song))) : useStore.getState().setInfoSongId(entry.song.id)}
+                  onContextMenu={(event) => openContext(track, event)}
+                >
+                  <span className="coffre-cover">
+                    <ProgressiveCover src={buildImageUrl(entry.song.image_url)} alt="" className="w-full h-full object-cover" />
+                    {entry.song.path && <span className="coffre-card-play"><Play size={17} fill="currentColor" /></span>}
+                  </span>
+                  <strong>{entry.title}</strong>
+                  <span className="coffre-week-date">{entry.dateText}</span>
+                  {loc && <span className="coffre-week-studio">{loc}</span>}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="coffre-reveal" style={{ '--coffre-reveal-delay': '100ms' } as CSSProperties} aria-labelledby="coffre-resume">
         <div className="coffre-section-heading"><h2 id="coffre-resume">{resume.length ? 'Continue listening' : 'From the vault'}</h2>
           <button onClick={() => setActiveView('playlists')}>Your collection <ArrowRight size={16} /></button></div>
         {row.length ? <div className="coffre-cover-row">{row.map((track) => <button className="coffre-cover-card" key={track.id}
@@ -211,7 +526,14 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
       </section>
 
       {eras.length > 0 && <section className="coffre-reveal" style={{ '--coffre-reveal-delay': '120ms' } as CSSProperties} aria-labelledby="coffre-eras">
-        <div className="coffre-section-heading"><h2 id="coffre-eras">Find your era</h2><button onClick={() => openCatalogue()}>Explore the archive <ArrowRight size={16} /></button></div>
+        <div className="coffre-section-heading">
+          <h2 id="coffre-eras">Find your era</h2>
+          <button onClick={() => openCatalogue()}>
+            {sessionCount > 0
+              ? `${available.length.toLocaleString()} unreleased · ${sessionCount.toLocaleString()} sessions`
+              : 'Explore the archive'} <ArrowRight size={16} />
+          </button>
+        </div>
         <div className="coffre-era-grid">{eras.map((era) => <button className="coffre-era" key={era.name} style={era.accent ? { '--era-accent': era.accent } as CSSProperties : undefined} onClick={() => openCatalogue(era.name)} onPointerEnter={() => { void loadEraFullNames() }}>
           <span className="coffre-era-cover"><ProgressiveCover src={era.cover} alt="" className="w-full h-full object-cover" /></span>
           <span><strong>{eraLabel(era.name, true)}</strong><small>{era.count.toLocaleString()} unreleased tracks</small></span><ArrowUpRight size={16} />
@@ -228,5 +550,13 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
     {context && <SongContextMenu state={context} onClose={() => setContext(null)} canEdit={canEdit}
       onInfo={() => context.songId != null && useStore.getState().setInfoSongId(context.songId)}
       onPlay={() => playTrack(context.track)} onPlayNext={() => playNext(context.track)} />}
+    {watching && (
+      <FootagePlayerModal
+        item={watching.item}
+        channel={channel}
+        startAt={watching.startAt}
+        onClose={() => setWatching(null)}
+      />
+    )}
   </div>
 }

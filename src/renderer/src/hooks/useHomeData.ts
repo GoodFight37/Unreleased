@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useStore, useStorePick } from '../store/useStore'
 import { loadRecentTracks } from '../lib/recentTracks'
 import { playlistCoverUrl, loadAllSongs, songToTrack, type JWApiSong } from '../lib/juicewrldApi'
+import { loadFileIndex, peekFileIndex, type FileIndex } from '../lib/fileSearch'
 import { peekPlaylistCover } from '../lib/userApi'
 import { loadRecentPlaylistIds } from '../lib/recentPlaylists'
 import { loadStats as loadHeardleStats, todayKey as heardleToday } from '../lib/heardle'
@@ -78,16 +79,17 @@ export interface HomePlaylistCard {
 // genuinely needs song durations, so it isn't shown here - /stats owns that.
 export function useHomeData() {
   const {
-    account, playlists, guestPlaylists, followedPlaylists, likedTrackIds,
+    account, activeChannel, playlists, guestPlaylists, followedPlaylists, likedTrackIds,
     songPrefs, setActiveView, setPendingPlaylistId, playTrack,
     radioFmActive, setRadioFmActive, radioFmIsLive, radioFmNowPlaying,
     homeSectionVisibility, ensurePlaylists, setIsPlaying, recentTracksRev,
   } = useStorePick(
-    'account', 'playlists', 'guestPlaylists', 'followedPlaylists', 'likedTrackIds',
+    'account', 'activeChannel', 'playlists', 'guestPlaylists', 'followedPlaylists', 'likedTrackIds',
     'songPrefs', 'setActiveView', 'setPendingPlaylistId', 'playTrack',
     'radioFmActive', 'setRadioFmActive', 'radioFmIsLive', 'radioFmNowPlaying',
     'homeSectionVisibility', 'ensurePlaylists', 'setIsPlaying', 'recentTracksRev',
   )
+  const channel = activeChannel ?? ''
 
   const showSection = (id: string): boolean => isHomeSectionVisible(id, homeSectionVisibility)
 
@@ -128,10 +130,14 @@ export function useHomeData() {
   })
   const [catalogue, setCatalogue] = useState<JWApiSong[]>(() => catalogueMemo ?? [])
   const [catalogueState, setCatalogueState] = useState<'loading' | 'ready' | 'error'>(() => catalogueMemo ? 'ready' : 'loading')
+  const [fileIndex, setFileIndex] = useState<FileIndex | null>(() => peekFileIndex(channel))
   const albumSongIndex = useMemo(() => albumsApi.indexSongsByPath(catalogue), [catalogue])
   // True until the first fetch settles when there was nothing to paint, so
   // Home can hold the Albums slot instead of reshuffling the bento later.
   const [albumsPending, setAlbumsPending] = useState(() => HOME_ALBUMS_SHOWN && albums.length === 0)
+  useEffect(() => {
+    loadFileIndex(channel).then((idx) => { if (idx) setFileIndex(idx) }).catch(() => undefined)
+  }, [channel])
   useEffect(() => {
     if (!HOME_ALBUMS_SHOWN) return
     albumsApi.fetchAlbums()
@@ -268,7 +274,7 @@ export function useHomeData() {
     setActiveView,
     showSection,
     recent, newsItems, games, playlistRow, albumRow, albumsPending,
-    catalogue, catalogueState,
+    catalogue, catalogueState, fileIndex, channel,
     openTrack, openNewsItem, openRadioFm,
   }
 }
