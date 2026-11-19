@@ -19,7 +19,7 @@ export interface FanCoversIndex {
 }
 
 const MODE_KEY = 'unreleasedCoverMode'
-const INDEX_KEY = 'fanCoversIndex:v3'
+const INDEX_KEY = 'fanCoversIndex:v4'
 const INDEX_TTL_MS = 24 * 60 * 60 * 1000
 
 const EMPTY_INDEX: FanCoversIndex = {
@@ -135,10 +135,8 @@ export function peekFanCoverForSong(
     const tKey = normalizeCoverTitle(title)
     if (tKey && _index.byTitle[tKey]) return _index.byTitle[tKey]
   }
-  if (_index.all.length === 0) return undefined
   const eraKey = normalizeEraKey(era)
-  const pool = (eraKey && _index.byEra[eraKey]?.length ? _index.byEra[eraKey] : null)
-    ?? (_index.all.length > 0 ? _index.all : null)
+  const pool = eraKey && _index.byEra[eraKey]?.length ? _index.byEra[eraKey] : null
   if (!pool || pool.length === 0) return undefined
   return pool[stableHash(songId) % pool.length]
 }
