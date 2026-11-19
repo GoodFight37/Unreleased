@@ -1565,7 +1565,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
   appMenuPosition: ls.get<AppMenuPosition>('appMenuPosition') ?? 'sidebar',
   navStyle: ls.get<NavStyle>('navStyle') ?? 'pill',
   interfaceStyle: (ls.get<string>('interfaceStyle') === 'editorial' ? 'editorial' : 'spatial') as InterfaceStyle,
-  loudnessNormalization: ls.get<boolean>('loudnessNormalization') ?? true,
+  loudnessNormalization: ls.get<boolean>('loudnessNormalization') ?? false,
   wrldArchiveStills: ls.get<boolean>('wrldArchiveStills') ?? false,
   grailSongIds: ls.get<number[]>('grailSongIds') ?? [],
   autoHideNav: ls.get<boolean>('autoHideNav') ?? false,

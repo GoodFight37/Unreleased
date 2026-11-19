@@ -129,9 +129,9 @@ export default function WrldVisualizer({
   const {
     activeMode, vizQuality, vizUseArtwork, vizBoost, covered,
     wrldAtmosphere, wrldAnimations, wrldLyricLook, wrldCleanView, wrldCutAccent, wrldCoverLyricColors,
-    wrldDvdBouncer, wrldDvdLogo,
+    wrldDvdBouncer, wrldDvdLogo, wrldDvdThemeSync,
     setWrldAtmosphere, setWrldAnimations, setWrldLyricLook, setWrldCleanView, setWrldCutAccent, setWrldCoverLyricColors,
-    setWrldDvdBouncer, setWrldDvdLogo,
+    setWrldDvdBouncer, setWrldDvdLogo, setWrldDvdThemeSync,
   } = useVizStore(useShallow((s) => ({
     activeMode: s.activeMode,
     vizQuality: s.vizQuality,
@@ -146,6 +146,7 @@ export default function WrldVisualizer({
     wrldCoverLyricColors: s.wrldCoverLyricColors,
     wrldDvdBouncer: s.wrldDvdBouncer,
     wrldDvdLogo: s.wrldDvdLogo,
+    wrldDvdThemeSync: s.wrldDvdThemeSync,
     setWrldAtmosphere: s.setWrldAtmosphere,
     setWrldAnimations: s.setWrldAnimations,
     setWrldLyricLook: s.setWrldLyricLook,
@@ -154,6 +155,7 @@ export default function WrldVisualizer({
     setWrldCoverLyricColors: s.setWrldCoverLyricColors,
     setWrldDvdBouncer: s.setWrldDvdBouncer,
     setWrldDvdLogo: s.setWrldDvdLogo,
+    setWrldDvdThemeSync: s.setWrldDvdThemeSync,
   })))
   const [ambienceOpen, setAmbienceOpen] = useState(false)
 
@@ -174,6 +176,7 @@ export default function WrldVisualizer({
   const [showSettings, setShowSettings] = useState(false)
   const [showAmbiance, setShowAmbiance] = useState(false)
   const [cleanPeek, setCleanPeek] = useState(false)
+  const cleanArmedAt = useRef(0)
   useEscapeToClose(() => setShowSettings(false), showSettings)
   useEscapeToClose(() => setShowAmbiance(false), showAmbiance)
   // The song's videos to pick from, in the old WRLD style (the Widgets layout's player card has its own button).
@@ -446,6 +449,15 @@ export default function WrldVisualizer({
       if (combo === 'KeyC') {
         const next = !useVizStore.getState().wrldCleanView
         useVizStore.getState().setWrldCleanView(next)
+        setCleanPeek(false)
+        setShowAmbiance(false)
+        setShowSettings(false)
+        setShowFontMenu(false)
+        if (next) {
+          cleanArmedAt.current = performance.now() + 700
+          overToolbar.current = false
+          ;(document.activeElement as HTMLElement | null)?.blur?.()
+        }
         announce(next ? 'Clean stage' : 'Controls shown')
         e.preventDefault()
         e.stopPropagation()
@@ -515,8 +527,8 @@ export default function WrldVisualizer({
           ref={postBarRef}
           role="toolbar"
           aria-label="Lyrics stage controls"
-          className={`glass-bar pointer-events-auto relative flex items-center gap-0.5 p-[5px] max-w-full rounded-[16px] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl border border-[var(--border)] transition-[opacity,transform] duration-200 ${
-            idle && !showFontMenu ? 'opacity-0 translate-y-1.5 pointer-events-none' : ''
+          className={`glass-bar relative flex items-center gap-0.5 p-[5px] max-w-full rounded-[16px] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl border border-[var(--border)] transition-[opacity,transform] duration-200 ${
+            ((idle || wrldCleanView) && !showFontMenu) ? 'opacity-0 translate-y-1.5 pointer-events-none' : 'pointer-events-auto'
           }`}
           onMouseEnter={() => { overToolbar.current = true }}
           onMouseLeave={() => { overToolbar.current = false; wake() }}
@@ -630,9 +642,24 @@ export default function WrldVisualizer({
                 setWrldDvdLogo(next.id)
                 announce(`DVD: ${next.label}`)
               }}
-              title="Switch bouncing DVD style (Album Covers, Juice Pixel, 999…)"
+              title="Switch bouncing DVD style (Album Covers, Playing Cover, LND Butterfly)"
             >
               {DVD_LOGO_OPTIONS.find((o) => o.id === wrldDvdLogo)?.label ?? 'Album Covers'}
+            </button>
+          )}
+          {wrldDvdBouncer && wrldDvdLogo === 'albums' && (
+            <button
+              type="button"
+              className={`h-9 px-2.5 shrink-0 rounded-[10px] text-[11px] font-semibold transition-colors ${wrldDvdThemeSync ? toolOn : toolIdle}`}
+              onClick={() => {
+                const next = !wrldDvdThemeSync
+                setWrldDvdThemeSync(next)
+                announce(next ? 'Theme sync on bounce: ON' : 'Theme sync on bounce: OFF')
+              }}
+              aria-pressed={wrldDvdThemeSync}
+              title={wrldDvdThemeSync ? 'Every bounce switches the Ambience theme (click to bounce without changing theme)' : 'Bounce without changing theme (click to sync Ambience theme on every bounce)'}
+            >
+              {wrldDvdThemeSync ? 'Theme sync' : 'Bounce only'}
             </button>
           )}
           <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
@@ -647,7 +674,9 @@ export default function WrldVisualizer({
       {wrldCleanView && !cleanPeek && (
         <div
           className="absolute top-0 right-0 w-44 h-20 z-30"
-          onMouseEnter={() => setCleanPeek(true)}
+          onPointerMove={() => {
+            if (performance.now() >= cleanArmedAt.current) setCleanPeek(true)
+          }}
           aria-hidden
         />
       )}
@@ -775,8 +804,15 @@ export default function WrldVisualizer({
           onClick={() => {
             const next = !wrldCleanView
             setWrldCleanView(next)
+            setCleanPeek(false)
             setShowAmbiance(false)
             setShowSettings(false)
+            setShowFontMenu(false)
+            if (next) {
+              cleanArmedAt.current = performance.now() + 700
+              overToolbar.current = false
+              ;(document.activeElement as HTMLElement | null)?.blur?.()
+            }
             announce(next ? 'Clean stage' : 'Controls shown')
           }}
           title={wrldCleanView ? 'Show controls (C)' : 'Clean stage for recording (C)'}
@@ -952,23 +988,43 @@ export default function WrldVisualizer({
                 />
               </div>
               {wrldDvdBouncer && (
-                <div className="flex flex-wrap gap-1.5 mt-2.5">
-                  {DVD_LOGO_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setWrldDvdLogo(opt.id)}
-                      aria-pressed={wrldDvdLogo === opt.id}
-                      className={`px-2 py-1 rounded-lg border text-[10px] font-semibold transition-colors ${
-                        wrldDvdLogo === opt.id
-                          ? 'bg-accent/15 border-[var(--accent)] text-text-primary'
-                          : 'border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-[var(--surface-overlay)]'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {DVD_LOGO_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setWrldDvdLogo(opt.id)}
+                        aria-pressed={wrldDvdLogo === opt.id}
+                        className={`px-2 py-1 rounded-lg border text-[10px] font-semibold transition-colors ${
+                          wrldDvdLogo === opt.id
+                            ? 'bg-accent/15 border-[var(--accent)] text-text-primary'
+                            : 'border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-[var(--surface-overlay)]'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {wrldDvdLogo === 'albums' && (
+                    <div className="flex items-center justify-between gap-3 mt-3 pt-2.5 border-t border-[var(--border)]/60">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold text-text-primary leading-tight">Sync Ambience theme</div>
+                        <div className="text-[10px] text-text-muted leading-tight mt-0.5">
+                          {wrldDvdThemeSync ? 'Every bounce switches the screen theme' : 'Bounces freely without changing theme'}
+                        </div>
+                      </div>
+                      <Toggle
+                        on={wrldDvdThemeSync}
+                        onClick={() => {
+                          const next = !wrldDvdThemeSync
+                          setWrldDvdThemeSync(next)
+                          announce(next ? 'Theme sync on bounce: ON' : 'Theme sync on bounce: OFF')
+                        }}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

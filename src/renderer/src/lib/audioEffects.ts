@@ -578,11 +578,11 @@ export function resetElementFade(el: HTMLAudioElement | null, gain = 1): void {
 }
 
 /** Sets master loudness normalization linear gain (1.0 = unity, clamped safely). */
-export function setNormalizationGain(linear: number): void {
-  const clamped = Number.isFinite(linear) ? Math.max(0.15, Math.min(2.0, linear)) : 1
+export function setNormalizationGain(linear: number, timeConstant = 0.08): void {
+  const clamped = Number.isFinite(linear) ? Math.max(0.5, Math.min(1.65, linear)) : 1
   lastNormGain = clamped
   if (!ctx || !masterGain) return
-  masterGain.gain.setTargetAtTime(clamped, ctx.currentTime, 0.08)
+  masterGain.gain.setTargetAtTime(clamped, ctx.currentTime, Math.max(0.02, timeConstant))
 }
 
 export function hasActiveAudioEffects(settings: AudioEffectSettings): boolean {

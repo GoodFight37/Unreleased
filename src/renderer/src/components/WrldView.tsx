@@ -21,7 +21,7 @@ import { getCurrentLineIndex, downloadSyncedLyrics, splitAdLibs, splitColorWords
 import { formatDuration } from '../lib/format'
 import { setEqAnchor } from '../lib/eqAnchor'
 import { seekAudio, getAudioDuration, usePlayerLoading } from './Player'
-import { getSongById, songToTrack, playlistCoverUrl, smallCoverUrl, fullCoverUrl, loadAllSongs } from '../lib/juicewrldApi'
+import { buildImageUrl, getSongById, songToTrack, playlistCoverUrl, smallCoverUrl, fullCoverUrl, loadAllSongs } from '../lib/juicewrldApi'
 import type { JWApiSong } from '../lib/juicewrldApi'
 import * as albumsApi from '../lib/albumsApi'
 import type { Album as WrldAlbum } from '../lib/albumsApi'
@@ -44,7 +44,7 @@ import ContextMenu from './ContextMenu'
 import RadioChatPanel from './RadioChatPanel'
 import RadioFmControls from './RadioFmControls'
 import WrldFmWidget from './WrldFmWidget'
-import { getSkin } from '../lib/skins'
+import { backdropArt, getSkin } from '../lib/skins'
 import WrldVisualizer from './WrldVisualizer'
 import WrldWidgets from './WrldWidgets'
 import LyricStageView from './LyricStageView'
@@ -532,17 +532,26 @@ export default function WrldView(): JSX.Element {
   )
   const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
   const { reducedMotion, gameMode } = useEffectsState()
-  const { wrldAtmosphere, wrldAnimations, wrldCleanView, wrldDvdBouncer, wrldDvdLogo } = useVizStore(useShallow(s => ({
+  const { wrldAtmosphere, wrldAnimations, wrldCleanView, wrldDvdBouncer, wrldDvdLogo, wrldDvdThemeSync } = useVizStore(useShallow(s => ({
     wrldAtmosphere: s.wrldAtmosphere,
     wrldAnimations: s.wrldAnimations,
     wrldCleanView: s.wrldCleanView,
     wrldDvdBouncer: s.wrldDvdBouncer,
     wrldDvdLogo: s.wrldDvdLogo,
+    wrldDvdThemeSync: s.wrldDvdThemeSync,
   })))
   const stageAnimated = wrldAnimations && !reducedMotion && !gameMode && !videoShown && wrldAtmosphere !== 'off'
+  const dvdControlsStage = wrldDvdBouncer && wrldDvdLogo === 'albums' && wrldDvdThemeSync
+  const stageBackdropArt = useMemo(() => {
+    if (dvdControlsStage) {
+      const themeArt = buildImageUrl(backdropArt(theme, false, artSrc && !artError ? artSrc : null))
+      if (themeArt) return themeArt
+    }
+    return artSrc && !artError ? artSrc : null
+  }, [dvdControlsStage, theme, artSrc, artError])
   const stageEra = useMemo(
-    () => resolveWrldEra(artSrc && !artError ? artSrc : null, displayAlbum ?? null),
-    [artSrc, artError, displayAlbum],
+    () => resolveWrldEra(stageBackdropArt, dvdControlsStage ? getSkin(theme).name : (displayAlbum ?? null)),
+    [stageBackdropArt, dvdControlsStage, theme, displayAlbum],
   )
   const titleBeatRef = useRef<HTMLParagraphElement>(null)
   useEffect(() => {
@@ -823,8 +832,8 @@ export default function WrldView(): JSX.Element {
               page renders over a still-mounted bgView (App.tsx), so the page
               you came from bled through those corners. */}
           {/* Post always gets the art/mesh stage under a dark veil, so its white words stay readable on a light cover. */}
-          <div className={`absolute inset-0 overflow-hidden ${!useThemeBackground && textIsDark && !postOn ? 'bg-[#f4f3f7]' : 'bg-black'}`} style={{ contain: 'strict' }}>
-            {useThemeBackground && !postOn ? (
+          <div className={`absolute inset-0 z-0 overflow-hidden ${!useThemeBackground && textIsDark && !postOn ? 'bg-[#f4f3f7]' : 'bg-black'}`} style={{ contain: 'strict' }}>
+            {useThemeBackground && !postOn && !dvdControlsStage ? (
               <div
                 className="absolute inset-0 bg-surface"
                 style={gradientsEnabled ? {
@@ -842,7 +851,7 @@ export default function WrldView(): JSX.Element {
               />
             ) : (
               <LiquidMeshBackdrop
-                artUrl={artSrc && !artError ? artSrc : null}
+                artUrl={stageBackdropArt}
                 eraAsset={stageEra.eraAsset}
                 atmosphere={stageEra.atmosphere}
                 isDark={postOn || !textIsDark}
@@ -864,7 +873,8 @@ export default function WrldView(): JSX.Element {
                 logo={wrldDvdLogo}
                 reducedMotion={reducedMotion || gameMode}
                 playingCoverUrl={artSrc && !artError ? artSrc : null}
-                onCornerAlbumHit={(albumId) => {
+                themeSync={wrldDvdThemeSync}
+                onBounceAlbumChange={(albumId) => {
                   useStore.getState().setTheme(albumId)
                 }}
                 className="absolute inset-0 z-[5] pointer-events-none overflow-hidden select-none opacity-90"
@@ -1448,7 +1458,7 @@ export default function WrldView(): JSX.Element {
                 inside keeps its covers - see below. */}
             {(panelPresence.mounted || queueEverOpened) && (
             <div
-              className={`absolute inset-y-0 right-0 overflow-hidden ${panelPresence.exiting ? 'animate-wrld-panel-out' : 'animate-wrld-panel-in'}`}
+              className={`absolute inset-y-0 right-0 z-10 overflow-hidden ${panelPresence.exiting ? 'animate-wrld-panel-out' : 'animate-wrld-panel-in'}`}
               style={{ left: 'max(40%, 320px)', ...(panelPresence.mounted ? null : { display: 'none' }) }}
               data-viz="panel"
             >

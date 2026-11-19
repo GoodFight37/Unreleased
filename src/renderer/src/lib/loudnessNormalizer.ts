@@ -6,11 +6,11 @@
 
 import { getAnalysisTap, setNormalizationGain } from './audioEffects'
 
-const CACHE_KEY = 'unreleased:loudnessCache:v1'
+const CACHE_KEY = 'unreleased:loudnessCache:v2'
 const MAX_CACHED_TRACKS = 1500
-const TARGET_DBFS = -14.0
-const MIN_GAIN_DB = -9.0
-const MAX_GAIN_DB = 5.0
+const TARGET_DBFS = -10.5
+const MIN_GAIN_DB = -4.0
+const MAX_GAIN_DB = 4.0
 
 type GainCache = Record<string, number>
 
@@ -132,7 +132,7 @@ export function syncLoudnessNormalizer(
       const gain = Math.round(dbToLinear(deltaDb) * 1000) / 1000
       loadCache()[trackId] = gain
       saveCacheDebounced()
-      if (activeTrackId === trackId) setNormalizationGain(gain)
+      // Never dip volume abruptly mid-song on a first-time measurement; apply gently on next play.
       stopSampling()
     }
   }, 250)

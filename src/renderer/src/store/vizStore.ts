@@ -144,6 +144,8 @@ interface VizState {
   /** Optional kinetic Album Covers / Playing Cover / LND Butterfly bouncer behind WRLD lyrics. */
   wrldDvdBouncer: boolean
   wrldDvdLogo: 'albums' | 'cover' | 'butterfly'
+  /** When true in Album Covers mode, every wall bounce switches the active Ambience album theme. */
+  wrldDvdThemeSync: boolean
   /** Hides chrome and playback controls in WRLD for clean screen-recording/captures. */
   wrldCleanView: boolean
   /** Post frame, saved. */
@@ -166,6 +168,7 @@ interface VizState {
   setWrldCoverLyricColors: (on: boolean) => void
   setWrldDvdBouncer: (on: boolean) => void
   setWrldDvdLogo: (logo: 'albums' | 'cover' | 'butterfly') => void
+  setWrldDvdThemeSync: (on: boolean) => void
   setWrldCleanView: (on: boolean) => void
   setWrldVideos: (choice: MusicVideoChoice) => void
   setWrldVideoShown: (on: boolean) => void
@@ -203,6 +206,7 @@ export const useVizStore = create<VizState>((set) => ({
   wrldCoverLyricColors: ls.get<boolean>('wrldCoverLyricColors') ?? true,
   wrldDvdBouncer: ls.get<boolean>('wrldDvdBouncer') === true,
   wrldDvdLogo: pick(ls.get('wrldDvdLogo'), ['albums', 'cover', 'butterfly'] as const, 'albums'),
+  wrldDvdThemeSync: ls.get<boolean>('wrldDvdThemeSync') ?? true,
   wrldFrame: normalizeWrldFrame(ls.get<unknown>('wrldFrame')),
   wrldInk: normalizeWrldInk(ls.get<unknown>('wrldInk')),
   wrldPostFont: ls.get<string>('wrldPostFont') ?? null,
@@ -273,6 +277,10 @@ export const useVizStore = create<VizState>((set) => ({
   setWrldDvdLogo: (wrldDvdLogo) => {
     set({ wrldDvdLogo })
     ls.set('wrldDvdLogo', wrldDvdLogo)
+  },
+  setWrldDvdThemeSync: (wrldDvdThemeSync) => {
+    set({ wrldDvdThemeSync })
+    ls.set('wrldDvdThemeSync', wrldDvdThemeSync)
   },
   setWrldFrame: (wrldFrame) => { set({ wrldFrame }); ls.set('wrldFrame', wrldFrame) },
   setWrldInk: (wrldInk) => { set({ wrldInk }); ls.set('wrldInk', wrldInk) },
