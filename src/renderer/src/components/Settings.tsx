@@ -4,7 +4,6 @@ import {
   Activity, Headphones, Gamepad2,
 } from 'lucide-react'
 import { DebugAnonymousToggle, DebugLogOpenButton, DebugRecordButton } from './DebugRecorder'
-import { ADDRESSES as DONATION_ADDRESSES, AddressRow as DonationAddressRow } from './DonationNotice'
 import VizControls from './VizControls'
 import { audioQualityLabel } from '../lib/audioQuality'
 import { showAppToast } from '../lib/appToast'
@@ -235,14 +234,13 @@ const ALL_SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electr
   { tab: 'about', label: 'Open debug log', sub: 'View a saved debug log file - requests, errors and console messages', devOnly: true },
   { tab: 'about', label: 'About', sub: 'Version, GitHub, Discord, API links' },
   { tab: 'about', label: 'API Docs', devOnly: true },
-  { tab: 'about', label: 'Thank You', sub: 'Donors and contributors' },
+  { tab: 'about', label: 'Built by & credits', sub: 'GoodFight37 (WRLDMLK) & Juice WRLD API' },
   { tab: 'about', label: 'GitHub' },
   { tab: 'about', label: 'Discord' },
   { tab: 'about', label: 'Terms of Service' },
   { tab: 'about', label: 'Privacy Policy' },
   { tab: 'about', label: 'Become an Editor' },
   { tab: 'about', label: 'Become a Contributor' },
-  { tab: 'about', label: 'FAQ', sub: 'What is this? Who are you? Why did you build this? Technical stuff?' },
 ]
 const FAN_SETTINGS_LABELS = new Set([
   'Theme', 'Liquid Glass & animations', 'App text size', 'Audio output', 'Equalizer', 'Audio quality',
@@ -503,7 +501,6 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     playNotificationSound(id)
   }
   const [cdnEnabled, setCdnEnabled] = useState(cdnService.enabled)
-  const [openAbout, setOpenAbout] = useState<string | null>(null)
   const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null)
   // Re-opening while already docked (sandbox notch collapsed) wouldn't
   // otherwise re-expand it — see the matching comment on setShowSettings.
@@ -542,6 +539,8 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     libraryFolders, addLibraryFolder, removeLibraryFolder, scanLibrary, libraryScanning, libraryLastScanned,
     libraryAutoRefresh, setLibraryAutoRefresh,
     developerMode, setDeveloperMode,
+    interfaceStyle, setInterfaceStyle,
+    loudnessNormalization, setLoudnessNormalization,
     lastfmUser, setLastfmUser, lastfmEnabled, setLastfmEnabled,
     appTextScale, setAppTextScale,
     lyricsScale, setLyricsScale,
@@ -562,7 +561,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
     fullEraNames, setFullEraNames,
     autoReportErrors, setAutoReportErrors,
     embedSongInfoOnDownload, setEmbedSongInfoOnDownload,
-  } = useStorePick('setShowSettings', 'setActiveView', 'account', 'theme', 'setTheme', 'accentColor', 'setAccentColor', 'settingsTab', 'setSettingsTab', 'appMenuPosition', 'setAppMenuPosition', 'navStyle', 'setNavStyle', 'autoHideNav', 'setAutoHideNav', 'autoHideNavZone', 'setAutoHideNavZone', 'navOrder', 'setNavOrder', 'navVisibility', 'setNavItemVisible', 'homeSectionVisibility', 'setHomeSectionVisible', 'navControlOrder', 'setNavControlOrder', 'navControlVisibility', 'setNavControlVisible', 'audioOutput', 'setAudioOutput', 'crossfadeEnabled', 'crossfadeDuration', 'setCrossfade', 'pauseFadeEnabled', 'setPauseFade', 'pauseOnDisconnect', 'setPauseOnDisconnect', 'rememberQueue', 'setRememberQueue', 'preferOgVersion', 'setPreferOgVersion', 'rotateSuggestedCovers', 'setRotateSuggestedCovers', 'mediaOverlayEnabled', 'setMediaOverlayEnabled', 'popoutWindows', 'setPopoutWindow', 'lyricsOffset', 'setLyricsOffset', 'sleepTimerEnd', 'setSleepTimer', 'hotkeyBindings', 'setHotkeyBinding', 'resetHotkeyBindings', 'resetGlobalHotkeyBindings', 'hotkeySeekSeconds', 'setHotkeySeekSeconds', 'globalHotkeysEnabled', 'setGlobalHotkeysEnabled', 'globalHotkeyBindings', 'setGlobalHotkeyBinding', 'libraryFolders', 'addLibraryFolder', 'removeLibraryFolder', 'scanLibrary', 'libraryScanning', 'libraryLastScanned', 'libraryAutoRefresh', 'setLibraryAutoRefresh', 'developerMode', 'setDeveloperMode', 'lastfmUser', 'setLastfmUser', 'lastfmEnabled', 'setLastfmEnabled', 'appTextScale', 'setAppTextScale', 'lyricsScale', 'setLyricsScale', 'lyricsAlign', 'setLyricsAlign', 'lyricsBlur', 'setLyricsBlur', 'lyricsBlurAmount', 'setLyricsBlurAmount', 'lyricsColorActive', 'setLyricsColorActive', 'lyricsColorInactive', 'setLyricsColorInactive', 'appFont', 'setAppFont', 'lyricsFont', 'setLyricsFont', 'gradientsEnabled', 'setGradientsEnabled', 'glassRefraction', 'setGlassRefraction', 'surfaceGradientsEnabled', 'setSurfaceGradientsEnabled', 'wrldThemeBackground', 'setWrldThemeBackground', 'adaptiveColors', 'setAdaptiveColors', 'refreshPlaylists', 'fullEraNames', 'setFullEraNames', 'logoutAccount', 'setShowUserAuth', 'playlistHeroEnabledDark', 'playlistHeroEnabledLight', 'setPlaylistHeroEnabled', 'autoReportErrors', 'setAutoReportErrors', 'embedSongInfoOnDownload', 'setEmbedSongInfoOnDownload')
+  } = useStorePick('setShowSettings', 'setActiveView', 'account', 'theme', 'setTheme', 'accentColor', 'setAccentColor', 'settingsTab', 'setSettingsTab', 'appMenuPosition', 'setAppMenuPosition', 'navStyle', 'setNavStyle', 'autoHideNav', 'setAutoHideNav', 'autoHideNavZone', 'setAutoHideNavZone', 'navOrder', 'setNavOrder', 'navVisibility', 'setNavItemVisible', 'homeSectionVisibility', 'setHomeSectionVisible', 'navControlOrder', 'setNavControlOrder', 'navControlVisibility', 'setNavControlVisible', 'audioOutput', 'setAudioOutput', 'crossfadeEnabled', 'crossfadeDuration', 'setCrossfade', 'pauseFadeEnabled', 'setPauseFade', 'pauseOnDisconnect', 'setPauseOnDisconnect', 'rememberQueue', 'setRememberQueue', 'preferOgVersion', 'setPreferOgVersion', 'rotateSuggestedCovers', 'setRotateSuggestedCovers', 'mediaOverlayEnabled', 'setMediaOverlayEnabled', 'popoutWindows', 'setPopoutWindow', 'lyricsOffset', 'setLyricsOffset', 'sleepTimerEnd', 'setSleepTimer', 'hotkeyBindings', 'setHotkeyBinding', 'resetHotkeyBindings', 'resetGlobalHotkeyBindings', 'hotkeySeekSeconds', 'setHotkeySeekSeconds', 'globalHotkeysEnabled', 'setGlobalHotkeysEnabled', 'globalHotkeyBindings', 'setGlobalHotkeyBinding', 'libraryFolders', 'addLibraryFolder', 'removeLibraryFolder', 'scanLibrary', 'libraryScanning', 'libraryLastScanned', 'libraryAutoRefresh', 'setLibraryAutoRefresh', 'developerMode', 'setDeveloperMode', 'interfaceStyle', 'setInterfaceStyle', 'loudnessNormalization', 'setLoudnessNormalization', 'lastfmUser', 'setLastfmUser', 'lastfmEnabled', 'setLastfmEnabled', 'appTextScale', 'setAppTextScale', 'lyricsScale', 'setLyricsScale', 'lyricsAlign', 'setLyricsAlign', 'lyricsBlur', 'setLyricsBlur', 'lyricsBlurAmount', 'setLyricsBlurAmount', 'lyricsColorActive', 'setLyricsColorActive', 'lyricsColorInactive', 'setLyricsColorInactive', 'appFont', 'setAppFont', 'lyricsFont', 'setLyricsFont', 'gradientsEnabled', 'setGradientsEnabled', 'glassRefraction', 'setGlassRefraction', 'surfaceGradientsEnabled', 'setSurfaceGradientsEnabled', 'wrldThemeBackground', 'setWrldThemeBackground', 'adaptiveColors', 'setAdaptiveColors', 'refreshPlaylists', 'fullEraNames', 'setFullEraNames', 'logoutAccount', 'setShowUserAuth', 'playlistHeroEnabledDark', 'playlistHeroEnabledLight', 'setPlaylistHeroEnabled', 'autoReportErrors', 'setAutoReportErrors', 'embedSongInfoOnDownload', 'setEmbedSongInfoOnDownload')
   const wrldWidgets = useVizStore(s => s.wrldWidgets)
   const setWrldWidgets = useVizStore(s => s.setWrldWidgets)
   const wrldFm = useVizStore(s => s.wrldFm)
@@ -1052,7 +1051,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
         {/* Body — sidebar category list + flat content pane, mirroring
             macOS System Settings / Apple Music's own preferences window. */}
         <div className="flex flex-1 min-h-0">
-          <div ref={categoryRef} className="relative isolate w-[230px] shrink-0 border-r border-[var(--border)] py-4 px-3 overflow-y-auto hidden sm:block">
+          <div ref={categoryRef} className="relative isolate w-[252px] shrink-0 border-r border-[var(--border)] py-4 px-3 overflow-y-auto hidden sm:block">
             {tabs.map((t, i) => (
               <button
                 key={t.id}
@@ -1204,6 +1203,47 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
             {!settingsQueryTrimmed && shows('appearance') && <span data-settings-section="appearance" aria-hidden />}{!settingsQueryTrimmed && shows('appearance') && (
               <div>
                 <SettingsTitle>Appearance</SettingsTitle>
+                {!developerMode && (
+                  <SettingsGroup title="Interface style">
+                    <div className="py-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {([
+                          {
+                            id: 'spatial' as const,
+                            name: 'Apple Spatial Glass',
+                            desc: 'Floating WebGPU glass pills, luminous cover halos and airy spatial chrome.',
+                          },
+                          {
+                            id: 'editorial' as const,
+                            name: 'Obsidian Editorial',
+                            desc: 'Minimalist left sidebar with Search & Heardle, Instrument Serif titles and quiet obsidian archive focus.',
+                          },
+                        ]).map((opt) => {
+                          const active = interfaceStyle === opt.id
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => setInterfaceStyle(opt.id)}
+                              className={`text-left p-3.5 rounded-xl border transition-all ${
+                                active
+                                  ? 'border-[var(--accent)] bg-accent/10 ring-1 ring-[var(--accent)]'
+                                  : 'border-[var(--border)] bg-[var(--fill)] hover:bg-[var(--fill-strong)]'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className={`text-sm font-semibold ${active ? 'text-accent' : 'text-text-primary'}`}>{opt.name}</span>
+                                {active && <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-accent text-white">Active</span>}
+                              </div>
+                              <p className="text-xs text-text-muted leading-relaxed">{opt.desc}</p>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </SettingsGroup>
+                )}
                 <SettingsGroup title="Theme">
                   <div className="py-3 border-b border-[var(--border)]">
                     <div className="flex items-center gap-2.5 mb-2.5">
@@ -1846,6 +1886,13 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     label="Pause when headphones disconnect"
                     sub="And play again when they reconnect"
                     labelExtra={<div className="ml-2 translate-y-[3px]"><Toggle on={pauseOnDisconnect} onClick={() => setPauseOnDisconnect(!pauseOnDisconnect)} /></div>}
+                  />
+                  <Row
+                    icon={Waves}
+                    iconColor="#0ea5e9"
+                    label="Loudness normalization"
+                    sub="Levels out volume jumps between unreleased bounces, sessions and official masters"
+                    labelExtra={<div className="ml-2 translate-y-[3px]"><Toggle on={loudnessNormalization} onClick={() => setLoudnessNormalization(!loudnessNormalization)} label="Loudness normalization" /></div>}
                   />
                   <Row icon={SlidersHorizontal} iconColor="#2563eb" label="Equalizer" sub="Presets, balance, playback speed and sleep timer">
                     <button className="text-text-primary text-xs font-semibold underline underline-offset-4" onClick={() => { closeSettings(); useStore.getState().toggleEqPanel() }}>Open sound panel</button>
@@ -2670,16 +2717,16 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     <Disc size={28} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-text-primary text-lg font-bold leading-tight">Unreleased</p>
+                    <p className="text-text-primary text-lg font-bold leading-tight">Unreleased Glass</p>
                     <p className="text-text-muted text-xs mt-0.5">
-                      Version {APP_VERSION} · powered by{' '}
+                      Version {APP_VERSION} · by <span className="text-text-primary font-medium">GoodFight37</span> (Discord: <span className="font-mono-ui text-text-primary">WRLDMLK</span>) · powered by{' '}
                       <a href="https://juicewrldapi.com" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">juicewrldapi.com</a>
                     </p>
                     <p className="text-text-muted text-xs mt-0.5 flex items-center gap-1.5">
                       <span>
                         Commit{' '}
                         <a
-                          href={`https://github.com/Juice-WRLD-API/Unreleased/commit/${COMMIT_HASH}`}
+                          href={`https://github.com/GoodFight37/Unreleased/commit/${COMMIT_HASH}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-accent font-mono hover:underline"
@@ -2691,7 +2738,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                     </p>
                     <div className="flex flex-wrap gap-2 mt-3">
                       {([
-                        { href: 'https://github.com/Juice-WRLD-API/Unreleased', label: 'GitHub', icon: Github },
+                        { href: 'https://github.com/GoodFight37/Unreleased', label: 'GitHub', icon: Github },
                         { href: 'https://discord.gg/jwa', label: 'Discord', icon: MessageCircle },
                         { href: 'https://juicewrldapi.com', label: 'API', icon: Globe },
                       ]).map(({ href, label, icon: LinkIcon }) => (
@@ -2719,7 +2766,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   )}
                   {(developerMode || !isElectron) && <SettingsLink icon={BookOpen} color="#0d9488" label="API docs" onClick={() => openMainView('docs')} />}
                   <SettingsLink icon={MessageCircle} color="#7c3aed" label="Send feedback" sub="Report a bug or share an idea" onClick={() => useStore.getState().openReport({ kind: 'feedback' })} />
-                  <SettingsLink icon={Heart} color="#db2777" label="Thank you" sub="Donors and contributors" onClick={() => openMainView('thanks')} />
+                  <SettingsLink icon={Heart} color="#db2777" label="Built by & credits" sub="GoodFight37 (WRLDMLK) & Juice WRLD API" onClick={() => openMainView('thanks')} />
                 </SettingsGroup>
 
                 {(developerMode || !isElectron) && <SettingsGroup title="Debug log">
@@ -2744,58 +2791,9 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   </Row>
                 </SettingsGroup>}
 
-                <SettingsGroup title="Support the app" footer="Donations help keep the servers running.">
-                  <div className="flex flex-col gap-1.5 py-3">
-                    {DONATION_ADDRESSES.map(a => <DonationAddressRow key={a.label} label={a.label} value={a.value} />)}
-                  </div>
-                </SettingsGroup>
-
                 <SettingsGroup title="Legal" flush>
                   <SettingsLink icon={ScrollText} color="#6b7280" label="Terms of Service" onClick={() => openLegal('terms')} />
                   <SettingsLink icon={ShieldCheck} color="#6b7280" label="Privacy Policy" onClick={() => openLegal('privacy')} />
-                </SettingsGroup>
-
-                <SettingsGroup title="FAQ" flush>
-                  {([
-                    {
-                      q: 'What is this?',
-                      a: "The Juice WRLD API is a RESTful API providing access to a comprehensive database of Juice WRLD songs, albums, and eras. Whether you are a fan, developer, or researcher, this API offers the tools you need to dive deep into Juice WRLD music.",
-                      link: { text: 'Check out the documentation to get started.' },
-                    },
-                    {
-                      q: 'Who are you?',
-                      a: "We are passionate Juice WRLD fans and developers who wanted to create an accessible platform for others to explore and analyze Juice WRLD musical legacy. Shoutout to hypixelforums on Discord for the bug feedback.",
-                    },
-                    {
-                      q: 'Why did you build this?',
-                      a: "We built this API to celebrate Juice WRLD legacy by making his music and history more accessible to fans and developers alike.",
-                    },
-                    {
-                      q: 'Technical stuff?',
-                      a: 'The Juice WRLD API is built with Django and PostgreSQL. This player (unreleased) is built with React, TypeScript, Vite, and Tailwind CSS.',
-                    },
-                  ] as { q: string; a: string; link?: { text: string } }[]).map(({ q, a, link }) => (
-                    <div key={q} className="border-b border-[var(--border)] last:border-b-0">
-                      <button
-                        onClick={() => setOpenAbout(openAbout === q ? null : q)}
-                        aria-expanded={openAbout === q}
-                        className="flex items-center justify-between w-full px-4 py-3 hover:bg-[var(--fill)] transition-colors text-left"
-                      >
-                        <span className="text-text-primary text-sm">{q}</span>
-                        <ChevronDown size={12} className={`text-text-muted control-motion shrink-0 ml-2 ${openAbout === q ? 'rotate-180' : ''}`} />
-                      </button>
-                      <MotionDisclosure open={openAbout === q} className="px-4 pb-3 pt-0">
-                        <p className="text-text-muted text-xs leading-relaxed">{a}</p>
-                        {link && (
-                          <button
-                            onClick={() => openMainView('docs')}
-                            className="mt-1.5 inline-block text-xs text-accent hover:underline">
-                            {link.text}
-                          </button>
-                        )}
-                      </MotionDisclosure>
-                    </div>
-                  ))}
                 </SettingsGroup>
               </div>
             )}

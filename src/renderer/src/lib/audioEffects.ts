@@ -233,6 +233,10 @@ let effectsWanted = false
 
 let ctx: AudioContext | null = null
 let chainInput: GainNode | null = null
+let dryBypassGain: GainNode | null = null
+let fxReturnGain: GainNode | null = null
+let masterGain: GainNode | null = null
+let lastNormGain = 1
 let analyser: AnalyserNode | null = null
 let bandFilters: BiquadFilterNode[] = []
 let monoNode: GainNode | null = null
@@ -264,6 +268,9 @@ let echoWet: GainNode | null = null
 // Elements already wired in - createMediaElementSource throws if called twice
 // on the same element, and there is no way to un-create a source node.
 const attachedEls = new WeakSet<HTMLAudioElement>()
+// Per-element gain node ahead of chainInput so crossfades run on Web Audio's
+// hardware clock with equal-power curves (immune to hidden-window RAF freeze).
+const slotGains = new WeakMap<HTMLAudioElement, GainNode>()
 // Elements that asked to be routed while the graph didn't exist yet (mobile,
 // before any effect is switched on). Held so enabling an effect later can wire
 // up everything that already registered - the player slots and the FM element
@@ -480,7 +487,22 @@ function ensureGraph(): AudioContext | null {
   wetGain.connect(boostGain)
   echoWet.connect(boostGain)
   boostGain.connect(limiter)
-  limiter.connect(ctx.destination)
+
+  // Clean dry bypass + master normalization output: when every EQ/FX stage is
+  // off, audio routes straight through dryBypassGain → masterGain → destination,
+  // avoiding safety-limiter coloration and lookahead latency on clean playback.
+  dryBypassGain = ctx.createGain()
+  fxReturnGain = ctx.createGain()
+  masterGain = ctx.createGain()
+  masterGain.gain.value = lastNormGain
+  dryBypassGain.gain.value = 1
+  fxReturnGain.gain.value = 0
+
+  chainInput.connect(dryBypassGain)
+  dryBypassGain.connect(masterGain)
+  limiter.connect(fxReturnGain)
+  fxReturnGain.connect(masterGain)
+  masterGain.connect(ctx.destination)
 
   applyAudioEffects(lastSettings)
   if (lastSinkId) setEffectsOutputDevice(lastSinkId)
@@ -502,13 +524,83 @@ function flushPendingAttachments(): void {
   if (!context || !chainInput) return
   for (const el of pendingEls) {
     try {
-      context.createMediaElementSource(el).connect(chainInput)
+      const slotGain = context.createGain()
+      slotGain.gain.value = 1
+      context.createMediaElementSource(el).connect(slotGain)
+      slotGain.connect(chainInput)
+      slotGains.set(el, slotGain)
       attachedEls.add(el)
     } catch (e) {
       console.error('attachAudioElement failed:', e)
     }
     pendingEls.delete(el)
   }
+}
+
+const FADE_CURVE_STEPS = 64
+const EQUAL_POWER_OUT = (() => {
+  const c = new Float32Array(FADE_CURVE_STEPS)
+  for (let i = 0; i < FADE_CURVE_STEPS; i++) c[i] = Math.cos((i / (FADE_CURVE_STEPS - 1)) * (Math.PI / 2))
+  c[FADE_CURVE_STEPS - 1] = 0
+  return c
+})()
+const EQUAL_POWER_IN = (() => {
+  const c = new Float32Array(FADE_CURVE_STEPS)
+  for (let i = 0; i < FADE_CURVE_STEPS; i++) c[i] = Math.sin((i / (FADE_CURVE_STEPS - 1)) * (Math.PI / 2))
+  c[0] = 0
+  c[FADE_CURVE_STEPS - 1] = 1
+  return c
+})()
+
+/** Schedules an equal-power fade on an attached element's Web Audio GainNode.
+ *  Runs on the audio thread (immune to minimized-window RAF throttling) with
+ *  zero -6 dB mid-crossfade loudness dip. Returns false if unattached. */
+export function scheduleEqualPowerFade(el: HTMLAudioElement | null, dir: 'in' | 'out', durationSec: number): boolean {
+  if (!el || !ctx || durationSec <= 0) return false
+  const node = slotGains.get(el)
+  if (!node) return false
+  const now = ctx.currentTime
+  const dur = Math.max(0.02, durationSec)
+  node.gain.cancelScheduledValues(now)
+  node.gain.setValueAtTime(dir === 'in' ? 0 : 1, now)
+  node.gain.setValueCurveAtTime(dir === 'in' ? EQUAL_POWER_IN : EQUAL_POWER_OUT, now, dur)
+  return true
+}
+
+/** Cancels any scheduled crossfade ramp and restores unity gain on an element. */
+export function resetElementFade(el: HTMLAudioElement | null, gain = 1): void {
+  if (!el || !ctx) return
+  const node = slotGains.get(el)
+  if (!node) return
+  const now = ctx.currentTime
+  node.gain.cancelScheduledValues(now)
+  node.gain.setValueAtTime(gain, now)
+}
+
+/** Sets master loudness normalization linear gain (1.0 = unity, clamped safely). */
+export function setNormalizationGain(linear: number): void {
+  const clamped = Number.isFinite(linear) ? Math.max(0.15, Math.min(2.0, linear)) : 1
+  lastNormGain = clamped
+  if (!ctx || !masterGain) return
+  masterGain.gain.setTargetAtTime(clamped, ctx.currentTime, 0.08)
+}
+
+export function hasActiveAudioEffects(settings: AudioEffectSettings): boolean {
+  const fx = sanitizeFx(settings.fx)
+  const eqMoved = settings.eqEnabled && (settings.gains.some((g) => Math.abs(g) > 0.01) || Math.abs(fx.preamp) > 0.01)
+  return (
+    eqMoved ||
+    Math.abs(settings.balance) > 0.01 ||
+    settings.mono ||
+    (settings.boost || 1) > 1.01 ||
+    settings.reverbMix > 0.005 ||
+    fx.filter ||
+    fx.drive > 0.005 ||
+    fx.compressor ||
+    Math.abs(fx.width - 1) > 0.01 ||
+    fx.autoPan ||
+    fx.echo
+  )
 }
 
 // Opts this session into the Web Audio chain on mobile, wiring up every element
@@ -566,6 +658,12 @@ export function applyAudioEffects(settings: AudioEffectSettings): void {
   }
 
   applyFx(sanitizeFx(settings.fx), settings.eqEnabled, t)
+
+  if (dryBypassGain && fxReturnGain) {
+    const active = hasActiveAudioEffects(settings)
+    dryBypassGain.gain.setTargetAtTime(active ? 0 : 1, t, 0.02)
+    fxReturnGain.gain.setTargetAtTime(active ? 1 : 0, t, 0.02)
+  }
 }
 
 function applyFx(fx: AudioFx, eqEnabled: boolean, t: number): void {

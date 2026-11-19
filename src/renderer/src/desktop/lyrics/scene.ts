@@ -35,7 +35,7 @@ export interface StageLook {
 }
 /** The app's lyric settings (Settings > Lyrics): the text size, the line sung's and the others' colors (null:
  *  the style's own), and whether the stage sits on a light background (`lightBg`) so all styles invert ink cleanly. */
-export interface LyricTune { size: number; active: string | null; inactive: string | null; lightBg?: boolean }
+export interface LyricTune { size: number; active: string | null; inactive: string | null; lightBg?: boolean; cutAccent?: 'juice' | 'cover' }
 
 /** What draws the lyrics: one of the styles here, or the fisheye. */
 export interface LyricRenderer {

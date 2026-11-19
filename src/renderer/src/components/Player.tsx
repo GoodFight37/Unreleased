@@ -12,16 +12,17 @@ import {
   Repeat1,
   Volume2,
   VolumeX,
+  Headphones,
   Maximize2,
   ListOrdered,
   Heart,
-  ChevronUp,
   MoreHorizontal,
   Radio,
   Info,
   SlidersHorizontal,
 } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
+import { usePlayheadStore } from '../store/usePlayheadStore'
 import { useVizStore } from '../store/vizStore'
 import { registerPlayerCommandHandler, runPlayerCommand } from '../lib/windowSync'
 import { eventToCombo, effectiveGlobalBinding, comboToAccelerator, registerHotkeyDispatch, HOTKEY_ACTIONS, isHotkeyActionAllowed, resolveInAppHotkey } from '../lib/hotkeys'
@@ -39,6 +40,7 @@ import ContextMenu from './ContextMenu'
 import EqualizerPanel from './EqualizerPanel'
 import {
   attachAudioElement, applyAudioEffects, resumeEffectsContext,
+  scheduleEqualPowerFade, resetElementFade,
   setEffectsOutputDevice, getCurrentPeak, setEffectsChainWanted, fxInUse,
 } from '../lib/audioEffects'
 import { LibraryTrack } from '../types'
@@ -57,13 +59,33 @@ import { runLog } from '../lib/runLog'
 import { isOfflineCopyUnreadable, markOfflineCopyUnreadable } from '../lib/offlineCopies'
 import { CoverFade, LikePop, SwapIcon, TrackSwap } from './PlayerMotion'
 import SongFootagePill from './SongFootagePill'
+import PlayerVersionSwitcher from './PlayerVersionSwitcher'
 import AmbiencePicker from './AmbiencePicker'
+import { syncLoudnessNormalizer } from '../lib/loudnessNormalizer'
 import { PopLayer } from './PopLayer'
 import { useGlassSurface, useGlassCompositorReady, setCompositorPlayEl, setCompositorLens, setCompositorSlider, scheduleGlassCompositor } from '../lib/glass/compositor'
 import { useEffectsState } from '../lib/effectsPreference'
 import { useLiquidLens } from '../hooks/useLiquidLens'
 
 const PLAYER_LENS = { bezel: 18, strength: 14, coreBlur: 16 }
+
+function BufferedBar({ disabled }: { disabled: boolean }): JSX.Element | null {
+  const ratio = usePlayheadStore((s) => s.bufferedRatio)
+  if (disabled || ratio <= 0) return null
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-text-primary/15 transition-[width] duration-200"
+      style={{ width: `${Math.round(ratio * 1000) / 10}%` }}
+    />
+  )
+}
+
+function initialCoverArt(track: Track | null, offline?: OfflineTrackMeta): string | null {
+  if (!track) return null
+  if (offline?.localImagePath && offline.coverSourceUrl === track.imageUrl) return toFileUrl(offline.localImagePath)
+  return track.imageUrl ?? offline?.imageUrl ?? null
+}
 
 // Downloaded-for-offline audio always wins over streaming — same track id,
 // just playing from local disk instead of the API. Donor cloud files can't be
@@ -708,6 +730,7 @@ export default function Player(): JSX.Element {
     if (cfActive.current) {
       const na = getNext()
       if (na) {
+        resetElementFade(na, 1)
         na.pause()
         na.removeAttribute('src')
         na.load()
@@ -720,9 +743,12 @@ export default function Player(): JSX.Element {
       cfTargetUrl.current = null
       cfIsRadio.current = false
     }
-    // Restore current audio to proper volume
+    // Restore current audio to proper volume and unity Web Audio slot gain
     const a = getActive()
-    if (a) a.volume = volumeRef.current
+    if (a) {
+      resetElementFade(a, 1)
+      a.volume = volumeRef.current
+    }
   }
 
   // A crossfade preloads audio for a particular source/target pair. Queue
@@ -770,9 +796,46 @@ export default function Player(): JSX.Element {
   // has loaded would fight it for bandwidth, which is exactly backwards -
   // the song actually playing should never be starved for one that's just
   // getting a head start.
+  // Keep the spare slot preloaded for crossfade (immediately once ready) OR
+  // gapless handoff on local/offline tracks immediately; remote tracks without
+  // crossfade preload in handleTimeUpdate at <= 15s remaining so rapid skipping
+  // wastes zero bandwidth while normal listening transitions gaplessly.
+  const preloadUpcomingSlot = useCallback((nextTrackData: Track | null): void => {
+    if (!nextTrackData || cfActive.current) return
+    if (isDonorStreamUrl(nextTrackData.streamUrl) && !cachedDonorUrl(nextTrackData.streamUrl)) {
+      void ensureDonorUrl(nextTrackData.streamUrl).then((u) => {
+        const s = useStore.getState()
+        const spare = getNext()
+        if (!spare || s.currentTrack?.id === nextTrackData.id) return
+        if (!sameMediaSrc(spare.src, u)) {
+          spare.src = u
+          spare.load()
+          applyRate(spare)
+        }
+      }).catch(() => { /* the main load will surface a real failure */ })
+      return
+    }
+    const url = resolvePlaybackUrl(nextTrackData)
+    if (!url) return
+    const na = getNext()
+    if (!na) return
+    if (sameMediaSrc(na.src, url)) {
+      if (
+        na.readyState === HTMLMediaElement.HAVE_NOTHING &&
+        na.networkState !== HTMLMediaElement.NETWORK_LOADING &&
+        !na.error
+      ) na.load()
+      return
+    }
+    resetElementFade(na, 1)
+    na.src = url
+    na.load()
+    applyRate(na)
+  }, [])
+
   const [currentTrackReady, setCurrentTrackReady] = useState(false)
   useEffect(() => {
-    if (!crossfadeEnabled || radioMode || !isPlaying || queue.length === 0 || cfActive.current || !currentTrackReady) return
+    if (radioMode || !isPlaying || queue.length === 0 || cfActive.current || !currentTrackReady) return
     let nextIdx: number
     if (repeat === 'one') nextIdx = queueIndex
     else {
@@ -784,50 +847,30 @@ export default function Player(): JSX.Element {
     }
     const nextTrackData = queue[nextIdx]
     if (!nextTrackData) return
-    if (isDonorStreamUrl(nextTrackData.streamUrl) && !cachedDonorUrl(nextTrackData.streamUrl)) {
-      // Not fetched yet: fetch, then load it into the spare slot if it's still
-      // the upcoming track.
-      void ensureDonorUrl(nextTrackData.streamUrl).then((u) => {
-        const s = useStore.getState()
-        const spare = getNext()
-        if (!spare || s.queue[nextIdx]?.id !== nextTrackData.id || s.currentTrack?.id === nextTrackData.id) return
-        spare.src = u
-        spare.load()
-        applyRate(spare)
-      }).catch(() => { /* the main load will surface a real failure */ })
-      return
-    }
     const url = resolvePlaybackUrl(nextTrackData)
-    const na = getNext()
-    if (!na) return
-    if (sameMediaSrc(na.src, url)) {
-      if (
-        na.readyState === HTMLMediaElement.HAVE_NOTHING &&
-        na.networkState !== HTMLMediaElement.NETWORK_LOADING &&
-        !na.error
-      ) na.load()
-      return
-    }
-    na.src = url
-    na.load()
-    // Preloaded slots inherit the current rate too — the loadedmetadata
-    // handler re-asserts it once this load settles.
-    applyRate(na)
-  }, [queue, queueIndex, isPlaying, repeat, crossfadeEnabled, radioMode, currentTrackReady])
+    const isLocal = url.startsWith('local-media:')
+    // With crossfade off, only preload local/offline tracks eagerly; remote
+    // tracks preload cleanly at T-15s inside handleTimeUpdate.
+    if (!crossfadeEnabled && !isLocal) return
+    preloadUpcomingSlot(nextTrackData)
+  }, [queue, queueIndex, isPlaying, repeat, crossfadeEnabled, radioMode, currentTrackReady, preloadUpcomingSlot])
 
-  // Crossfade is the only reason to keep a speculative second media request.
-  // Turning it off aborts that one inactive target while leaving pauses alone,
-  // so resuming playback does not download the same next song again.
+  // Turning crossfade off cancels any active crossfade ramp while keeping
+  // gapless slot preloading available.
   useEffect(() => {
     if (crossfadeEnabled) return
     cancelCF()
-    const na = getNext()
-    if (!na) return
-    na.pause()
-    na.removeAttribute('src')
-    na.load()
-    na.volume = 0
   }, [crossfadeEnabled])
+
+  const loudnessNormalization = useStore((s) => s.loudnessNormalization)
+  useEffect(() => {
+    syncLoudnessNormalizer(
+      radioFmActive ? null : (currentTrack?.id ?? null),
+      loudnessNormalization,
+      isPlaying && !radioFmActive,
+      volume,
+    )
+  }, [currentTrack?.id, loudnessNormalization, isPlaying, radioFmActive, volume])
 
   // Route both slots through the shared Web Audio effects chain (EQ, balance,
   // mono, silence detection). Elements keep their own volume/rate handling.
@@ -898,12 +941,9 @@ export default function Player(): JSX.Element {
     // copy so the (possibly personalized) art shows with no network, as long
     // as it was saved from the cover this track currently resolves to.
     const offlineCover = useStore.getState().offlineTracks[currentTrack.id]
-    const localArt = offlineCover?.localImagePath && offlineCover.coverSourceUrl === currentTrack.imageUrl
-      ? toFileUrl(offlineCover.localImagePath)
-      : null
     const synthetic: FullTrack = {
       ...currentTrack,
-      albumArt: localArt ?? currentTrack.imageUrl ?? null,
+      albumArt: initialCoverArt(currentTrack, offlineCover),
       lyrics: null,
       syncedLyrics: null,
       producer: null,
@@ -916,7 +956,7 @@ export default function Player(): JSX.Element {
     const donorFileId = donorFileIdFromTrackId(currentTrack.id)
     if (donorFileId && !synthetic.albumArt) {
       void ensureDonorCover(donorFileId).then((url) => {
-        if (url && !isStale()) setCurrentTrackFull({ ...synthetic, albumArt: url })
+        if (url && !isStale()) setCurrentTrackFull(prev => prev && !prev.albumArt ? { ...prev, albumArt: url } : prev)
       })
     }
     // Fetch lyrics from API if this is a tracker song (id = "jw-{n}")
@@ -933,7 +973,7 @@ export default function Player(): JSX.Element {
         // the live fetch below overwrites it with fresh data when it succeeds.
         const offlineMeta = useStore.getState().offlineTracks[currentTrack.id]
         if (offlineMeta) {
-          setCurrentTrackFull({ ...synthetic, albumArt: localArt ?? offlineMeta.imageUrl ?? synthetic.albumArt, lyrics: offlineMeta.lyrics, syncedLyrics: offlineMeta.syncedLyrics })
+          setCurrentTrackFull({ ...synthetic, lyrics: offlineMeta.lyrics, syncedLyrics: offlineMeta.syncedLyrics })
         } else {
           // Flagged pending so WRLD's layout doesn't read the still-null
           // lyrics as "this song has none" and snap to the centered,
@@ -947,9 +987,9 @@ export default function Player(): JSX.Element {
             const lyrics = song.lyrics || null
             lyricsCache.set(songId, { lyrics, syncedLyrics, ts: Date.now() })
             if (isStale()) return
-            setCurrentTrackFull({ ...synthetic, lyrics, syncedLyrics })
+            setCurrentTrackFull(prev => prev ? { ...prev, lyrics, syncedLyrics, lyricsPending: false } : prev)
           })
-          .catch(() => { if (!offlineMeta && !isStale()) setCurrentTrackFull(synthetic) /* no network - treat as no lyrics; an offline snapshot (if any) was already applied above */ })
+          .catch(() => { if (!offlineMeta && !isStale()) setCurrentTrackFull(prev => prev ? { ...prev, lyricsPending: false } : prev) /* keep any cover resolved while lyrics were loading */ })
       }
     } else if (!donorFileId) {
       // Local track — load lyrics + cover art from IPC
@@ -1810,7 +1850,7 @@ export default function Player(): JSX.Element {
     navigator.mediaSession.metadata = new MediaMetadata({
       title,
       artist,
-      album: '',
+      album: radioFmActive ? '999 FM' : (currentTrack?.album || currentTrack?.era || ''),
       artwork: artSrc ? [{ src: artSrc }] : [],
     })
   }, [
@@ -1838,19 +1878,38 @@ export default function Player(): JSX.Element {
     navigator.mediaSession.playbackState = playbackActive ? 'playing' : 'paused'
   }, [playbackActive, mediaSessionActive])
 
-  // Media Session action handlers — play/pause/skip
+  // Media Session action handlers — play/pause/skip/seek
   useEffect(() => {
     if (!('mediaSession' in navigator)) return
     if (!mediaSessionActive) return
-    navigator.mediaSession.setActionHandler('play',  () => setPlayback(true))
-    navigator.mediaSession.setActionHandler('pause', () => setPlayback(false))
-    navigator.mediaSession.setActionHandler('nexttrack',     radioFmActive ? null : () => runPlayerCommand('next'))
-    navigator.mediaSession.setActionHandler('previoustrack', radioFmActive ? null : () => runPlayerCommand('previous'))
+    const safeSet = (action: MediaSessionAction, handler: MediaSessionActionHandler | null): void => {
+      try { navigator.mediaSession.setActionHandler(action, handler) } catch { /* unsupported action */ }
+    }
+    safeSet('play', () => setPlayback(true))
+    safeSet('pause', () => setPlayback(false))
+    safeSet('stop', () => setPlayback(false))
+    safeSet('nexttrack', radioFmActive ? null : () => runPlayerCommand('next'))
+    safeSet('previoustrack', radioFmActive ? null : () => runPlayerCommand('previous'))
+    safeSet('seekto', radioFmActive ? null : (details) => {
+      if (details.seekTime != null && Number.isFinite(details.seekTime)) runPlayerCommand('seek', details.seekTime)
+    })
+    safeSet('seekbackward', radioFmActive ? null : (details) => {
+      const step = details.seekOffset ?? useStore.getState().hotkeySeekSeconds ?? 10
+      const a = getActive()
+      if (a) runPlayerCommand('seek', Math.max(0, a.currentTime - step))
+    })
+    safeSet('seekforward', radioFmActive ? null : (details) => {
+      const step = details.seekOffset ?? useStore.getState().hotkeySeekSeconds ?? 10
+      const a = getActive()
+      if (a) {
+        const dur = Number.isFinite(a.duration) ? a.duration : (useStore.getState().currentTrack?.duration || 0)
+        runPlayerCommand('seek', dur > 0 ? Math.min(dur, a.currentTime + step) : a.currentTime + step)
+      }
+    })
     return () => {
-      navigator.mediaSession.setActionHandler('play',          null)
-      navigator.mediaSession.setActionHandler('pause',         null)
-      navigator.mediaSession.setActionHandler('nexttrack',     null)
-      navigator.mediaSession.setActionHandler('previoustrack', null)
+      for (const action of ['play', 'pause', 'stop', 'nexttrack', 'previoustrack', 'seekto', 'seekbackward', 'seekforward'] as MediaSessionAction[]) {
+        safeSet(action, null)
+      }
     }
   }, [setPlayback, mediaSessionActive, radioFmActive])
 
@@ -1968,14 +2027,22 @@ export default function Player(): JSX.Element {
       }
     }
 
-    setCurrentTime(audio.currentTime)
     // audio.duration reads as Infinity for streamed audio until the server's
     // sent enough to know the real length (no Content-Length / chunked
     // response) — dividing by that kept progress pinned at 0 the whole song,
     // so fall back to the track's own known duration when audio.duration
     // isn't a finite number yet.
     const dur = isFinite(audio.duration) ? audio.duration : (currentTrack?.duration || 0)
-    if (dur > 0) setProgress(audio.currentTime / dur)
+    const nextProgress = dur > 0 ? audio.currentTime / dur : undefined
+    useStore.getState().setPlaybackPosition(audio.currentTime, nextProgress)
+    let bufferedEnd = 0
+    try {
+      for (let i = 0; i < audio.buffered.length; i++) {
+        const end = audio.buffered.end(i)
+        if (end > bufferedEnd) bufferedEnd = end
+      }
+    } catch { /* buffered range unavailable */ }
+    usePlayheadStore.getState().setPlayhead(audio.currentTime, dur, bufferedEnd)
 
     if (!audio.paused) creditPlayIfListened(audio.currentTime, dur)
 
@@ -1999,6 +2066,23 @@ export default function Player(): JSX.Element {
         if (dur > 0) setProgress(abLoopStart! / dur)
       } catch { /* recovery will restore the requested loop position */ }
       return
+    }
+
+    // Gapless preload: when crossfade is off, start pre-buffering the next
+    // track into the spare slot ~15s before the end so onAudioEnded can swap
+    // slots with zero cold-load gap.
+    if (!abLooping && !crossfadeEnabled && !cfActive.current && useStore.getState().isPlaying && dur > 0) {
+      const remaining = dur - audio.currentTime
+      if (remaining > 0 && remaining <= 15) {
+        const st = useStore.getState()
+        const upcoming = st.radioMode
+          ? (st.queueIndex < st.queue.length - 1 ? st.queue[st.queueIndex + 1] : st.radioNext)
+          : (() => {
+              const ni = computeNextIdx()
+              return ni >= 0 && ni < st.queue.length ? st.queue[ni] : null
+            })()
+        if (upcoming && upcoming.id !== currentTrack?.id) preloadUpcomingSlot(upcoming)
+      }
     }
 
     // Start crossfade when approaching end. A queued timeupdate event can
@@ -2056,39 +2140,49 @@ export default function Player(): JSX.Element {
           cfTargetIdx.current = nextIdx
           cfTargetUrl.current = url
           const attempt = ++cfAttempt.current
-          na.volume = 0
           applyRate(na)
-          na.play().catch((error) => {
-            console.error(error)
-            if (cfAttempt.current === attempt && cfActive.current && getNext() === na) cancelCF()
-          })
-
-          // Fade OUT active audio
-          const startVol  = audio.volume
-          const startTime = performance.now()
-          const fadeDur   = remaining * 1000
-
-          const tickOut = (): void => {
-            const a = getActive()
-            if (!a) return
-            const t = Math.min((performance.now() - startTime) / fadeDur, 1)
-            a.volume = startVol * (1 - t)
-            if (t < 1) cfOutRaf.current = requestAnimationFrame(tickOut)
-            else { a.volume = 0; cfOutRaf.current = null }
-          }
-          cfOutRaf.current = requestAnimationFrame(tickOut)
-
-          // Fade IN next audio
           const targetVol = volumeRef.current
-          const tickIn = (): void => {
-            const n = getNext()
-            if (!n) return
-            const t = Math.min((performance.now() - startTime) / fadeDur, 1)
-            n.volume = targetVol * t
-            if (t < 1) cfInRaf.current = requestAnimationFrame(tickIn)
-            else { n.volume = targetVol; cfInRaf.current = null }
+          // Equal-power Web Audio GainNode ramp (immune to minimized-window RAF
+          // throttling and free of linear -6 dB mid-fade dips). Fall back to
+          // RAF volume ramps only if the elements are unattached to Web Audio.
+          const gpuAudioFaded =
+            scheduleEqualPowerFade(audio, 'out', remaining) &&
+            scheduleEqualPowerFade(na, 'in', remaining)
+          if (gpuAudioFaded) {
+            na.volume = targetVol
+            audio.volume = targetVol
+            na.play().catch((error) => {
+              console.error(error)
+              if (cfAttempt.current === attempt && cfActive.current && getNext() === na) cancelCF()
+            })
+          } else {
+            na.volume = 0
+            na.play().catch((error) => {
+              console.error(error)
+              if (cfAttempt.current === attempt && cfActive.current && getNext() === na) cancelCF()
+            })
+            const startVol  = audio.volume
+            const startTime = performance.now()
+            const fadeDur   = remaining * 1000
+            const tickOut = (): void => {
+              const a = getActive()
+              if (!a) return
+              const t = Math.min((performance.now() - startTime) / fadeDur, 1)
+              a.volume = startVol * Math.cos(t * (Math.PI / 2))
+              if (t < 1) cfOutRaf.current = requestAnimationFrame(tickOut)
+              else { a.volume = 0; cfOutRaf.current = null }
+            }
+            cfOutRaf.current = requestAnimationFrame(tickOut)
+            const tickIn = (): void => {
+              const n = getNext()
+              if (!n) return
+              const t = Math.min((performance.now() - startTime) / fadeDur, 1)
+              n.volume = targetVol * Math.sin(t * (Math.PI / 2))
+              if (t < 1) cfInRaf.current = requestAnimationFrame(tickIn)
+              else { n.volume = targetVol; cfInRaf.current = null }
+            }
+            cfInRaf.current = requestAnimationFrame(tickIn)
           }
-          cfInRaf.current = requestAnimationFrame(tickIn)
         }
       }
     }
@@ -2126,9 +2220,13 @@ export default function Player(): JSX.Element {
       cfTargetUrl.current = null
       cfIsRadio.current   = false
 
-      // Ensure incoming track is at full volume
+      // Ensure incoming track is at full volume and reset both Web Audio slot gains
       const na = getNext()
-      if (na) na.volume = volumeRef.current
+      resetElementFade(audio, 1)
+      if (na) {
+        resetElementFade(na, 1)
+        na.volume = volumeRef.current
+      }
 
       // Swap which slot is "active"
       activeSlot.current = activeSlot.current === 'A' ? 'B' : 'A'
@@ -2185,6 +2283,38 @@ export default function Player(): JSX.Element {
       return
     }
     const prevId = currentTrack?.id
+    // True gapless handoff: if the spare slot already pre-buffered the exact
+    // next track, start playing it immediately on this tick and swap slots
+    // instead of paying a React render + cold HTTP round-trip gap.
+    const upcomingSlot = getNext()
+    const stBefore = useStore.getState()
+    const peekNextTrack = stBefore.radioMode
+      ? (stBefore.queueIndex < stBefore.queue.length - 1 ? stBefore.queue[stBefore.queueIndex + 1] : stBefore.radioNext)
+      : (() => {
+          const ni = computeNextIdx()
+          return ni >= 0 && ni < stBefore.queue.length ? stBefore.queue[ni] : null
+        })()
+    const peekUrl = peekNextTrack && peekNextTrack.id !== prevId ? resolvePlaybackUrl(peekNextTrack) : ''
+    if (
+      upcomingSlot &&
+      peekUrl &&
+      sameMediaSrc(upcomingSlot.src, peekUrl) &&
+      !upcomingSlot.error &&
+      upcomingSlot.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    ) {
+      resetElementFade(audio, 1)
+      resetElementFade(upcomingSlot, 1)
+      upcomingSlot.volume = volumeRef.current
+      try { if (upcomingSlot.currentTime > 0.25) upcomingSlot.currentTime = 0 } catch {}
+      applyRate(upcomingSlot)
+      activeSlot.current = activeSlot.current === 'A' ? 'B' : 'A'
+      recoveryResumeAt.current = 0
+      skipNextLoadUrl.current = peekUrl
+      playSlot(upcomingSlot)
+      nextTrack()
+      return
+    }
+
     const next = nextTrack()
     if (!next) {
       setIsPlaying(false)
@@ -2620,7 +2750,7 @@ export default function Player(): JSX.Element {
 
   // Cover art error state — reset when the track or its cover changes (an
   // offline copy can give way to the API's, or the other way round)
-  const coverArt = currentTrackFull?.albumArt ?? currentTrack?.imageUrl
+  const coverArt = currentTrackFull?.albumArt ?? initialCoverArt(currentTrack, useStore.getState().offlineTracks[currentTrack?.id ?? ''])
   const [coverArtError, setCoverArtError] = useState(false)
   useEffect(() => { setCoverArtError(false) }, [currentTrack?.id, coverArt])
   // What the title/artist blocks animate on: the song (or the 999FM now-
@@ -2724,7 +2854,7 @@ export default function Player(): JSX.Element {
           the local-media:// protocol both send Access-Control-Allow-Origin. */}
       <audio
         ref={slotA}
-        preload={crossfadeEnabled ? 'auto' : 'none'}
+        preload="auto"
         crossOrigin="anonymous"
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
@@ -2742,7 +2872,7 @@ export default function Player(): JSX.Element {
       />
       <audio
         ref={slotB}
-        preload={crossfadeEnabled ? 'auto' : 'none'}
+        preload="auto"
         crossOrigin="anonymous"
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
@@ -3036,6 +3166,7 @@ export default function Player(): JSX.Element {
                   {playerQuality}
                 </span>
               )}
+              <PlayerVersionSwitcher songId={currentSongId} disabled={radioFmActive} />
               <SongFootagePill
                 songTitle={radioFmActive && radioFmNowPlaying ? radioFmNowPlaying.title : (currentTrack?.apiTitle || currentTrack?.title)}
                 songId={radioFmActive ? (radioFmNowPlaying?.song_id ?? radioFmMatchedSong?.songId ?? null) : currentSongId}
@@ -3098,6 +3229,7 @@ export default function Player(): JSX.Element {
                 : <ElapsedTime />}
             </span>
             <div className="flex-1 progress-track relative">
+              <BufferedBar disabled={!currentTrack || radioFmActive} />
               <SeekRange
                 seekDrag={seekDrag} radioFmActive={radioFmActive}
                 onMouseDown={radioFmActive ? undefined : handleSeekMouseDown}
@@ -3147,18 +3279,6 @@ export default function Player(): JSX.Element {
             )}
           </button>}
 
-          {!radioFmActive && <button onClick={() => {
-            setShowNowPlaying(false)
-            expandToWrld()
-            const el = (window as any).electron
-            if (el?.setFullscreen) void el.setFullscreen(true)
-            else document.documentElement.requestFullscreen?.().catch(() => {})
-          }}
-            className="text-text-secondary hover:text-text-primary transition-colors"
-            title="Fullscreen player" aria-label="Fullscreen player">
-            <Maximize2 size={16} />
-          </button>}
-
           <AmbiencePicker />
           </div>
 
@@ -3193,20 +3313,29 @@ export default function Player(): JSX.Element {
                 ref={outputBtnRef}
                 onClick={openOutputPicker}
                 title="Audio output"
+                aria-label="Audio output"
                 className={`transition-colors ${audioOutput ? 'text-accent' : 'text-text-muted hover:text-text-primary'}`}
               >
-                <Volume2 size={14} />
+                <Headphones size={15} />
               </button>
             )}
           </div>
 
           <button
-            onClick={expandToWrld}
-            title="Open WRLD"
+            onClick={(e) => {
+              setShowNowPlaying(false)
+              expandToWrld()
+              if (e.shiftKey && !radioFmActive) {
+                const el = (window as any).electron
+                if (el?.setFullscreen) void el.setFullscreen(true)
+                else document.documentElement.requestFullscreen?.().catch(() => {})
+              }
+            }}
+            title={radioFmActive ? 'Open WRLD' : 'Open WRLD (Shift+click for fullscreen)'}
             aria-label="Open WRLD"
             className="text-text-secondary hover:text-text-primary transition-colors"
           >
-            <ChevronUp size={18} />
+            <Maximize2 size={16} />
           </button>
         </div>
 

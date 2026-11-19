@@ -14,7 +14,7 @@ import type { AdminTab } from '../hooks/useAdminQueue'
 // track list is deliberately absent: it's reloaded from disk instead
 // (see the libraryLastScanned handling below).
 const SYNC_KEYS = [
-  'theme', 'customSkins', 'accentColor', 'sidebarPosition', 'navOrder', 'navVisibility', 'appMenuPosition',
+  'theme', 'interfaceStyle', 'loudnessNormalization', 'wrldArchiveStills', 'grailSongIds', 'customSkins', 'accentColor', 'sidebarPosition', 'navOrder', 'navVisibility', 'appMenuPosition',
   'navControlOrder', 'navControlVisibility', 'settingsTab',
   'appTextScale', 'lyricsScale', 'lyricsAlign', 'lyricsBlur', 'appFont', 'lyricsFont', 'gradientsEnabled', 'surfaceGradientsEnabled', 'glassRefraction',
   'lyricsColorActive', 'lyricsColorInactive', 'lyricsBlurAmount', 'lyricsOverride', 'fullEraNames',
@@ -189,6 +189,8 @@ export function initWindowSync(isFloat: boolean): void {
 
   useStore.subscribe((state, prev) => {
     if (applyingRemote) return
+    // No pop-outs open: skip diffing 80+ SYNC_KEYS and avoid firing IPC on every playhead tick.
+    if (!isFloat && state.openFloatViews.length === 0) return
     const patch: Record<string, unknown> = {}
     for (const key of SYNC_KEYS) {
       if (state[key] !== prev[key]) patch[key] = state[key]

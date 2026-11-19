@@ -108,7 +108,7 @@ function paintWord(text: string, key: string, size: number, inkColor: RGB, outli
   const ascent = m.fontBoundingBoxAscent || size * 0.9, descent = m.fontBoundingBoxDescent || size * 0.25
   const margin = Math.ceil(0.3 * size)
   const box = { width: Math.ceil(m.width + 2 * margin), height: Math.ceil(ascent + descent + 2 * margin) }
-  const scale = Math.min(window.devicePixelRatio || 1, 2)
+  const scale = Math.max(2, Math.min(window.devicePixelRatio || 1, 3))
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(box.width * scale)
   canvas.height = Math.ceil(box.height * scale)
@@ -182,9 +182,9 @@ export class WordBlock implements LyricRenderer {
 
   lightBg = false
   get size(): number { return 70 * this.s }
-  get width(): number { return 4.9 * this.size }
-  get radius(): number { return 172 * this.s }
-  get eye(): number { return 360 * this.s }
+  get width(): number { return 5.2 * this.size }
+  get radius(): number { return 310 * this.s }
+  get eye(): number { return 580 * this.s }
 
   /** Everything the block follows; it sets itself afresh only when the song, its look or the clock's course changed. */
   show(song: StageSong, { clock, isSeen, colors, face, scale, tune }: StageLook): void {
@@ -368,33 +368,32 @@ export class WordBlock implements LyricRenderer {
     this.shown = target
   }
 
-  /** A word's strips: the picture cut into narrow upright slices, each laid on the sphere where its part of the word
-   *  falls and turned to face out, unseen until the word is due; `flat`, they stand where they fall, off the lens. */
+  /** Render each word as one intact high-DPI surface on the curve so letters
+   *  never get sliced or show vertical strip seams. */
   strips(art: Art, x: number, baseline: number, seed: number, flat = false): Strip[] {
     const size = art.size
-    const count = Math.max(1, Math.ceil(size.width / (0.45 * this.size)))
-    const slice = size.width / count
     const corner = { x: x - this.width / 2 - art.baseline.x, y: baseline - this.blockHeight / 2 - art.baseline.y }
     const middle = { x: corner.x + size.width / 2, y: corner.y + size.height / 2 }
-    const out: Strip[] = []
-    for (let index = 0; index < count; index++) {
-      const strip = document.createElement('div') as Strip
-      strip.className = 'wb-strip'
-      const overlap = 0.5
-      const w = slice + 2 * overlap
-      Object.assign(strip.style, { width: `${w}px`, height: `${size.height}px`, marginLeft: `${-w / 2}px`, marginTop: `${-size.height / 2}px`,
-        backgroundImage: `url("${art.picture}")`, backgroundSize: `${size.width}px ${size.height}px`, backgroundPosition: `${-(index * slice - overlap)}px 0px`, opacity: '0' })
-      const spot = { x: corner.x + (index + 0.5) * slice, y: corner.y + size.height / 2 }
-      strip._spot = spot
-      strip._word = middle
-      strip._seed = seed
-      strip._final = flat ? this.flat(spot) : this.bulge(spot)
-      strip.style.transform = strip._final
-      this.blockEl.appendChild(strip)
-      this.pageLayers.push(strip)
-      out.push(strip)
-    }
-    return out
+    const strip = document.createElement('div') as Strip
+    strip.className = 'wb-strip'
+    Object.assign(strip.style, {
+      width: `${size.width}px`,
+      height: `${size.height}px`,
+      marginLeft: `${-size.width / 2}px`,
+      marginTop: `${-size.height / 2}px`,
+      backgroundImage: `url("${art.picture}")`,
+      backgroundSize: `${size.width}px ${size.height}px`,
+      backgroundPosition: '0px 0px',
+      opacity: '0',
+    })
+    strip._spot = middle
+    strip._word = middle
+    strip._seed = seed
+    strip._final = flat ? this.flat(middle) : this.bulge(middle)
+    strip.style.transform = strip._final
+    this.blockEl.appendChild(strip)
+    this.pageLayers.push(strip)
+    return [strip]
   }
 
   /** A point of the flat block (from its middle, y up) carried onto the sphere, each strip turned to face out. */
@@ -533,8 +532,20 @@ export class WordBlock implements LyricRenderer {
     const fits = (x: number): boolean => x - half >= margin && x + half <= host.width - margin
     this.adlibSide = -this.adlibSide
     if (!fits(spot(this.adlibSide)) && fits(spot(-this.adlibSide))) this.adlibSide = -this.adlibSide
-    const x = Math.min(Math.max(spot(this.adlibSide), half + margin), host.width - half - margin)
-    const y = rowBox.middle + (Math.random() - 0.5) * 0.36 * this.pitch
+    const sideX = spot(this.adlibSide)
+    let x: number
+    let y: number
+    if (fits(sideX)) {
+      x = sideX
+      y = rowBox.middle + (Math.random() - 0.5) * 0.36 * this.pitch
+    } else {
+      // Adlib is too wide for either margin: place it cleanly below/above the active row
+      // instead of clamping it back on top of the main lyric words.
+      x = Math.min(Math.max(host.width / 2 + this.adlibSide * 24 * this.s, half + margin), host.width - half - margin)
+      const below = rowBox.middle + Math.max(this.pitch * 0.92, el.offsetHeight * 1.45)
+      const above = rowBox.middle - Math.max(this.pitch * 0.92, el.offsetHeight * 1.45)
+      y = below + el.offsetHeight / 2 <= host.height - margin ? below : Math.max(margin + el.offsetHeight / 2, above)
+    }
     Object.assign(el.style, { left: `${x - half}px`, top: `${y - el.offsetHeight / 2}px` })
     const life = Math.min(Math.max(adlib.end - adlib.start + 0.8, 1.2), 2) * 1000
     el.animate([{ opacity: 0, translate: '0 0' }, { opacity: 0.72, offset: 0.1 }, { opacity: 0.72, offset: 0.6 }, { opacity: 0, translate: `0 ${-26 * this.s}px` }], { duration: life, easing: 'ease-out', fill: 'forwards' })

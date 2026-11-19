@@ -48,7 +48,7 @@ class EdgeLights {
       frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
       skipTaskbar: true, focusable: false, hasShadow: false, show: false, alwaysOnTop: true, fullscreenable: false,
       enableLargerThanScreen: true, backgroundColor: '#00000000', title: 'Unreleased',
-      webPreferences: { preload: this.options.preload, backgroundThrottling: false, contextIsolation: true },
+      webPreferences: { preload: this.options.preload, backgroundThrottling: false, contextIsolation: true, sandbox: true },
     })
     win.setIgnoreMouseEvents(true)
     win.setAlwaysOnTop(true, 'screen-saver')

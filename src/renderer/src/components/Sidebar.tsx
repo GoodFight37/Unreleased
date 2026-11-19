@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { Settings, LogIn, ChevronLeft, ChevronRight, ChevronDown, Download, Upload, Info, Check, EyeOff, Bell } from 'lucide-react'
+import { Settings, LogIn, ChevronLeft, ChevronRight, ChevronDown, Download, Upload, Info, Check, EyeOff, Bell, Search, Radio, Gamepad2 } from 'lucide-react'
 import logo from '../assets/logo.png'
 import { useStore, useStorePick } from '../store/useStore'
 import { ViewType } from '../types'
 import { showStaffProfile, getToken } from '../lib/userApi'
 import AppMenu from './AppMenu'
+import AlbumThemeStrip from './AlbumThemeStrip'
 import { NAV_ITEMS, orderedNavItems, isNavItemVisible, orderedNavControls, isNavControlVisible, navTabFor, tabEntryView, type NavControlId } from '../lib/navItems'
 import { preloadView } from '../lib/lazyViews'
 import { viewLabel } from '../lib/viewLabels'
@@ -28,8 +29,10 @@ const LS_COLLAPSED = 'sidebar:collapsed'
 const LS_PLAYLISTS_EXPANDED = 'sidebar:playlistsExpanded'
 
 export default function Sidebar(): JSX.Element {
-  const { activeView, setActiveView, openProfile, openOwnPublicProfile, openSettings, setShowDiagnostics, developerMode, account, setShowUserAuth, playlists, setPendingPlaylistId, sidebarPosition, navStyle: configuredNavStyle, navOrder, setNavOrder, navVisibility, setNavItemVisible, navControlOrder, navControlVisibility, setNavControlVisible, showDownloadManager, setShowDownloadManager, appMenuPosition: configuredMenuPosition, offlinePlaylists } = useStorePick('activeView', 'setActiveView', 'openProfile', 'openOwnPublicProfile', 'openSettings', 'setShowDiagnostics', 'developerMode', 'account', 'setShowUserAuth', 'playlists', 'setPendingPlaylistId', 'sidebarPosition', 'navStyle', 'navOrder', 'setNavOrder', 'navVisibility', 'setNavItemVisible', 'navControlOrder', 'navControlVisibility', 'setNavControlVisible', 'showDownloadManager', 'setShowDownloadManager', 'appMenuPosition', 'offlinePlaylists')
-  const navStyle = developerMode ? configuredNavStyle : 'pill'
+  const { activeView, setActiveView, openProfile, openOwnPublicProfile, openSettings, setShowDiagnostics, developerMode, interfaceStyle, account, setShowUserAuth, playlists, setPendingPlaylistId, sidebarPosition: configuredSidebarPos, navStyle: configuredNavStyle, navOrder, setNavOrder, navVisibility, setNavItemVisible, navControlOrder, navControlVisibility, setNavControlVisible, showDownloadManager, setShowDownloadManager, appMenuPosition: configuredMenuPosition, offlinePlaylists } = useStorePick('activeView', 'setActiveView', 'openProfile', 'openOwnPublicProfile', 'openSettings', 'setShowDiagnostics', 'developerMode', 'interfaceStyle', 'account', 'setShowUserAuth', 'playlists', 'setPendingPlaylistId', 'sidebarPosition', 'navStyle', 'navOrder', 'setNavOrder', 'navVisibility', 'setNavItemVisible', 'navControlOrder', 'navControlVisibility', 'setNavControlVisible', 'showDownloadManager', 'setShowDownloadManager', 'appMenuPosition', 'offlinePlaylists')
+  const isEditorial = !developerMode && interfaceStyle === 'editorial'
+  const navStyle = developerMode ? configuredNavStyle : isEditorial ? 'classic' : 'pill'
+  const sidebarPosition = developerMode ? configuredSidebarPos : isEditorial ? 'left' : configuredSidebarPos
   const appMenuPosition = developerMode ? configuredMenuPosition : 'sidebar'
   // Counts, not the list: every progress tick replaces `downloads`, and the
   // whole menu re-rendered with it.
@@ -140,9 +143,17 @@ export default function Sidebar(): JSX.Element {
   // web-only tabs on web and anything the user has toggled off.
   const items = developerMode
     ? orderedNavItems(navOrder, hasChatAccess(account), showStaffProfile(account)).filter((i) => isNavItemVisible(i, navVisibility, isElectron))
-    : (['home', 'api-tracker', 'playlists', 'footage'] as ViewType[]).map((view) => ({
-        ...NAV_ITEMS.find((item) => item.view === view)!, label: viewLabel(view, '', false),
-      }))
+    : isEditorial
+      ? [
+          ...(['home', 'api-tracker', 'playlists', 'footage'] as ViewType[]).map((view) => ({
+            ...NAV_ITEMS.find((item) => item.view === view)!, label: viewLabel(view, '', false),
+          })),
+          { view: 'heardle' as ViewType, label: 'Heardle', icon: <Gamepad2 size={18} /> },
+          { view: 'wrld' as ViewType, label: '999 FM', icon: <Radio size={18} /> },
+        ]
+      : (['home', 'api-tracker', 'playlists', 'footage'] as ViewType[]).map((view) => ({
+          ...NAV_ITEMS.find((item) => item.view === view)!, label: viewLabel(view, '', false),
+        }))
   // Which tab reads as current - not always activeView, since some views are
   // sub-views of a tab (the games inside Games). See navTabFor.
   const activeTab = !developerMode && ['library', 'liked', 'playlists', 'albums', 'shared-playlist'].includes(activeView)
@@ -308,19 +319,43 @@ export default function Sidebar(): JSX.Element {
   // laid out along the chosen edge; AutoHideNav floats it over the page.
   if (navStyle === 'pill') {
     const horizontal = sidebarPosition === 'top' || sidebarPosition === 'bottom'
+    const onPillMove = (e: React.PointerEvent<HTMLElement>): void => {
+      const rect = e.currentTarget.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+      e.currentTarget.style.setProperty('--pill-mx', `${((e.clientX - rect.left) / rect.width) * 100}%`)
+      e.currentTarget.style.setProperty('--pill-my', `${((e.clientY - rect.top) / rect.height) * 100}%`)
+    }
+    const onPillLeave = (e: React.PointerEvent<HTMLElement>): void => {
+      e.currentTarget.style.removeProperty('--pill-mx')
+      e.currentTarget.style.removeProperty('--pill-my')
+    }
     return (
       // no-drag: on the top edge the pill floats over the window's drag strip
       // (App.tsx), which would otherwise swallow its clicks.
       <aside
         ref={navRef}
+        onPointerMove={onPillMove}
+        onPointerLeave={onPillLeave}
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         // Frosted from a ::before layer (.glass-backdrop). Fixed in place: the
         // bar can't be dragged to another edge and its tabs aren't draggable.
-        className={`app-sidebar glass-backdrop glass-specular pointer-events-auto relative isolate flex ${horizontal ? 'flex-row max-w-full overflow-x-auto' : 'flex-col max-h-full overflow-y-auto'} items-center gap-1 p-1.5 rounded-full`}
+        className={`app-sidebar nav-pill-live glass-backdrop glass-specular pointer-events-auto relative isolate flex ${horizontal ? 'flex-row max-w-full overflow-x-auto' : 'flex-col max-h-full overflow-y-auto'} items-center gap-1 p-1.5 rounded-full`}
       >
         {isElectron && appMenuPosition === 'sidebar' && (
           <>
             <div className="w-10 h-10 shrink-0 flex items-center justify-center"><AppMenu variant="sidebar-icon" /></div>
+            {horizontal && !developerMode && (
+              <button
+                type="button"
+                onClick={() => setActiveView(activeView === 'wrld' ? 'home' : 'wrld')}
+                title={activeView === 'wrld' ? 'Back to Discover' : 'Open WRLD full-screen player'}
+                aria-label="999 — Open WRLD"
+                className="nav-brand-999 hidden lg:inline-flex items-center gap-1.5 px-2.5 h-8 rounded-full font-mono-ui text-[11px] font-bold tracking-[0.14em] text-text-primary shrink-0"
+              >
+                <span className="nav-brand-dot" aria-hidden />
+                <span>999</span>
+              </button>
+            )}
             <div className={`shrink-0 bg-[var(--border)] ${horizontal ? 'w-px h-6 mx-1' : 'h-px w-6 my-1'}`} />
           </>
         )}
@@ -336,7 +371,7 @@ export default function Sidebar(): JSX.Element {
             data-indicator-key={view}
             className={`nav-btn ${horizontal && (!developerMode || activeTab === view) ? 'px-3 gap-2' : 'w-10'} h-10 shrink-0 flex items-center justify-center rounded-full ${
               activeTab === view
-                ? 'text-accent'
+                ? 'is-active text-accent'
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
@@ -345,13 +380,31 @@ export default function Sidebar(): JSX.Element {
           </button>
         ))}
         <div className={`shrink-0 bg-[var(--border)] ${horizontal ? 'w-px h-6 mx-1' : 'h-px w-6 my-1'}`} />
+        <button
+          onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
+          title="Search songs & commands (Ctrl+K)"
+          aria-label="Search songs & commands"
+          className={`${barIconBtn} !w-10 !h-10 !rounded-full`}
+        >
+          <Search size={17} />
+        </button>
         {!account && (
           <button onClick={() => setShowUserAuth(true)} title="Log in" aria-label="Log in" className={`${barIconBtn} !w-10 !h-10 !rounded-full`}>
             <LogIn size={18} />
           </button>
         )}
         {controls.map((c) => renderControlIcon(c.id))}
-        <div ref={navIndicatorRef} className="nav-indicator rounded-full bg-accent/20" aria-hidden />
+        {!developerMode && (
+          <button
+            onClick={() => openSettings()}
+            title="Settings"
+            aria-label="Settings"
+            className={`${barIconBtn} !w-10 !h-10 !rounded-full`}
+          >
+            <Settings size={17} />
+          </button>
+        )}
+        <div ref={navIndicatorRef} className="nav-indicator nav-indicator-glass rounded-full" aria-hidden />
         {navContextMenu}
       </aside>
     )
@@ -437,28 +490,48 @@ export default function Sidebar(): JSX.Element {
           } as React.CSSProperties}
         />
       )}
-      {/* Logo — collapses to zero height (redundant with the WRLD tab icon) */}
-      {/* Logo - collapses to zero height when the sidebar is collapsed. The
-          open cap is in rem like its contents (11.75rem), so a larger app
-          text size doesn't clip the wordmark. */}
-      <div
-        className="flex flex-col items-center gap-1 shrink-0 px-5 overflow-hidden transition-[max-height,opacity] duration-200 ease-in-out"
-        style={{ maxHeight: collapsed ? '0px' : '13rem', opacity: collapsed ? 0 : 1 }}
-      >
-        <div className="pt-5 pb-4 flex flex-col items-center gap-1">
-          <img src={logo} alt="unreleased" className="object-contain h-32 w-auto" />
-          <span
-            className="text-text-primary text-sm uppercase select-none whitespace-nowrap"
-            style={{ fontFamily: "'Josefin Sans', sans-serif", fontWeight: 300, letterSpacing: '0.35em' }}
+      {/* Editorial header + instant Vault Search (Piste A) or Classic wordmark */}
+      {isEditorial ? (
+        <div className="px-3 pt-2 pb-3 space-y-2.5 shrink-0">
+          {!collapsed && (
+            <div className="flex items-center justify-between px-1">
+              <span className="text-text-primary text-[15px] font-semibold tracking-tight truncate">Unreleased Glass</span>
+              <span className="font-mono-ui text-[10px] tracking-widest text-text-muted">999</span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
+            title="Search songs, eras, producers (Ctrl+K)"
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2 rounded-xl border border-[var(--border)] bg-[var(--fill)] hover:bg-[var(--fill-strong)] text-text-secondary hover:text-text-primary transition-colors text-xs`}
           >
-            unreleased
-          </span>
+            <span className="flex items-center gap-2 min-w-0">
+              <Search size={14} className="shrink-0 text-text-muted" />
+              {!collapsed && <span className="truncate">Search vault…</span>}
+            </span>
+            {!collapsed && <kbd className="font-mono-ui text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-highest)] text-text-muted">Ctrl+K</kbd>}
+          </button>
         </div>
-      </div>
+      ) : (
+        <div
+          className="flex flex-col items-center gap-1 shrink-0 px-5 overflow-hidden transition-[max-height,opacity] duration-200 ease-in-out"
+          style={{ maxHeight: collapsed ? '0px' : '13rem', opacity: collapsed ? 0 : 1 }}
+        >
+          <div className="pt-5 pb-4 flex flex-col items-center gap-1">
+            <img src={logo} alt="unreleased" className="object-contain h-32 w-auto" />
+            <span
+              className="text-text-primary text-sm uppercase select-none whitespace-nowrap"
+              style={{ fontFamily: "'Josefin Sans', sans-serif", fontWeight: 300, letterSpacing: '0.35em' }}
+            >
+              unreleased
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* App menu (File/Edit/View…) parked in the side menu, above the tabs —
           only when the user chose the 'sidebar' spot over the title-bar pill. */}
-      {isElectron && appMenuPosition === 'sidebar' && (
+      {isElectron && appMenuPosition === 'sidebar' && !isEditorial && (
         <div className="px-3 pb-1 shrink-0">
           <AppMenu variant="sidebar" collapsed={collapsed} />
         </div>
@@ -543,6 +616,12 @@ export default function Sidebar(): JSX.Element {
       {/* Bottom section - Log in stays pinned (never hideable); the rest are
           user-ordered/hideable controls (Settings → Appearance → Menu controls). */}
       <div className="pb-4 space-y-1 px-2">
+        {isEditorial && !collapsed && (
+          <div className="px-2 pb-2 pt-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">Album theme</p>
+            <AlbumThemeStrip compact />
+          </div>
+        )}
         {!account && (
           <button
             onClick={() => setShowUserAuth(true)}
@@ -554,6 +633,16 @@ export default function Sidebar(): JSX.Element {
           </button>
         )}
         {controls.map((c) => renderControl(c.id))}
+        {isEditorial && (
+          <button
+            onClick={() => openSettings()}
+            title={collapsed ? 'Settings' : undefined}
+            className={rowCls}
+          >
+            <span className={iconWrap}><Settings size={18} /></span>
+            <span aria-hidden={collapsed} className={labelCls}>Settings</span>
+          </button>
+        )}
 
         {/* Collapse toggle */}
         <button

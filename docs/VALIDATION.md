@@ -125,8 +125,7 @@ retry after a failed import; they do not migrate a real personal profile.
   is [shareable WRLD videos](WRLD-STORIES.md), built on the current full-screen
   experience, with optional alternative layouts rather than mandatory vertical video.
 
-The repository's default branch remains `app`. Changes and these notes are on
-[`liquid-glass`](https://github.com/GoodFight37/Unreleased/tree/liquid-glass).
+The repository's single active branch is [`app`](https://github.com/GoodFight37/Unreleased/tree/app).
 
 ## Known risks (security review, 2026-11)
 

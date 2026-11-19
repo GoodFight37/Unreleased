@@ -1,4 +1,4 @@
-import { BarChart3, Bell, BookOpen, Clapperboard, Download, Gamepad2, HardDrive, Heart, Home, House, Info, Library, ListMusic, LogOut, Newspaper, SearchCode, Settings, Shield, SquareTerminal, Upload, User } from 'lucide-react'
+import { BarChart3, Bell, BookOpen, Clapperboard, Disc3, Download, Gamepad2, HardDrive, Heart, Home, House, Info, Library, ListMusic, LogOut, Newspaper, Settings, Shield, SquareTerminal, Upload, User } from 'lucide-react'
 import type { ReactNode } from 'react'
 import logo from '../assets/logo.png'
 import type { ViewType } from '../types'
@@ -38,7 +38,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   // The landing page on both shells, so it's pinned rather than optional -
   // hiding it would leave the app with no way back to where it opened.
   { view: 'home', label: 'Home', icon: <House size={18} />, alwaysVisible: true },
-  { view: 'api-tracker', label: 'Tracker', icon: <SearchCode size={18} /> },
+  { view: 'api-tracker', label: 'Tracker', icon: <Disc3 size={18} /> },
   { view: 'footage', label: 'Footage', icon: <Clapperboard size={18} /> },
   { view: 'api-files', label: 'Files', icon: <HardDrive size={18} /> },
   // Local-files library - desktop app only (the web build has no local folders).

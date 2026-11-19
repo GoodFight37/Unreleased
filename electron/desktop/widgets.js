@@ -154,7 +154,7 @@ class Widget {
       ...frame, frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
       fullscreenable: false, skipTaskbar: true, hasShadow: false, show: false, focusable: false, alwaysOnTop: false,
       backgroundColor: '#00000000', title: 'Unreleased',
-      webPreferences: { preload: this.options.preload, backgroundThrottling: false, contextIsolation: true },
+      webPreferences: { preload: this.options.preload, backgroundThrottling: false, contextIsolation: true, sandbox: true },
     }, (win) => {
       this.opening = null
       this.window = win

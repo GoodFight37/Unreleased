@@ -114,7 +114,7 @@ export function Toggle({ on, onClick, label, locked, lockedReason = 'Locked off 
       onClick={onClick}
       disabled={locked}
       title={locked ? lockedReason : undefined}
-      className={`relative w-10 h-5 rounded-full shrink-0 appearance-none border-0 p-0 leading-none bg-[var(--surface-overlay)] ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+      className={`relative w-10 h-5 rounded-full shrink-0 appearance-none border-0 p-0 leading-none bg-[var(--surface-overlay)] ring-1 ring-inset ring-black/15 dark:ring-white/10 ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       <span aria-hidden="true" className={`absolute inset-0 rounded-full bg-accent control-motion ${on ? 'opacity-100' : 'opacity-0'}`} />
       {/* Vertically centered with inset-y-0 + my-auto (an auto-margin flex/
@@ -122,10 +122,8 @@ export function Toggle({ on, onClick, label, locked, lockedReason = 'Locked off 
           `top-0.5` still relied on the button having zero padding/border to
           land exactly right, and browsers don't zero those out on <button>
           by default. auto-margin centering can't drift regardless of the
-          button's own box model. No shadow on the knob either — its default
-          downward offset (0 1px 3px) reads as visual weight sitting low,
-          making it look off-center even when it's geometrically centered. */}
-      <span aria-hidden="true" className={`absolute inset-y-0 left-0.5 my-auto w-4 h-4 rounded-full bg-white control-motion ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+          button's own box model. */}
+      <span aria-hidden="true" className={`absolute inset-y-0 left-0.5 my-auto w-4 h-4 rounded-full bg-white ring-1 ring-black/15 control-motion ${on ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
   )
 }

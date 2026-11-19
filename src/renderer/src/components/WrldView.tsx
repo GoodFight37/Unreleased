@@ -1,5 +1,5 @@
 import { effectsMotionMedia, useEffectsState } from '../lib/effectsPreference'
-import { chunkWords, isWrldFanLyricId, resolveWrldEra } from '../lib/wrldAtmospheres'
+import { isWrldFanLyricId, resolveWrldEra } from '../lib/wrldAtmospheres'
 import { getFont } from '../lib/fonts'
 import { useAlbumColors } from '../desktop/artColors'
 import { hsbToRgb } from '../desktop/light/engine'
@@ -847,6 +847,7 @@ export default function WrldView(): JSX.Element {
                 animated={stageAnimated && wrldAtmosphere === 'mesh'}
               />
             )}
+            {/* WRLD archive photo stills intentionally deferred for a dedicated full-res redesign. */}
             {(!useThemeBackground || postOn) && (
               <>
                 <div className={`absolute inset-0 pointer-events-none ${textIsDark && !postOn ? 'mesh-vignette--light' : 'mesh-vignette'}`} />
@@ -1433,7 +1434,7 @@ export default function WrldView(): JSX.Element {
             {(panelPresence.mounted || queueEverOpened) && (
             <div
               className={`absolute inset-y-0 right-0 overflow-hidden ${panelPresence.exiting ? 'animate-wrld-panel-out' : 'animate-wrld-panel-in'}`}
-              style={{ left: 'max(50%, 320px)', ...(panelPresence.mounted ? null : { display: 'none' }) }}
+              style={{ left: 'max(40%, 320px)', ...(panelPresence.mounted ? null : { display: 'none' }) }}
               data-viz="panel"
             >
               {/* Divider - FM only */}
@@ -1459,21 +1460,23 @@ export default function WrldView(): JSX.Element {
                 </WrldPanelLayer>
               )}
               {radioPresence.mounted && (
-                // Same frame as the queue above: pt-24 clears the visualizer
-                // toolbar, and a narrow centered column keeps the search box's
-                // help button off the window edge.
-                <WrldPanelLayer exiting={radioPresence.exiting} animateIn={viewCrossfade} className="absolute inset-0 flex justify-center px-6 xl:px-10 pt-24 pb-7">
-                  <div className="w-full max-w-[360px] h-full flex flex-col">
-                    {/* Radio and Chat share this layer; Lyrics is its own. */}
-                    <div className="flex items-center gap-1 pb-4 shrink-0">
-                      {(['radio', 'chat'] as const).map(tab => (
-                        <button key={tab} onClick={() => setFmTab(tab)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            fmTab === tab ? 'bg-white/10 text-white/90' : 'text-white/35 hover:text-white/65 hover:bg-white/5'
-                          }`}>
-                          {tab === 'radio' ? 'Radio' : 'Chat'}
-                        </button>
-                      ))}
+                <WrldPanelLayer exiting={radioPresence.exiting} animateIn={viewCrossfade} className="absolute inset-0 flex items-stretch justify-center px-6 xl:px-12 pt-20 pb-8">
+                  <div className="w-full max-w-[680px] h-full flex flex-col rounded-3xl border border-white/12 bg-black/30 backdrop-blur-xl shadow-2xl p-5 md:p-6 overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 pb-4 mb-3 border-b border-white/10 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
+                        <span className="font-mono-ui text-[11px] font-bold tracking-[0.16em] uppercase text-white/90">999 FM · Live</span>
+                      </div>
+                      <div className="inline-flex items-center gap-1 p-1 rounded-full bg-white/[0.06] border border-white/10">
+                        {(['radio', 'chat'] as const).map(tab => (
+                          <button key={tab} onClick={() => setFmTab(tab)}
+                            className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                              fmTab === tab ? 'bg-white/15 text-white shadow-sm' : 'text-white/55 hover:text-white/85'
+                            }`}>
+                            {tab === 'radio' ? 'Radio' : 'Chat'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div key={fmTab} className="flex-1 min-h-0 flex flex-col animate-wrld-view-in">
                       {fmTab === 'chat' ? <RadioChatPanel /> : FmRadioPanel()}
@@ -2326,7 +2329,7 @@ const ProgressBar = memo(function ProgressBar({ txtPri, txtTer, trackBg }: { txt
 
 // ── LyricsPanel - module-level component so it has its own Zustand selector ──
 
-import type { SyncedLyricLine, SyncedLyricWord, Track } from '../types'
+import type { SyncedLyricLine, Track } from '../types'
 
 interface LyricsPanelProps {
   rawLyrics: string | null
@@ -2360,12 +2363,65 @@ const LyricsPanel = memo(function LyricsPanel({
   const isLightLyrics = Boolean(lightBg ?? (txtSec.startsWith('rgba(10,') || txtSec.startsWith('rgba(0,0,0') || !getSkin(theme).dark))
   const developerMode = useStore((s) => s.developerMode)
   const wrldLyricLook = useVizStore((s) => s.wrldLyricLook)
+  const wrldCoverLyricColors = useVizStore((s) => s.wrldCoverLyricColors)
   const radioFmPaused = useStore((s) => s.radioFmPaused)
   const lyricsPaused = radioFmActive && radioFmPaused
   const lyricLook = developerMode ? savedLyricLook : (isWrldFanLyricId(wrldLyricLook) ? wrldLyricLook : 'classic')
+  // Cover-derived active lyric colors across Classic & Focus when Cover lyric colors is enabled.
+  const coverPalette = useAlbumColors(wrldCoverLyricColors ? artUrl : null)
+  const coverTint = useMemo(() => {
+    if (!wrldCoverLyricColors || !coverPalette) return null
+    const relLum = (r: number, g: number, b: number): number => {
+      const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    }
+    const lift = (c: { hue: number; saturation: number; brightness: number }, secondary = false) => {
+      const sat = c.saturation < 0.14 ? c.saturation : Math.min(Math.max(c.saturation, 0.58), 0.94)
+      const bri = isLightLyrics ? Math.min(c.brightness, secondary ? 0.34 : 0.40) : Math.max(c.brightness, 0.96)
+      let [r, g, b] = hsbToRgb({ hue: c.hue, saturation: sat, brightness: bri })
+      // Guarantee WCAG AA contrast against any bright cover mesh while preserving cover hue.
+      if (!isLightLyrics) {
+        const minLum = secondary ? 0.66 : 0.80
+        if (relLum(r, g, b) < minLum) {
+          let lo = 0, hi = 1
+          for (let k = 0; k < 10; k++) {
+            const m = (lo + hi) * 0.5
+            const lum = relLum(r + (1 - r) * m, g + (1 - g) * m, b + (1 - b) * m)
+            if (lum < minLum) lo = m
+            else hi = m
+          }
+          r = r + (1 - r) * hi
+          g = g + (1 - g) * hi
+          b = b + (1 - b) * hi
+        }
+      } else {
+        const maxLum = secondary ? 0.11 : 0.08
+        if (relLum(r, g, b) > maxLum) {
+          let lo = 0, hi = 1
+          for (let k = 0; k < 10; k++) {
+            const m = (lo + hi) * 0.5
+            const lum = relLum(r * (1 - m), g * (1 - m), b * (1 - m))
+            if (lum > maxLum) lo = m
+            else hi = m
+          }
+          r *= 1 - hi
+          g *= 1 - hi
+          b *= 1 - hi
+        }
+      }
+      const rr = Math.round(r * 255), gg = Math.round(g * 255), bb = Math.round(b * 255)
+      return { rgb: `${rr} ${gg} ${bb}`, css: `rgb(${rr}, ${gg}, ${bb})` }
+    }
+    const primary = lift(coverPalette.primary, false)
+    const secondary = lift(coverPalette.secondary, true)
+    return { primary, secondary }
+  }, [wrldCoverLyricColors, coverPalette, isLightLyrics])
   // null = auto, i.e. the art-derived text colors this tab already picks.
-  const activeColor   = developerMode ? lyricsColorActive ?? txtPri : txtPri
+  const activeColor   = developerMode ? (lyricsColorActive ?? coverTint?.primary.css ?? txtPri) : (coverTint?.primary.css ?? txtPri)
   const inactiveColor = developerMode ? lyricsColorInactive ?? txtSec : txtSec
+  const coverAccentStyle = coverTint
+    ? ({ '--accent': coverTint.primary.css, '--accent-rgb': coverTint.primary.rgb } as React.CSSProperties)
+    : undefined
   const pausedSecRef = useRef<{ raw: string | null; sec: number } | null>(null)
   if (lyricsPaused) {
     if (pausedSecRef.current === null || pausedSecRef.current.raw !== rawLyrics) {
@@ -2403,7 +2459,7 @@ const LyricsPanel = memo(function LyricsPanel({
   // wide window), and then nothing follows the song here.
   const [vpHalf, setVpHalf] = useState(0)
   const inSight = vpHalf > 0
-  const classicList = !!rawLyrics && isSynced && syncedLines.length > 0 && (lyricLook === 'classic' || !currentTrack)
+  const classicList = !!rawLyrics && isSynced && syncedLines.length > 0 && (lyricLook === 'classic' || lyricLook === 'focus' || !currentTrack)
 
   useEffect(() => {
     if (!isSynced || syncedLines.length === 0) {
@@ -2552,7 +2608,7 @@ const LyricsPanel = memo(function LyricsPanel({
     )
   }
 
-  if (lyricLook !== 'classic' && currentTrack) {
+  if (lyricLook !== 'classic' && lyricLook !== 'focus' && currentTrack) {
     return (
       <LyricStageView
         look={lyricLook}
@@ -2569,6 +2625,74 @@ const LyricsPanel = memo(function LyricsPanel({
     )
   }
 
+  if (lyricLook === 'focus' && isSynced && syncedLines.length > 0) {
+    const activeLine = currentLineIdx >= 0 ? syncedLines[currentLineIdx] : null
+    const nextLine = currentLineIdx >= 0
+      ? syncedLines[currentLineIdx + 1] ?? null
+      : syncedLines[0] ?? null
+    const focusAlignCls = lyricsAlign === 'left' ? 'items-start text-left' : 'items-center text-center'
+    return (
+      <div
+        ref={viewportRef}
+        style={coverAccentStyle}
+        onContextMenu={handleContextMenu}
+        className={`relative flex-1 min-h-0 overflow-hidden flex flex-col justify-center px-8 md:px-14 gap-6 select-none ${focusAlignCls}`}
+      >
+        {activeLine ? (
+          <div
+            key={`focus-${currentLineIdx}`}
+            className="focus-lyric-enter max-w-4xl"
+            style={{
+              fontFamily: 'var(--font-lyrics)',
+              fontSize: `calc(clamp(28px, 4.1vw, 56px) * ${Math.min(Math.max(lyricsScale, 0.8), 1.35)})`,
+              fontWeight: 800,
+              lineHeight: 1.16,
+              letterSpacing: '-0.025em',
+              color: activeColor,
+              textShadow: coverTint && !isLightLyrics ? `0 8px 34px rgb(${coverTint.primary.rgb} / 0.34)` : undefined,
+            }}
+          >
+            {activeLine.words && activeLine.words.length > 0 ? (
+              <WordLyricLine words={activeLine.words} active getTime={getLyricTime} offset={lyricsOffset} fill />
+            ) : (
+              splitAdLibs(activeLine.text).map((seg, si) => (
+                <span
+                  key={si}
+                  style={seg.adLib ? { color: coverTint?.secondary.css ?? inactiveColor, opacity: 0.78, fontStyle: 'italic' } : undefined}
+                >
+                  {seg.text}
+                </span>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 opacity-40" aria-hidden="true">
+            <span className="w-2.5 h-2.5 rounded-full bg-current animate-pulse" />
+            <span className="w-2.5 h-2.5 rounded-full bg-current animate-pulse" style={{ animationDelay: '180ms' }} />
+            <span className="w-2.5 h-2.5 rounded-full bg-current animate-pulse" style={{ animationDelay: '360ms' }} />
+          </div>
+        )}
+        {nextLine && (
+          <button
+            type="button"
+            onClick={() => { if (!radioFmActive) seekAudio(Math.max(0, nextLine.time + lyricsOffset)) }}
+            className="max-w-3xl transition-opacity duration-200 opacity-35 hover:opacity-65 cursor-pointer"
+            style={{
+              fontFamily: 'var(--font-lyrics)',
+              fontSize: `calc(clamp(16px, 1.8vw, 24px) * ${Math.min(Math.max(lyricsScale, 0.8), 1.3)})`,
+              fontWeight: 600,
+              lineHeight: 1.35,
+              color: inactiveColor,
+            }}
+          >
+            {nextLine.text}
+          </button>
+        )}
+        {downloadMenu}
+      </div>
+    )
+  }
+
   if (isSynced && syncedLines.length > 0) {
     // Edge fade is done with a mask on the lines themselves, not an opaque
     // overlay - painting flat rgba(0,0,0,0.55) bands on top added darkness
@@ -2581,6 +2705,7 @@ const LyricsPanel = memo(function LyricsPanel({
     return (
       <div
         ref={viewportRef}
+        style={coverAccentStyle}
         className="relative flex-1 min-h-0 overflow-hidden"
         onWheel={handleWheel}
         onTouchStart={handleTouchStart}
@@ -2729,127 +2854,68 @@ const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedL
   currentTrack: Track | null
   artUrl: string | null
 }): JSX.Element {
-  const { frame, ink, postFont, story } = useVizStore(useShallow(s => ({
-    frame: s.wrldFrame, ink: s.wrldInk, postFont: s.wrldPostFont, story: s.wrldPost === 'story',
+  const { wrldLyricLook, ink, postFont } = useVizStore(useShallow(s => ({
+    wrldLyricLook: s.wrldLyricLook, ink: s.wrldInk, postFont: s.wrldPostFont,
   })))
-  const lyricsFont = useStore(s => s.lyricsFont)
-  const lyricsOffset = useStore(s => s.lyricsOffset)
-  // The cover's color as the lyric styles already measure it; only looked up when Accent is on.
+  const radioFmActive = useStore(s => s.radioFmActive)
   const colors = useAlbumColors(ink === 'accent' ? artUrl : null)
 
-  const timed = isSynced && syncedLines.length > 0
-  const [pos, setPos] = useState({ line: -1, word: -1 })
-  useEffect(() => {
-    if (!timed || frame === '999') return
-    let raf = 0
-    const tick = (): void => {
-      if (document.hidden) { raf = 0; return }
-      // shortcut: the live play position, not LyricsPanel's 999 FM pause hold; the FM pause only freezes lines there.
-      const t = playingSeconds() - lyricsOffset
-      const line = getCurrentLineIndex(syncedLines, t)
-      const words = syncedLines[line]?.words
-      let word = -1
-      if (words) while (word + 1 < words.length && words[word + 1].start <= t) word++
-      setPos(p => (p.line === line && p.word === word ? p : { line, word }))
-      raf = requestAnimationFrame(tick)
-    }
-    const onVis = (): void => {
-      if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
-      else if (!raf) raf = requestAnimationFrame(tick)
-    }
-    document.addEventListener('visibilitychange', onVis)
-    raf = requestAnimationFrame(tick)
-    return () => { document.removeEventListener('visibilitychange', onVis); cancelAnimationFrame(raf) }
-  }, [timed, frame, syncedLines, lyricsOffset])
-
-  const line = pos.line >= 0 ? syncedLines[pos.line] : null
-  const words = line?.words
-  const chunks = useMemo(() => (words ? chunkWords(words) : null), [words])
-
-  // The frame's own font unless one is picked: the lyrics font, Serif for Quiet, the fisheye's own face for 999.
-  const fontId = postFont ?? (frame === 'quiet' ? 'serif' : frame === '999' ? null : lyricsFont)
-  const stack = fontId ? getFont(fontId).stack : undefined
+  const stack = postFont ? getFont(postFont).stack : undefined
 
   let inkRgb: string | null = INK_WHITE
   if (ink === 'yellow') inkRgb = INK_YELLOW
   else if (ink === 'accent') {
-    // Lifted so the color still reads as text over the dark stage.
     inkRgb = colors
       ? hsbToRgb({ ...colors.primary, saturation: Math.min(colors.primary.saturation, 0.8), brightness: Math.max(colors.primary.brightness, 0.92) })
           .map(v => Math.round(v * 255)).join(' ')
       : null
   }
-  // WordLyricLine's fill and glow mix in --accent, so the ink is scoped there too.
+  const inkColor = inkRgb ? `rgb(${inkRgb})` : 'var(--accent)'
   const inkStyle = (inkRgb
-    ? { color: `rgb(${inkRgb})`, '--accent': `rgb(${inkRgb})`, '--accent-rgb': inkRgb }
-    : { color: 'var(--accent)' }) as React.CSSProperties
+    ? { color: inkColor, '--accent': inkColor, '--accent-rgb': inkRgb, ...(stack ? { '--font-lyrics': stack } : {}) }
+    : { color: 'var(--accent)', ...(stack ? { '--font-lyrics': stack } : {}) }) as React.CSSProperties
 
-  const sing = (ws: SyncedLyricWord[]): JSX.Element =>
-    <WordLyricLine words={ws} active getTime={playingSeconds} offset={lyricsOffset} fill />
-
-  let body: React.ReactNode = null
-  if (frame === '999') {
-    body = currentTrack && rawLyrics ? (
-      <div className="absolute inset-x-0 top-[12%] bottom-[12%] flex flex-col">
-        <LyricStageView look="fisheye" trackId={currentTrack.id} title={currentTrack.title} artist={currentTrack.artist}
-          duration={currentTrack.duration} rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines}
-          artUrl={artUrl} lightBg={false} face={stack} />
-      </div>
-    ) : null
-  } else if (!timed) {
-    body = rawLyrics
-      ? <p className="text-sm text-white/70" style={{ fontFamily: 'var(--font-app)' }}>These lyrics aren’t timed. The 999 frame can still sing them.</p>
-      : null
-  } else if (line?.text) {
-    if (frame === 'word') {
-      const cur = words?.[Math.max(pos.word, 0)]
-      body = cur ? (
-        <>
-          {/* The length term keeps a long word inside a narrow (Story) frame. */}
-          <p key={`${pos.line}-${pos.word}`} style={{ fontSize: `max(40px, min(22cqi, 22cqh, ${(160 / Math.max(cur.text.length, 1)).toFixed(1)}cqi))`, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em' }}>
-            {sing([cur])}
-          </p>
-          <p className="mt-[4cqh] max-w-[80%]" style={{ fontSize: 'max(14px, min(4.6cqi, 3.4cqh))', fontWeight: 500, lineHeight: 1.35, opacity: 0.72 }}>
-            {sing(words!)}
-          </p>
-        </>
-      ) : (
-        <p className="max-w-[86%]" style={{ fontSize: 'max(24px, min(10cqi, 7cqh))', fontWeight: 700, lineHeight: 1.15 }}>{line.text}</p>
-      )
-    } else if (frame === 'quiet') {
-      body = (
-        <p className="max-w-[72%]" style={{ fontSize: 'max(18px, min(5.2cqi, 4.2cqh))', fontWeight: 400, lineHeight: 1.45 }}>
-          {words ? sing(words) : line.text}
-        </p>
-      )
-    } else {
-      let ci = 0
-      if (chunks) for (let seen = 0, w = Math.max(pos.word, 0); ci < chunks.length - 1 && seen + chunks[ci].length <= w; ci++) seen += chunks[ci].length
-      body = (
-        <p key={`${pos.line}-${ci}`} className="max-w-[86%]" style={{ fontSize: 'max(24px, min(10cqi, 7cqh))', fontWeight: 700, lineHeight: 1.15, letterSpacing: '-0.01em' }}>
-          {chunks ? sing(chunks[ci]) : line.text}
-        </p>
-      )
-    }
-  }
+  const stageLook = wrldLyricLook === 'fisheye' || wrldLyricLook === 'cut' || wrldLyricLook === 'cinema'
+    ? wrldLyricLook
+    : null
 
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-      <div
-        className="relative flex flex-col items-center justify-center text-center overflow-hidden"
-        style={{
-          containerType: 'size',
-          // No text-shadow here: the sung word's fill is a transparent text fill, and a shadow would show through it.
-          fontFamily: stack ?? 'var(--font-lyrics)',
-          ...inkStyle,
-          // Story: the same frame in 9:16 with room above and below; the rest of the stage is veiled to show the crop.
-          ...(story
-            ? { height: 'calc(100% - 20vh)', aspectRatio: '9 / 16', boxShadow: '0 0 0 100vmax rgb(0 0 0 / 0.6)' }
-            : { width: '100%', height: '100%' }),
-        }}
-      >
-        {body}
-      </div>
+    <div className="absolute inset-0 z-20 flex items-center justify-center" style={inkStyle}>
+      {stageLook && currentTrack && rawLyrics ? (
+        <div className="absolute inset-x-0 top-[8%] bottom-[12%] flex flex-col pointer-events-none">
+          <LyricStageView
+            look={stageLook}
+            trackId={currentTrack.id}
+            title={currentTrack.title}
+            artist={currentTrack.artist}
+            duration={currentTrack.duration}
+            rawLyrics={rawLyrics}
+            isSynced={isSynced}
+            syncedLines={syncedLines}
+            artUrl={artUrl}
+            lightBg={false}
+            face={stack}
+          />
+        </div>
+      ) : (
+        <div className="w-full max-w-4xl h-full mx-auto px-6 md:px-12 pt-14 pb-20 flex flex-col">
+          <LyricsPanel
+            padded
+            rawLyrics={rawLyrics}
+            isSynced={isSynced}
+            syncedLines={syncedLines}
+            radioFmActive={radioFmActive}
+            currentTrack={currentTrack}
+            isEditor={false}
+            txtPri={inkColor}
+            txtSec="rgba(255,255,255,0.42)"
+            txtTer="rgba(255,255,255,0.34)"
+            txtFaint="rgba(255,255,255,0.22)"
+            artUrl={artUrl}
+            lightBg={false}
+          />
+        </div>
+      )}
     </div>
   )
 })

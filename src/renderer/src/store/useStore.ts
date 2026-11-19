@@ -135,6 +135,7 @@ export interface DownloadItem {
 export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'
 // 'classic' = the docked menu; 'pill' = a floating, rounded, icon-only bar.
 export type NavStyle = 'classic' | 'pill'
+export type InterfaceStyle = 'spatial' | 'editorial'
 
 // Where the File/Edit/View� app-menu button lives (desktop only): the floating
 // title-strip pill, tucked inside the side menu, or off entirely.
@@ -275,6 +276,10 @@ interface AppState {
   sidebarPosition: SidebarPosition
   // Desktop only: visual style of the nav menu. Local-only preference.
   navStyle: NavStyle
+  interfaceStyle: InterfaceStyle
+  loudnessNormalization: boolean
+  wrldArchiveStills: boolean
+  grailSongIds: number[]
   appMenuPosition: AppMenuPosition
   // Desktop only: the nav menu slides out of view until the pointer touches its
   // screen edge (like an auto-hiding taskbar). Local-only preference.
@@ -592,10 +597,6 @@ interface AppState {
   showNotifications: boolean
   updateStatus: { type: string; version?: string; percent?: number; bytesPerSecond?: number; message?: string } | null
 
-  // The bottom nav's overflow sheet - its trigger button lives on Home now,
-  // not in the nav bar itself, so the open/close state has to live somewhere
-  // both can reach.
-  showMoreNav: boolean
   // Lets a view's sub-state paint a hero image full-bleed behind the app bar
   // and up under the status bar, instead of sitting on the shell's flat
   // reserved inset strip. The view that raises it MUST clear it on the way
@@ -730,6 +731,10 @@ interface AppActions {
   deleteCustomSkin: (id: string) => void
   setAppMenuPosition: (position: AppMenuPosition) => void
   setNavStyle: (style: NavStyle) => void
+  setInterfaceStyle: (style: InterfaceStyle) => void
+  setLoudnessNormalization: (enabled: boolean) => void
+  setWrldArchiveStills: (enabled: boolean) => void
+  toggleGrailSong: (songId: number) => void
   setAutoHideNav: (on: boolean) => void
   setAutoHideNavZone: (px: number) => void
   setNavOrder: (order: ViewType[]) => void
@@ -787,6 +792,7 @@ interface AppActions {
   setGlobalHotkeyBinding: (actionId: string, combo: string) => void
 
   toggleLike: (trackId: string) => void
+  unlikeTrack: (trackId: string) => void
 
   /** Custom display name for a song, or null to fall back to its own title. */
   setSongName: (songId: number, name: string | null) => void
@@ -1011,7 +1017,6 @@ interface AppActions {
   setShowNotifications: (show: boolean) => void
   setUpdateStatus: (status: { type: string; version?: string; percent?: number; bytesPerSecond?: number; message?: string } | null) => void
 
-  setShowMoreNav: (show: boolean) => void
   setHeroBleedTop: (heroBleedTop: boolean) => void
   // Writes to playlistHeroEnabledDark or ...Light, whichever matches the
   // skin active right now.
@@ -1559,6 +1564,10 @@ export const useStore = create<AppStore>((set, get, store) => ({
   sidebarPosition: 'top',
   appMenuPosition: ls.get<AppMenuPosition>('appMenuPosition') ?? 'sidebar',
   navStyle: ls.get<NavStyle>('navStyle') ?? 'pill',
+  interfaceStyle: (ls.get<string>('interfaceStyle') === 'editorial' ? 'editorial' : 'spatial') as InterfaceStyle,
+  loudnessNormalization: ls.get<boolean>('loudnessNormalization') ?? true,
+  wrldArchiveStills: ls.get<boolean>('wrldArchiveStills') ?? false,
+  grailSongIds: ls.get<number[]>('grailSongIds') ?? [],
   autoHideNav: ls.get<boolean>('autoHideNav') ?? false,
   autoHideNavZone: ls.get<number>('autoHideNavZone') ?? 24,
   navOrder: (() => {
@@ -1868,6 +1877,15 @@ export const useStore = create<AppStore>((set, get, store) => ({
     if (navStyle === 'pill') ls.set('autoHideNav', false)
     get()._scheduleProfilePush(['userSettings'])
   },
+  setInterfaceStyle: (interfaceStyle) => { set({ interfaceStyle }); ls.set('interfaceStyle', interfaceStyle) },
+  setLoudnessNormalization: (loudnessNormalization) => { set({ loudnessNormalization }); ls.set('loudnessNormalization', loudnessNormalization) },
+  setWrldArchiveStills: (wrldArchiveStills) => { set({ wrldArchiveStills }); ls.set('wrldArchiveStills', wrldArchiveStills) },
+  toggleGrailSong: (songId) => {
+    const cur = get().grailSongIds
+    const next = cur.includes(songId) ? cur.filter((id) => id !== songId) : [songId, ...cur].slice(0, 12)
+    set({ grailSongIds: next })
+    ls.set('grailSongIds', next)
+  },
   setAutoHideNav: (autoHideNav) => { if (autoHideNav && get().navStyle === 'pill') return; set({ autoHideNav }); ls.set('autoHideNav', autoHideNav); get()._scheduleProfilePush(['userSettings']) },
   setAutoHideNavZone: (px) => {
     const autoHideNavZone = Math.max(4, Math.min(120, Math.round(px)))
@@ -2135,6 +2153,26 @@ export const useStore = create<AppStore>((set, get, store) => ({
           set({ likedTrackIds: reverted })
           ls.set('likedTrackIds', reverted)
           showAppToast(wasLiked ? "Couldn't unlike the song" : "Couldn't like the song")
+        })
+      }
+    }
+  },
+
+  unlikeTrack: (trackId) => {
+    const { likedTrackIds, account } = get()
+    const next = likedTrackIds.filter((id) => id !== trackId)
+    set({ likedTrackIds: next })
+    ls.set('likedTrackIds', next)
+
+    if (account) {
+      const songId = userApi.trackIdToSongId(trackId)
+      if (songId != null) {
+        userApi.removeFavorite(songId).catch(() => {
+          const current = get().likedTrackIds
+          const reverted = current.includes(trackId) ? current : [...current, trackId]
+          set({ likedTrackIds: reverted })
+          ls.set('likedTrackIds', reverted)
+          showAppToast("Couldn't unlike the song")
         })
       }
     }
@@ -2675,14 +2713,11 @@ export const useStore = create<AppStore>((set, get, store) => ({
       try {
         const favorites = await userApi.getFavorites()
         const serverIds = favorites.map((f) => `jw-${f.song.id}`)
-        const localOnly = get().likedTrackIds.filter((id) => !serverIds.includes(id))
-        await Promise.all(
-          localOnly
-            .map((id) => userApi.trackIdToSongId(id))
-            .filter((sid): sid is number => sid != null)
-            .map((sid) => userApi.addFavorite(sid).catch(() => undefined)),
-        )
-        const merged = Array.from(new Set([...serverIds, ...localOnly]))
+        // Only local-file and archive-file likes live outside the favorites API;
+        // server favorites are authoritative for `jw-*` song ids so unliked songs
+        // never bounce back across restarts or stale local caches.
+        const localNonApi = get().likedTrackIds.filter((id) => userApi.trackIdToSongId(id) == null)
+        const merged = Array.from(new Set([...serverIds, ...localNonApi]))
         set({ likedTrackIds: merged })
         ls.set('likedTrackIds', merged)
       } catch {}
@@ -3676,9 +3711,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
   setShowNotifications: (show) => set(show ? { showNotifications: true, showDownloadManager: false } : { showNotifications: false }),
   setUpdateStatus: (updateStatus) => set({ updateStatus }),
 
-  showMoreNav: false,
   heroBleedTop: false,
-  setShowMoreNav: (showMoreNav) => set({ showMoreNav }),
   setHeroBleedTop: (heroBleedTop) => set({ heroBleedTop }),
   playlistHeroEnabledDark: ls.get<boolean>('playlistHeroEnabledDark') ?? true,
   playlistHeroEnabledLight: ls.get<boolean>('playlistHeroEnabledLight') ?? false,
@@ -3694,26 +3727,63 @@ export const useStore = create<AppStore>((set, get, store) => ({
     const s = get()
     if (!serverSettings) { get()._scheduleProfilePush(['userSettings']); return }
 
+    const batch: Partial<AppStore> = {}
     const mergedMuted = Array.from(new Set([...(serverSettings.muted_user_ids ?? []), ...s.mutedUserIds]))
-    if (mergedMuted.length !== s.mutedUserIds.length) { set({ mutedUserIds: mergedMuted }); ls.set('mutedUserIds', mergedMuted) }
+    if (mergedMuted.length !== s.mutedUserIds.length) { batch.mutedUserIds = mergedMuted; ls.set('mutedUserIds', mergedMuted) }
 
     // Favorite GIFs union like muted_user_ids - favoriting on one device
     // shouldn't be erasable by a stale sync from another.
     const serverFavGifs = serverSettings.favorite_gifs ?? []
     const mergedFavGifs = [...s.favoriteGifs, ...serverFavGifs.filter((g) => !s.favoriteGifs.some((f) => f.id === g.id))]
-    if (mergedFavGifs.length !== s.favoriteGifs.length) { set({ favoriteGifs: mergedFavGifs }); ls.set('favoriteGifs', mergedFavGifs) }
+    if (mergedFavGifs.length !== s.favoriteGifs.length) { batch.favoriteGifs = mergedFavGifs; ls.set('favoriteGifs', mergedFavGifs) }
 
     if (serverSettings.custom_skins && JSON.stringify(serverSettings.custom_skins) !== JSON.stringify(s.customSkins)) {
-      set({ customSkins: serverSettings.custom_skins })
+      batch.customSkins = serverSettings.custom_skins
       ls.set('customSkins', serverSettings.custom_skins)
       setCustomSkinsCache(serverSettings.custom_skins)
     }
-    // After seeding custom skins, so a synced custom id resolves to the right Dark/Light fallback.
-    if (serverSettings.theme && serverSettings.theme !== s.theme) s.setTheme(getSkin(serverSettings.theme).id)
     if (Array.isArray(serverSettings.donor_playlists) && JSON.stringify(serverSettings.donor_playlists) !== JSON.stringify(s.donorPlaylists)) {
-      set({ donorPlaylists: serverSettings.donor_playlists })
+      batch.donorPlaylists = serverSettings.donor_playlists
       ls.set('donorPlaylists', serverSettings.donor_playlists)
     }
+    if (serverSettings.playlist_hero_enabled_dark !== undefined && serverSettings.playlist_hero_enabled_dark !== s.playlistHeroEnabledDark) {
+      batch.playlistHeroEnabledDark = serverSettings.playlist_hero_enabled_dark; ls.set('playlistHeroEnabledDark', serverSettings.playlist_hero_enabled_dark)
+    }
+    if (serverSettings.playlist_hero_enabled_light !== undefined && serverSettings.playlist_hero_enabled_light !== s.playlistHeroEnabledLight) {
+      batch.playlistHeroEnabledLight = serverSettings.playlist_hero_enabled_light; ls.set('playlistHeroEnabledLight', serverSettings.playlist_hero_enabled_light)
+    }
+    if (serverSettings.nav_visibility) {
+      const mergedNavVis = { ...s.navVisibility, ...serverSettings.nav_visibility }
+      batch.navVisibility = mergedNavVis; ls.set('navVisibility', mergedNavVis)
+    }
+    if (serverSettings.nav_control_visibility) {
+      const mergedCtrlVis = { ...s.navControlVisibility, ...serverSettings.nav_control_visibility }
+      batch.navControlVisibility = mergedCtrlVis; ls.set('navControlVisibility', mergedCtrlVis)
+    }
+    if (serverSettings.home_section_visibility) {
+      const mergedHomeVis = { ...s.homeSectionVisibility, ...serverSettings.home_section_visibility }
+      batch.homeSectionVisibility = mergedHomeVis; ls.set('homeSectionVisibility', mergedHomeVis)
+    }
+    if (serverSettings.eq_gains && serverSettings.eq_gains.length === EQ_BANDS.length && JSON.stringify(serverSettings.eq_gains) !== JSON.stringify(s.eqGains)) {
+      batch.eqGains = serverSettings.eq_gains
+      batch.eqPreset = serverSettings.eq_preset ?? 'custom'
+      ls.set('eqGains', serverSettings.eq_gains); ls.set('eqPreset', serverSettings.eq_preset ?? 'custom')
+    }
+    if (serverSettings.audio_fx) {
+      const audioFx = sanitizeFx(serverSettings.audio_fx)
+      if (stableJson(audioFx) !== stableJson(s.audioFx)) { batch.audioFx = audioFx; ls.set('audioFx', audioFx) }
+    }
+    if (Array.isArray(serverSettings.eq_user_presets)) {
+      const eqUserPresets = sanitizeUserPresets(serverSettings.eq_user_presets)
+      if (stableJson(eqUserPresets) !== stableJson(s.eqUserPresets)) { batch.eqUserPresets = eqUserPresets; ls.set('eqUserPresets', eqUserPresets) }
+    }
+    if (serverSettings.hotkey_bindings && JSON.stringify(serverSettings.hotkey_bindings) !== JSON.stringify(s.hotkeyBindings)) {
+      batch.hotkeyBindings = serverSettings.hotkey_bindings; ls.set('hotkeyBindings', serverSettings.hotkey_bindings)
+    }
+    if (Object.keys(batch).length > 0) set(batch)
+
+    // After seeding custom skins, so a synced custom id resolves to the right Dark/Light fallback.
+    if (serverSettings.theme && serverSettings.theme !== s.theme) s.setTheme(getSkin(serverSettings.theme).id)
     if (serverSettings.accent_color !== undefined && serverSettings.accent_color !== s.accentColor) s.setAccentColor(serverSettings.accent_color, { keepAdaptive: true })
     if (serverSettings.app_text_scale !== undefined && serverSettings.app_text_scale !== s.appTextScale) s.setAppTextScale(serverSettings.app_text_scale)
     // syncedFontId is null for an imported font file this device doesn't have.
@@ -3733,19 +3803,10 @@ export const useStore = create<AppStore>((set, get, store) => ({
     if (serverSettings.surface_gradients_enabled !== undefined && serverSettings.surface_gradients_enabled !== s.surfaceGradientsEnabled) s.setSurfaceGradientsEnabled(serverSettings.surface_gradients_enabled)
     if (serverSettings.wrld_theme_background !== undefined && serverSettings.wrld_theme_background !== s.wrldThemeBackground) s.setWrldThemeBackground(serverSettings.wrld_theme_background)
     if (serverSettings.adaptive_colors !== undefined && serverSettings.adaptive_colors !== s.adaptiveColors) s.setAdaptiveColors(serverSettings.adaptive_colors)
-    if (serverSettings.playlist_hero_enabled_dark !== undefined && serverSettings.playlist_hero_enabled_dark !== s.playlistHeroEnabledDark) {
-      set({ playlistHeroEnabledDark: serverSettings.playlist_hero_enabled_dark }); ls.set('playlistHeroEnabledDark', serverSettings.playlist_hero_enabled_dark)
-    }
-    if (serverSettings.playlist_hero_enabled_light !== undefined && serverSettings.playlist_hero_enabled_light !== s.playlistHeroEnabledLight) {
-      set({ playlistHeroEnabledLight: serverSettings.playlist_hero_enabled_light }); ls.set('playlistHeroEnabledLight', serverSettings.playlist_hero_enabled_light)
-    }
     // Mirror the server's nav position untouched (the fork stays on top) so pushes echo it back unchanged.
     if (serverSettings.sidebar_position) ls.set('sidebarPosition', serverSettings.sidebar_position)
     if (serverSettings.nav_order && JSON.stringify(serverSettings.nav_order) !== JSON.stringify(s.navOrder)) s.setNavOrder(serverSettings.nav_order)
-    if (serverSettings.nav_visibility) { set({ navVisibility: { ...s.navVisibility, ...serverSettings.nav_visibility } }); ls.set('navVisibility', get().navVisibility) }
     if (serverSettings.nav_control_order && JSON.stringify(serverSettings.nav_control_order) !== JSON.stringify(s.navControlOrder)) s.setNavControlOrder(serverSettings.nav_control_order)
-    if (serverSettings.nav_control_visibility) { set({ navControlVisibility: { ...s.navControlVisibility, ...serverSettings.nav_control_visibility } }); ls.set('navControlVisibility', get().navControlVisibility) }
-    if (serverSettings.home_section_visibility) { set({ homeSectionVisibility: { ...s.homeSectionVisibility, ...serverSettings.home_section_visibility } }); ls.set('homeSectionVisibility', get().homeSectionVisibility) }
     if (serverSettings.playback_speed !== undefined && serverSettings.playback_speed !== s.playbackSpeed) s.setPlaybackSpeed(serverSettings.playback_speed)
     if (serverSettings.crossfade_enabled !== undefined && (serverSettings.crossfade_enabled !== s.crossfadeEnabled || serverSettings.crossfade_duration !== s.crossfadeDuration)) {
       s.setCrossfade(serverSettings.crossfade_enabled, serverSettings.crossfade_duration ?? s.crossfadeDuration)
@@ -3770,29 +3831,14 @@ export const useStore = create<AppStore>((set, get, store) => ({
     if (serverSettings.lastfm_enabled !== undefined && serverSettings.lastfm_enabled !== s.lastfmEnabled) s.setLastfmEnabled(serverSettings.lastfm_enabled)
     if (serverSettings.auto_report_errors !== undefined && serverSettings.auto_report_errors !== s.autoReportErrors) s.setAutoReportErrors(serverSettings.auto_report_errors)
     if (serverSettings.eq_enabled !== undefined && serverSettings.eq_enabled !== s.eqEnabled) s.setEqEnabled(serverSettings.eq_enabled)
-    if (serverSettings.eq_gains && serverSettings.eq_gains.length === EQ_BANDS.length && JSON.stringify(serverSettings.eq_gains) !== JSON.stringify(s.eqGains)) {
-      set({ eqGains: serverSettings.eq_gains, eqPreset: serverSettings.eq_preset ?? 'custom' })
-      ls.set('eqGains', serverSettings.eq_gains); ls.set('eqPreset', serverSettings.eq_preset ?? 'custom')
-    }
     if (serverSettings.eq_balance != null && serverSettings.eq_balance !== s.eqBalance) s.setEqBalance(serverSettings.eq_balance)
     if (serverSettings.eq_mono !== undefined && serverSettings.eq_mono !== s.eqMono) s.setEqMono(serverSettings.eq_mono)
     if (serverSettings.eq_boost != null && serverSettings.eq_boost !== s.eqBoost) s.setEqBoost(serverSettings.eq_boost)
-    if (serverSettings.audio_fx) {
-      const audioFx = sanitizeFx(serverSettings.audio_fx)
-      if (stableJson(audioFx) !== stableJson(s.audioFx)) { set({ audioFx }); ls.set('audioFx', audioFx) }
-    }
-    if (Array.isArray(serverSettings.eq_user_presets)) {
-      const eqUserPresets = sanitizeUserPresets(serverSettings.eq_user_presets)
-      if (stableJson(eqUserPresets) !== stableJson(s.eqUserPresets)) { set({ eqUserPresets }); ls.set('eqUserPresets', eqUserPresets) }
-    }
     if (serverSettings.skip_silence !== undefined && serverSettings.skip_silence !== s.skipSilence) s.setSkipSilence(serverSettings.skip_silence)
     if (serverSettings.reverb_enabled !== undefined && serverSettings.reverb_enabled !== s.reverbEnabled) s.setReverbEnabled(serverSettings.reverb_enabled)
     if (serverSettings.reverb_mix !== undefined && serverSettings.reverb_mix !== s.reverbMix) s.setReverbMix(serverSettings.reverb_mix)
     if (serverSettings.reverb_decay !== undefined && serverSettings.reverb_decay !== s.reverbDecay) s.setReverbDecay(serverSettings.reverb_decay)
     if (serverSettings.pitch_shift !== undefined && serverSettings.pitch_shift !== s.pitchShift) s.setPitchShift(serverSettings.pitch_shift)
-    if (serverSettings.hotkey_bindings && JSON.stringify(serverSettings.hotkey_bindings) !== JSON.stringify(s.hotkeyBindings)) {
-      set({ hotkeyBindings: serverSettings.hotkey_bindings }); ls.set('hotkeyBindings', serverSettings.hotkey_bindings)
-    }
     if (serverSettings.hotkey_seek_seconds !== undefined && serverSettings.hotkey_seek_seconds !== s.hotkeySeekSeconds) s.setHotkeySeekSeconds(serverSettings.hotkey_seek_seconds)
     if (serverSettings.global_hotkeys_enabled !== undefined && serverSettings.global_hotkeys_enabled !== s.globalHotkeysEnabled) s.setGlobalHotkeysEnabled(serverSettings.global_hotkeys_enabled)
 

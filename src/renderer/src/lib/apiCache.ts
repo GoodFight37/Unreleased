@@ -1,39 +1,115 @@
-// Persistent (localStorage-backed) cache for GET API responses. When a
-// request fails at the network level (offline, DNS failure, etc.) callers
-// fall back to the last successful response for that same key instead of
-// erroring out, so the app stays browsable/listenable without a connection.
-// HTTP-level errors (4xx/5xx) are NOT covered here - those are real server
-// responses, not offline symptoms, and should surface as-is.
+// Hybrid memory + IndexedDB + small-entry localStorage cache for GET API
+// responses. Small responses (<= 250 KB) mirror to localStorage for instant
+// synchronous cold-boot apiPeek; large responses (including the 3.5 MB bulk
+// catalog /songs/?all=true) persist asynchronously to IndexedDB without
+// blocking the main thread or hitting localStorage's 10 MB quota.
 
 const PREFIX = 'unreleased:apicache:'
 const MAX_ENTRIES = 300
 const EVICT_SLACK = 20
-// localStorage's ~10MB origin quota is counted in UTF-16 code units, so a
-// single value bigger than this can never realistically be stored alongside
-// the rest of the cache. Notably the bulk catalog (/songs/?all=true) is
-// ~7.4M chars of JSON - before this cap, every fetch of it stringified the
-// payload, threw QuotaExceededError, ran a full eviction sweep (JSON.parsing
-// every cached entry and deleting a third of them), retried, and failed
-// again: seconds of synchronous churn that also silently gutted the offline
-// cache while never actually caching anything.
-const MAX_ENTRY_CHARS = 2_000_000
+const MAX_LS_CHARS = 250_000
+const IDB_NAME = 'unreleased-apicache-v1'
+const IDB_STORE = 'entries'
 
 interface CacheEntry<T> {
   data: T
   ts: number
 }
 
+const memCache = new Map<string, CacheEntry<unknown>>()
+let idbPromise: Promise<IDBDatabase | null> | null = null
+
+function openIdb(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null)
+  if (!idbPromise) {
+    idbPromise = new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(IDB_NAME, 1)
+        req.onupgradeneeded = () => {
+          const db = req.result
+          if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE)
+        }
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => resolve(null)
+      } catch {
+        resolve(null)
+      }
+    })
+  }
+  return idbPromise
+}
+
+function idbPut(key: string, entry: CacheEntry<unknown>): void {
+  void openIdb().then((db) => {
+    if (!db) return
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).put(entry, key)
+    } catch { /* ignore quota/private mode */ }
+  })
+}
+
+function idbDelete(key: string): void {
+  void openIdb().then((db) => {
+    if (!db) return
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).delete(key)
+    } catch { /* ignore */ }
+  })
+}
+
+function idbClear(): void {
+  void openIdb().then((db) => {
+    if (!db) return
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).clear()
+    } catch { /* ignore */ }
+  })
+}
+
+/** Hydrates in-memory cache from IndexedDB in the background so large offline
+ *  entries (like /songs/?all=true) are ready without synchronous startup I/O. */
+export function hydrateApiCache(): Promise<void> {
+  return openIdb().then((db) => {
+    if (!db) return
+    return new Promise<void>((resolve) => {
+      try {
+        const tx = db.transaction(IDB_STORE, 'readonly')
+        const store = tx.objectStore(IDB_STORE)
+        const req = store.openCursor()
+        req.onsuccess = () => {
+          const cursor = req.result
+          if (!cursor) { resolve(); return }
+          const k = String(cursor.key)
+          if (!memCache.has(k) && cursor.value && typeof cursor.value === 'object') {
+            memCache.set(k, cursor.value as CacheEntry<unknown>)
+          }
+          cursor.continue()
+        }
+        req.onerror = () => resolve()
+      } catch {
+        resolve()
+      }
+    })
+  })
+}
+
+// Start hydrating immediately on module load (non-blocking).
+void hydrateApiCache()
+
 function cacheKeys(): string[] {
   const keys: string[] = []
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i)
-    if (k?.startsWith(PREFIX)) keys.push(k)
-  }
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k?.startsWith(PREFIX)) keys.push(k)
+    }
+  } catch { /* storage unavailable */ }
   return keys
 }
 
-// cacheSet writes `{"data":…,"ts":N}`, so the timestamp is at the end and can
-// be read without parsing an entry that may run to megabytes.
 function entryTs(raw: string | null): number {
   const m = raw ? /"ts":(\d+)\}$/.exec(raw) : null
   if (m) return Number(m[1])
@@ -51,17 +127,21 @@ function evictOldest(count: number): void {
 }
 
 export function cacheGet<T>(key: string): T | undefined {
+  const mem = memCache.get(key)
+  if (mem) return mem.data as T
   try {
     const raw = localStorage.getItem(PREFIX + key)
     if (!raw) return undefined
-    return (JSON.parse(raw) as CacheEntry<T>).data
+    const parsed = JSON.parse(raw) as CacheEntry<T>
+    memCache.set(key, parsed)
+    return parsed.data
   } catch {
     return undefined
   }
 }
 
-// Whether an entry exists, without parsing it.
 export function cacheHas(key: string): boolean {
+  if (memCache.has(key)) return true
   try {
     return localStorage.getItem(PREFIX + key) !== null
   } catch {
@@ -70,37 +150,47 @@ export function cacheHas(key: string): boolean {
 }
 
 export function cacheSet<T>(key: string, data: T): void {
-  const raw = JSON.stringify({ data, ts: Date.now() } as CacheEntry<T>)
-  // Too big to ever fit - skip entirely rather than evict-and-retry a write
-  // that's guaranteed to fail (see MAX_ENTRY_CHARS). Callers just won't have
-  // an offline fallback for these responses.
-  if (raw.length > MAX_ENTRY_CHARS) return
-  try {
-    localStorage.setItem(PREFIX + key, raw)
-  } catch {
-    // Likely quota exceeded - drop the oldest third of entries and retry once.
-    evictOldest(Math.max(20, Math.floor(cacheKeys().length / 3)))
-    try { localStorage.setItem(PREFIX + key, raw) } catch {}
+  const entry: CacheEntry<T> = { data, ts: Date.now() }
+  memCache.set(key, entry)
+  if (memCache.size > MAX_ENTRIES * 2) {
+    const oldestKey = memCache.keys().next().value
+    if (oldestKey !== undefined) memCache.delete(oldestKey)
   }
-  // Trim a little below the cap, so a burst of new keys (a page of song
-  // lookups) doesn't run a full sweep on every write.
-  const keys = cacheKeys()
-  if (keys.length > MAX_ENTRIES) evictOldest(keys.length - MAX_ENTRIES + EVICT_SLACK)
+  idbPut(key, entry)
+
+  // Mirror only compact entries to localStorage for instant sync cold-boot peek.
+  try {
+    const raw = JSON.stringify(entry)
+    if (raw.length > MAX_LS_CHARS) return
+    try {
+      localStorage.setItem(PREFIX + key, raw)
+    } catch {
+      evictOldest(Math.max(20, Math.floor(cacheKeys().length / 3)))
+      try { localStorage.setItem(PREFIX + key, raw) } catch {}
+    }
+    const keys = cacheKeys()
+    if (keys.length > MAX_ENTRIES) evictOldest(keys.length - MAX_ENTRIES + EVICT_SLACK)
+  } catch { /* ignore stringify/storage errors */ }
 }
 
 export function cacheDelete(key: string): void {
+  memCache.delete(key)
+  idbDelete(key)
   try { localStorage.removeItem(PREFIX + key) } catch {}
 }
 
 export function cacheClearAll(): number {
   const keys = cacheKeys()
+  const count = Math.max(keys.length, memCache.size)
+  memCache.clear()
+  idbClear()
   for (const k of keys) localStorage.removeItem(k)
-  return keys.length
+  return count
 }
 
 export function cacheStats(): { count: number; bytes: number } {
   const keys = cacheKeys()
   let bytes = 0
   for (const k of keys) bytes += ((localStorage.getItem(k)?.length ?? 0) + k.length) * 2
-  return { count: keys.length, bytes }
+  return { count: Math.max(keys.length, memCache.size), bytes }
 }

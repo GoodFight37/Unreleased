@@ -909,7 +909,7 @@ function createFloatWindow(view, params) {
     title: floatTitle(view),
     backgroundColor: '#0a0a0a', icon: iconPath, frame: false,
     webPreferences: {
-      nodeIntegration: false, contextIsolation: true, webSecurity: true, preload: preloadPath,
+      nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, preload: preloadPath,
       ...(isUiVerify ? { backgroundThrottling: false } : {}),
     },
     show: false,
@@ -1128,7 +1128,7 @@ function isTrustedIpcSender(event) {
   const frame = event.senderFrame
   if (frame && event.sender.mainFrame && frame.routingId !== event.sender.mainFrame.routingId) return false
   const rawUrl = frame?.url || event.sender.getURL?.() || ''
-  if (!rawUrl) return true
+  if (!rawUrl) return false
   try {
     const u = new URL(rawUrl)
     return isDev ? u.origin === 'http://localhost:3018' : u.protocol === 'file:' && u.host === ''
@@ -1272,7 +1272,7 @@ function createWindow() {
     title: 'Unreleased',
     backgroundColor: '#0a0a0a', icon: iconPath, frame: false,
     webPreferences: {
-      nodeIntegration: false, contextIsolation: true, webSecurity: true, preload: preloadPath,
+      nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, preload: preloadPath,
       ...(isUiVerify ? { backgroundThrottling: false } : {}),
     },
     show: false,
@@ -1790,7 +1790,7 @@ ipcMain.handle('hide-other-windows', (event) => {
 // this only rejects structurally-wrong messages (a compromised renderer
 // injecting garbage), it doesn't validate the SYNC_KEYS payload contents,
 // which every receiving window still owns via useStore.setState.
-const WINDOW_SYNC_TYPES = new Set(['patch', 'snapshot', 'request', 'navigate', 'attach', 'command', 'library-patch', 'library-add'])
+const WINDOW_SYNC_TYPES = new Set(['patch', 'snapshot', 'request', 'navigate', 'attach', 'command', 'library-patch', 'library-add', 'debug-toggle', 'debug-state'])
 function isValidWindowSyncMessage(msg) {
   return !!msg && typeof msg === 'object' && typeof msg.type === 'string' && WINDOW_SYNC_TYPES.has(msg.type)
 }
@@ -4245,7 +4245,7 @@ ipcMain.handle('open-discord-login', (_, authorizeUrl) => {
       parent: mainWindow || undefined,
       modal: false,
       title: 'Log in with Discord',
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
+      webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
     })
     loginWin.setMenu(null)
     loginWin.loadURL(authorizeUrl)
@@ -4624,7 +4624,8 @@ app.whenReady().then(() => {
       const playback = alacPlayback()
       let filePath = requestedPath
       let forcedMime = null
-      if (playback.inCache(filePath) && !fs.existsSync(filePath + '.ok')) {
+      const hasOkMarker = await fs.promises.access(filePath + '.ok').then(() => true, () => false)
+      if (playback.inCache(filePath) && !hasOkMarker) {
         const job = playback.jobs.get(filePath)
         if (!job) return new Response('Not ready', { status: 404, headers: corsHeaders })
         const body = await liveBody(filePath, job, request.headers.get('range'))
@@ -4650,7 +4651,7 @@ app.whenReady().then(() => {
       // Range header entirely, so every seek got the whole file back as a 200
       // and Chromium restarted playback from 0. A real 206 + Content-Range is
       // what makes the <audio> element treat the track as seekable.
-      const stat = fs.statSync(filePath)
+      const stat = await fs.promises.stat(filePath)
       const size = stat.size
       const mimeByExt = {
         '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.wav': 'audio/wav',
@@ -4659,7 +4660,8 @@ app.whenReady().then(() => {
         '.aif': 'audio/aiff', '.caf': 'audio/x-caf', '.alac': 'audio/mp4',
         '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
         '.m4v': 'video/mp4', '.mkv': 'video/x-matroska',
-        '.jpg': 'image/jpeg', // offline cover snapshots (offline-covers/)
+        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+        '.webp': 'image/webp', '.gif': 'image/gif', '.avif': 'image/avif', '.bmp': 'image/bmp',
       }
       const mime = forcedMime || mimeByExt[path.extname(filePath).toLowerCase()] || 'application/octet-stream'
 

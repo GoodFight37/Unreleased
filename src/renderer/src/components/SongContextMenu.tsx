@@ -2,7 +2,7 @@ import { copyText } from '../lib/clipboard'
 import { useEffect, useState } from 'react'
 import type { ComponentProps } from 'react'
 import {
-  Clapperboard, Info, ListPlus, ListEnd, Plus, Folder, Pencil, Download, HardDrive, PackageOpen, Check, Loader2, CheckSquare2, Heart, Trash2, ListMusic, CircleArrowDown, Flag, FileAudio2, Clipboard, ClipboardCopy, Copy, FolderInput, FileCog, Share2, X, Link2, Layers, MicVocal, Sparkles, Ellipsis, ImagePlus,
+  Clapperboard, Info, ListPlus, ListEnd, Plus, Folder, Pencil, Download, HardDrive, PackageOpen, Check, Loader2, CheckSquare2, Heart, Star, Trash2, ListMusic, CircleArrowDown, Flag, FileAudio2, Clipboard, ClipboardCopy, Copy, FolderInput, FileCog, Share2, X, Link2, Layers, MicVocal, Sparkles, Ellipsis, ImagePlus,
 } from 'lucide-react'
 import { useStore, IS_FLOAT_WINDOW } from '../store/useStore'
 import { useShallow } from 'zustand/react/shallow'
@@ -494,6 +494,18 @@ export default function SongContextMenu({
           ],
         },
         onToggleLike && { icon: liked ? HeartFilled : Heart, label: liked ? 'Unlike' : 'Like', active: liked, onSelect: onToggleLike },
+        hasValidSong && (() => {
+          const isGrail = useStore.getState().grailSongIds.includes(songId as number)
+          return {
+            icon: Star,
+            label: isGrail ? 'Unpin from Your Grails' : 'Pin to Your Grails',
+            active: isGrail,
+            onSelect: () => {
+              useStore.getState().toggleGrailSong(songId as number)
+              showAppToast(isGrail ? 'Removed from Your Grails' : 'Pinned to Your Grails')
+            },
+          }
+        })(),
         versionsEnabled && !disableChangeVersion && hasValidSong && {
           icon: Layers,
           label: 'Change version',

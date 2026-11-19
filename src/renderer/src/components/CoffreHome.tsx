@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowRight, ArrowUpRight, Disc3, Gamepad2, Music2, Pause, Play, Radio } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
 import type { useHomeData } from '../hooks/useHomeData'
@@ -26,12 +27,14 @@ import {
 import { AlbumArtThumbnail } from './AlbumArtThumbnail'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
 import { ProgressiveCover } from './ProgressiveCover'
+import { DiscoverArchiveBackdrop, DiscoverTopBar, DiscoverVaultCulture } from './DiscoverArchiveCulture'
 import {
   cleanFootageDisplayTitle,
   FootageFamilyChip,
   FootageLinkChip,
   FootagePlayerModal,
   FootageTile,
+  footageUrl,
   formatVideoSeconds,
   releaseVideoStream,
   useVideoPosterFrame,
@@ -53,6 +56,14 @@ function firstStudioLocation(song: JWApiSong): string {
   return raw.split(/\r?\n/)[0]?.trim() ?? ''
 }
 
+const HERO_PAUSED_KEY = 'unreleased:discoverHeroPaused'
+function readHeroPaused(): boolean {
+  try { return typeof localStorage !== 'undefined' && localStorage.getItem(HERO_PAUSED_KEY) === '1' } catch { return false }
+}
+function writeHeroPaused(paused: boolean): void {
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(HERO_PAUSED_KEY, paused ? '1' : '0') } catch { /* ignore */ }
+}
+
 function DiscoverHeroVideo({
   item,
   channel,
@@ -68,7 +79,9 @@ function DiscoverHeroVideo({
 }): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const doneRef = useRef(false)
+  const [pausedByUser, setPausedByUser] = useState<boolean>(readHeroPaused)
+  const flagsRef = useRef({ pausedByUser, still, modalOpen })
+  flagsRef.current = { pausedByUser, still, modalOpen }
 
   const { shape, windowRef, posterDrawnRef } = useVideoPosterFrame(
     videoRef,
@@ -81,10 +94,10 @@ function DiscoverHeroVideo({
     },
   )
 
+  // Keep the stream alive across pause/resume toggles; only release on path change or unmount.
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
-    doneRef.current = false
     const onTimeUpdate = (): void => {
       const w = windowRef.current
       if (!posterDrawnRef.current && v.readyState >= 2 && v.currentTime >= w.start && canvasRef.current && v.videoWidth) {
@@ -97,47 +110,103 @@ function DiscoverHeroVideo({
         } catch { /* ignore */ }
       }
       if (v.paused) return
-      const limit = Math.min(w.len, 6)
-      if (v.currentTime - w.start >= limit) {
-        doneRef.current = true
-        releaseVideoStream(v)
+      const limit = Math.min(Math.max(w.len, 8), 16)
+      if (v.currentTime - w.start >= limit || (v.duration > 0 && v.currentTime >= v.duration - 0.15)) {
+        try { v.currentTime = w.start } catch { /* ignore */ }
       }
     }
+    const onEnded = (): void => {
+      try {
+        v.currentTime = windowRef.current.start
+        const f = flagsRef.current
+        if (!f.pausedByUser && !f.still && !f.modalOpen && !document.hidden) v.play().catch(() => {})
+      } catch { /* ignore */ }
+    }
     v.addEventListener('timeupdate', onTimeUpdate)
+    v.addEventListener('ended', onEnded)
     return () => {
       v.removeEventListener('timeupdate', onTimeUpdate)
+      v.removeEventListener('ended', onEnded)
       releaseVideoStream(v)
     }
   }, [item.path])
 
   useEffect(() => {
     const v = videoRef.current
-    if (!v || doneRef.current) return
+    if (!v) return
+    const startLoop = (): void => {
+      const f = flagsRef.current
+      if (f.still || f.modalOpen || f.pausedByUser || document.hidden) return
+      const start = windowRef.current.start
+      if (v.readyState >= 1 && start > 0 && Math.abs(v.currentTime - start) > 0.5 && v.currentTime < start) {
+        try { v.currentTime = start } catch { /* ignore */ }
+      }
+      v.style.opacity = '1'
+      v.play().catch(() => {})
+    }
     const sync = (): void => {
-      if (doneRef.current) return
-      if (!still && !modalOpen && !document.hidden) {
-        v.style.opacity = '1'
-        v.play().catch(() => {})
+      if (!still && !modalOpen && !pausedByUser && !document.hidden) {
+        v.dataset.hover = '1'
+        if (!v.currentSrc && !v.getAttribute('src')) {
+          v.src = footageUrl(item.path, item.streamChannel ?? channel)
+          v.load()
+        }
+        startLoop()
       } else {
+        delete v.dataset.hover
         v.pause()
+        // Always return cleanly to the opening poster frame when paused instead of freezing mid-expression.
         v.style.opacity = '0'
+        if (pausedByUser && v.readyState >= 1) {
+          const start = windowRef.current.start
+          if (Math.abs(v.currentTime - start) > 0.25) {
+            try { v.currentTime = start } catch { /* ignore */ }
+          }
+        }
       }
     }
     sync()
     const onVis = (): void => sync()
     document.addEventListener('visibilitychange', onVis)
+    v.addEventListener('loadedmetadata', startLoop)
+    v.addEventListener('canplay', startLoop)
     v.addEventListener('seeked', sync)
     return () => {
       document.removeEventListener('visibilitychange', onVis)
+      v.removeEventListener('loadedmetadata', startLoop)
+      v.removeEventListener('canplay', startLoop)
       v.removeEventListener('seeked', sync)
     }
-  }, [still, modalOpen, item.path])
+  }, [still, modalOpen, pausedByUser, item.path, item.streamChannel, channel])
+
+  const togglePause = (): void => {
+    setPausedByUser((prev) => {
+      const next = !prev
+      writeHeroPaused(next)
+      return next
+    })
+  }
 
   return (
-    <div className="coffre-hero-media" aria-hidden="true">
-      <canvas ref={canvasRef} className="vposter" data-shape={shape} />
-      <video ref={videoRef} muted playsInline preload="none" data-shape={shape} tabIndex={-1} />
-    </div>
+    <>
+      <div className="coffre-hero-media" aria-hidden="true">
+        <canvas ref={canvasRef} className="vposter" data-shape={shape} />
+        <video ref={videoRef} muted loop playsInline preload="none" data-shape={shape} tabIndex={-1} />
+      </div>
+      {!still && (
+        <button
+          type="button"
+          onClick={togglePause}
+          title={pausedByUser ? 'Play studio loop' : 'Pause studio loop'}
+          aria-label={pausedByUser ? 'Play studio loop' : 'Pause studio loop'}
+          aria-pressed={pausedByUser}
+          className="absolute top-3.5 right-3.5 z-20 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-black/45 hover:bg-black/68 border border-white/20 text-[11px] font-medium text-white/90 backdrop-blur-md transition-colors"
+        >
+          {pausedByUser ? <Play size={11} fill="currentColor" /> : <Pause size={11} fill="currentColor" />}
+          <span>{pausedByUser ? 'Play loop' : 'Pause'}</span>
+        </button>
+      )}
+    </>
   )
 }
 
@@ -300,8 +369,8 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
     setContext({ track, songId: trackIdToSongId(track.id), x: event.clientX, y: event.clientY })
   }
 
-  return <div className="coffre-home glass-scroll pb-player">
-    {roomArt && <div className="coffre-stage-backdrop" aria-hidden="true">
+  const stageBackdrop = roomArt ? (
+    <div className="coffre-stage-backdrop" aria-hidden="true">
       <LiquidMeshBackdrop
         artUrl={roomArt}
         eraAsset={heroEraMeta.eraAsset}
@@ -312,10 +381,18 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
         animated={!still}
       />
       <div className={`coffre-stage-vignette ${isDarkTheme ? 'is-dark' : 'is-light'}`} />
-    </div>}
+    </div>
+  ) : null
+
+  return <div className="coffre-home glass-scroll pb-player">
+    {stageBackdrop && (typeof document !== 'undefined' && typeof createPortal === 'function'
+      ? createPortal(stageBackdrop, document.body)
+      : stageBackdrop)}
     <div className="coffre-home-inner">
+      <DiscoverTopBar />
       {heroFootage ? (
         <section className="coffre-discover-hero coffre-reveal" aria-label="Featured studio footage">
+          <DiscoverArchiveBackdrop onOpenPhotos={() => setActiveView('footage')} showControls={false} />
           <DiscoverHeroVideo
             item={heroFootage}
             channel={channel}
@@ -535,6 +612,8 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
         </button>)}</div> : <div className="coffre-empty"><Music2 size={27} /><p role={data.catalogueState === 'error' ? 'alert' : 'status'}>{data.catalogueState === 'loading' ? 'Loading the catalogue…' : data.catalogueState === 'error' ? 'The catalogue could not be loaded. Open Catalogue to try again.' : 'Your listening will appear here. Explore the catalogue to find your first track.'}</p><button onClick={() => openCatalogue()}>Open catalogue <ArrowRight size={16} /></button></div>}
       </section>
 
+      <DiscoverVaultCulture catalogue={data.catalogue} onPlayTrack={playTrack} />
+
       <div className="coffre-reveal flex flex-wrap items-center gap-2.5">
         <button type="button" className="coffre-secondary" onClick={() => setActiveView('heardle')}><Gamepad2 size={15} /> Games · Heardle</button>
         <button type="button" className="coffre-secondary" onClick={data.openRadioFm}><Radio size={15} /> 999 FM</button>
@@ -544,7 +623,7 @@ export default function CoffreHome({ data }: { data: ReturnType<typeof useHomeDa
         <div className="coffre-section-heading">
           <div>
             <h2 id="coffre-name-only">Unsurfaced</h2>
-            <p className="text-xs text-text-secondary mt-0.5">Hasn't leaked. Nothing to play yet.</p>
+            <p className="text-xs text-text-secondary mt-0.5" title="Still in the vault — Soon™">Hasn't leaked. Nothing to play yet.</p>
           </div>
         </div>
         <div className="coffre-vt-grid">{nameOnly.map((song) => <div key={song.id} className="coffre-cover-card" style={{ cursor: 'default' }}>

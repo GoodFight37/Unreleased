@@ -2091,8 +2091,16 @@ export default function ApiTrackerView(): JSX.Element {
     const stored = localStorage.getItem(LS_TRACKER_VIEW)
     return stored === 'detail' || stored === 'grid' ? stored : 'list'
   })
-  const [fanVisual, setFanVisual] = useState(true)
-  const viewMode = developerMode ? developerViewMode : fanVisual ? 'grid' : 'detail'
+  const [fanLayout, setFanLayout] = useState<'list' | 'visual' | 'details'>(() => {
+    const stored = localStorage.getItem('unreleased:catalogueFanLayout')
+    return stored === 'visual' || stored === 'details' || stored === 'list' ? stored : 'list'
+  })
+  const setFanLayoutSaved = (v: 'list' | 'visual' | 'details'): void => {
+    setFanLayout(v)
+    safeSetLS('unreleased:catalogueFanLayout', v)
+  }
+  const fanVisual = fanLayout === 'visual'
+  const viewMode: ViewMode = developerMode ? developerViewMode : fanVisual ? 'grid' : fanLayout === 'details' ? 'detail' : 'list'
   const [showFilterMenu, setShowFilterMenu] = useState(false)
 
   const setViewMode = (v: ViewMode): void => { setViewModeState(v); localStorage.setItem(LS_TRACKER_VIEW, v) }
@@ -3041,8 +3049,13 @@ export default function ApiTrackerView(): JSX.Element {
             />
 
             </> : <>
-            <GlassSegmented ariaLabel="Catalogue layout" value={fanVisual ? 'visual' : 'details'}
-              onChange={v => setFanVisual(v === 'visual')} options={[{ value: 'visual', label: 'Visual', icon: <LayoutGrid size={15} /> }, { value: 'details', label: 'Détails', icon: <LayoutList size={15} /> }]} />
+            <GlassSegmented ariaLabel="Catalogue layout" value={fanLayout}
+              onChange={(v) => setFanLayoutSaved(v as 'list' | 'visual' | 'details')}
+              options={[
+                { value: 'list', label: 'List', icon: <LayoutList size={15} /> },
+                { value: 'visual', label: 'Visual', icon: <LayoutGrid size={15} /> },
+                { value: 'details', label: 'Details', icon: <Rows3 size={15} /> },
+              ]} />
             {versionsEnabled && <button
               className={glassPillButton(compactView)}
               onClick={() => { setCompactView(!compactView); clearExpandedGroups() }}

@@ -113,10 +113,13 @@ export default function RadioFmPlayer(): JSX.Element {
         noteRadioFrame(data, useStore.getState().radioFmActive)
       },
     })
-    client.connect()
     clientRef.current = client
     setActiveRadioClient(client)
     wireAudio(audioRef.current)
+    // Connect immediately only if already on WRLD or tuned into 999 FM;
+    // otherwise stay idle on the REST probe until the user opens WRLD/FM.
+    const initial = useStore.getState()
+    if (initial.radioFmActive || initial.activeView === 'wrld') client.connect()
 
     fetchRadioLive()
       .then((data) => {
@@ -159,12 +162,18 @@ export default function RadioFmPlayer(): JSX.Element {
     }
   }, [radioFmActive])
 
+  const activeView = useStore((s) => s.activeView)
+  useEffect(() => {
+    if (radioFmActive || activeView === 'wrld') clientRef.current?.connect()
+  }, [radioFmActive, activeView])
+
   useEffect(() => {
     const client = clientRef.current
     if (!client) return
     if (radioFmActive) {
       setIsPlaying(false)
       resumeEffectsContext()
+      client.connect()
       client.startListening().catch(() => setRadioFmActive(false))
     } else {
       client.stopListening()

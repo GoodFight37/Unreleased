@@ -4,6 +4,7 @@
 // so a pause, a jump or a change of song always shows the right frame.
 import { faceCSS } from './looks'
 import { width as textWidth } from './type'
+import { hsbToRgb } from '../light/engine'
 import { clockTime, type LyricRenderer, type StageClock, type StageLook, type StageSong } from './scene'
 import { buildCut, type CutLine, type CutSong } from './cutEngine'
 import './cut.css'
@@ -69,8 +70,10 @@ export class CutScene implements LyricRenderer {
 
   get width(): number { return this.host.clientWidth }
   get height(): number { return this.host.clientHeight }
-  /** The size of everything: the stage's room against the one the type was drawn for, and the app's text size. */
-  get k(): number { return Math.min(this.width / BASE_W, this.height / BASE_H) * this.scale * this.textSize }
+  /** The size of everything: stage ratio against the base design box, times user text size.
+   *  Note: do NOT multiply by `this.scale` here — `width / BASE_W` and `height / BASE_H`
+   *  already incorporate the viewport size, so multiplying by `scale` squared it on 1080p+. */
+  get k(): number { return Math.min(this.width / BASE_W, this.height / BASE_H) * Math.min(Math.max(this.textSize, 0.7), 1.25) }
   get runs(): boolean { return this.seen && Boolean(this.clock?.running) && this.width > 0 && !document.hidden }
 
   onVisible = (): void => { this.render(); this.loop() }
@@ -87,6 +90,10 @@ export class CutScene implements LyricRenderer {
     this.clock = look.clock
     this.host.classList.toggle('is-light', light)
     this.root.classList.toggle('is-light', light)
+    if (look.tune?.cutAccent === 'cover' && look.colors) {
+      const rgb = hsbToRgb(look.colors.primary).map(value => Math.round(value * 255)).join(' ')
+      this.root.style.setProperty('--cut-accent', `color-mix(in srgb, rgb(${rgb}) ${light ? 32 : 38}%, var(--cut-ink))`)
+    } else this.root.style.removeProperty('--cut-accent')
     if (song.id !== this.song?.id || song.lyrics !== this.song?.lyrics) {
       this.song = song
       this.cut = buildCut(song.lyrics)
@@ -187,19 +194,21 @@ export class CutScene implements LyricRenderer {
       const hr = head.length ? this.fit(head, 2, 84 * k, 36 * k, room) : null
       const tr = tail.length ? this.fit(tail, 2, 56 * k, 30 * k, room) : null
       const high = (): number => (hr ? hr.rows.length * hr.size * 1.08 + 10 * k : 0) + hs + (tr ? tr.rows.length * tr.size * 1.08 + 26 * k : 0)
-      while (high() > H * 0.83 && hs > 90 * k) hs -= 6 * k
+      while (high() > H * 0.74 && hs > 72 * k) hs -= 6 * k
       total = high()
-      let y = (H * 0.904 - total) / 2 - 6 * k
+      const minTop = H * 0.12
+      let y = Math.max(minTop, (H * 0.88 - total) / 2)
       if (hr) { put(head.map((_, j) => j), hr, y, 'head'); y += hr.rows.length * hr.size * 1.08 + 10 * k }
-      boxes[hero] = { x: margin, y: y - (hr ? hs * 0.1 : 0), size: hs, group: 'hero' }
+      boxes[hero] = { x: margin, y: y - (hr ? hs * 0.08 : 0), size: hs, group: 'hero' }
       y += hs
-      if (tr) put(tail.map((_, j) => hero + 1 + j), tr, y + 26 * k, 'tail')
+      if (tr) put(tail.map((_, j) => hero + 1 + j), tr, y + 20 * k, 'tail')
     } else {
-      const set = this.fit(texts, 3, 118 * k, 40 * k, room)
+      const set = this.fit(texts, 3, 108 * k, 36 * k, room)
       total = set.rows.length * set.size * 1.08
-      put(texts.map((_, j) => j), set, (H * 0.904 - total) / 2 - 6 * k, 'body')
+      const y0 = Math.max(H * 0.12, (H * 0.88 - total) / 2)
+      put(texts.map((_, j) => j), set, y0, 'body')
     }
-    return { boxes, total, top: Math.max(0, (H * 0.904 - total) / 2 - 6 * k) }
+    return { boxes, total, top: Math.max(H * 0.12, (H * 0.88 - total) / 2) }
   }
 
   private phrase(i: number): Phrase {

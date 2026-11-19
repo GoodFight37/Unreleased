@@ -49,6 +49,15 @@ function loadQueueStore(saved = new Map()) {
   return createStore((set, get, api) => ({ ...createQueueSlice(set, get, api), preferOgVersion: false, currentTrackFull: null }))
 }
 
+test('queue memory defaults on without starting playback and respects an explicit opt-out', () => {
+  const fresh = loadQueueStore().getState()
+  assert.equal(fresh.rememberQueue, true)
+  assert.equal(fresh.isPlaying, false)
+  const optedOut = loadQueueStore(new Map([['unreleased:rememberQueue', 'false']])).getState()
+  assert.equal(optedOut.rememberQueue, false)
+  assert.equal(optedOut.isPlaying, false)
+})
+
 function loadTrackerHandlePlay({ sortedSongs, isPlayableSong, songToTrack, playTrack, compactView = false, filteredCompactGroups = [] }) {
   const source = fs.readFileSync(path.join(root, 'components', 'ApiTrackerView.tsx'), 'utf8')
   const start = source.indexOf('  const playRequest = useRef(0)')

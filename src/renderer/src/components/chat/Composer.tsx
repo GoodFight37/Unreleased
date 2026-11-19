@@ -21,11 +21,11 @@ import { displayName, roomKey, useChatStore, type RoomRef, type UiMessage } from
 import { useStore } from '../../store/useStore'
 import GifPicker from './GifPicker'
 import ReactionPicker from './ReactionPicker'
-import { emojiGlyph, EMOJI_IMG } from './emoji'
+import { EMOJI, emojiGlyph } from './emoji'
 import { EVERYONE_HANDLE, mentionIdsIn } from './people'
 import { autoApproveApplies } from '../../hooks/useAdminUsersList'
 
-const EMOJI_NAMES = Object.keys(EMOJI_IMG).sort()
+const EMOJI_NAMES = Object.keys(EMOJI).sort()
 import { ChatAvatar, errorText, formatBytes, useChatToast } from './ui'
 import { confirmGlass } from '../../lib/confirmModal'
 
@@ -1205,7 +1205,7 @@ const Composer = forwardRef<ComposerHandle, {
               onMouseEnter={() => setEmojiQuery({ ...emojiQuery, index: i })}
               className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left ${i === emojiQuery.index ? 'bg-surface-overlay' : ''}`}
             >
-              <img src={EMOJI_IMG[name]} alt="" className="h-5 w-5 shrink-0 object-contain" />
+              <span className="h-5 w-5 shrink-0 inline-flex items-center justify-center text-base leading-none">{emojiGlyph(name)}</span>
               <span className="text-sm text-text-primary truncate">:{name}:</span>
             </button>
           ))}

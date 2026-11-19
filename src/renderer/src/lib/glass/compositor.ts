@@ -267,6 +267,7 @@ const AUTO_SELECTORS: Array<[string, GlassSurfaceOptions]> = [
   ['.app-menu-glass[role="menu"], .menu-glass, .glass-popover', { kind: 'panel', layer: 2 }],
   ['.modal-glass', { kind: 'panel', layer: 2 }],
   ['.app-sidebar', { kind: 'pill', layer: 1 }],
+  ['.album-theme-pill', { kind: 'pill', layer: 1 }],
   ['.glass-button, .glass-bar, .glass-chip', { kind: 'pill', layer: 1 }],
   ['.glass-seg:not(.glass-seg-quiet)', { kind: 'pill', layer: 0 }],
   ['.glass-seg-thumb.is-ready', { kind: 'segthumb', layer: 1 }],
@@ -412,9 +413,9 @@ function collectSurfaces(dt: number, reducedMotion: boolean, beatBoost = 0): { s
     if (stepSpring(st.press, dt, reducedMotion)) animating = true
     const hoverVal = Math.max(0, Math.min(1, st.hover.val))
     const pressVal = Math.max(0, Math.min(1, st.press.val))
-    const scale = reducedMotion ? 1 : 1 + Math.max(hoverVal * 0.06, pressVal * 0.18)
-    const baseHw = 13
-    const baseHh = 7
+    const scale = reducedMotion ? 1 : 1 + Math.max(hoverVal * 0.08, pressVal * 0.18)
+    const baseHw = 9
+    const baseHh = 5.5
     const thumbCx = ir.left + baseHw + ratio * Math.max(0, ir.width - baseHw * 2)
     const thumbCy = ir.top + ir.height * 0.5
     const seekPulse = id === 'seek' ? beatBoost * 0.35 : 0
@@ -598,21 +599,22 @@ export function GlassCompositorLayer(): JSX.Element | null {
       if (!stopped) setReady(false)
     })
 
-    // The top bar is left out: pressing one of its buttons must not swell the whole bar.
-    const surfaceSelector = '.app-player, .glass-seg, .glass-field, .glass-pane:not(.app-sidebar), .glass-button, .glass-bar, .glass-chip, .app-menu-glass, .menu-glass, .glass-popover, .modal-glass'
+    // Top nav & album pills track subtle hover light without swelling on button press.
+    const hoverSelector = '.app-player, .app-sidebar, .album-theme-pill, .glass-seg, .glass-field, .glass-pane, .glass-button, .glass-bar, .glass-chip, .app-menu-glass, .menu-glass, .glass-popover, .modal-glass'
+    const pressSelector = '.app-player, .glass-seg, .glass-field, .glass-pane:not(.app-sidebar), .glass-button, .glass-bar, .glass-chip, .app-menu-glass, .menu-glass, .glass-popover, .modal-glass'
     const LAYOUT_PROPS = new Set(['transform', 'translate', 'scale', 'width', 'height', 'left', 'right', 'top', 'bottom', 'inset', 'max-width', 'max-height', 'margin', 'padding'])
     const onPointerMove = (e: PointerEvent): void => {
       backdropState.pointer = [
         e.clientX / Math.max(1, window.innerWidth),
         e.clientY / Math.max(1, window.innerHeight),
       ]
-      const target = e.target instanceof Element ? e.target.closest<HTMLElement>(surfaceSelector) : null
+      const target = e.target instanceof Element ? e.target.closest<HTMLElement>(hoverSelector) : null
       hoveredSurface = target
       lastInteractionMs = performance.now()
       run()
     }
     const onPointerDown = (e: PointerEvent): void => {
-      pressedSurface = e.target instanceof Element ? e.target.closest<HTMLElement>(surfaceSelector) : null
+      pressedSurface = e.target instanceof Element ? e.target.closest<HTMLElement>(pressSelector) : null
       lastInteractionMs = performance.now()
       run()
     }
@@ -647,7 +649,7 @@ export function GlassCompositorLayer(): JSX.Element | null {
       if (e instanceof TransitionEvent && e.propertyName && !LAYOUT_PROPS.has(e.propertyName)) return
       if (e instanceof AnimationEvent && (e.animationName === 'img-fade-in' || e.animationName === 'pulse' || e.animationName === 'spin' || e.animationName === 'ambient-drift' || e.animationName === 'ambient-art-drift' || e.animationName === 'view-skeleton-in')) return
       const target = e.target instanceof Element ? e.target : null
-      if (!target || (!target.matches(surfaceSelector) && !target.classList.contains('glass-seg-thumb') && !target.closest('.modal-glass, .app-menu-glass, .menu-glass, .glass-popover'))) return
+      if (!target || (!target.matches(hoverSelector) && !target.classList.contains('glass-seg-thumb') && !target.closest('.modal-glass, .app-menu-glass, .menu-glass, .glass-popover'))) return
       startAnimSync(420)
     }
     animSyncFn = startAnimSync

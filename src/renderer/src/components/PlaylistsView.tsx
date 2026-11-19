@@ -2321,6 +2321,7 @@ export default function PlaylistsView(): JSX.Element {
     const favTrackMap = new Map<string, Track>()
     for (const f of cachedFavs) {
       const t = userApi.liteSongToTrack(f.song)
+      if (!likedSet.has(t.id)) continue
       favTrackMap.set(t.id, t)
     }
     for (const lt of libraryTracks) {
@@ -2331,10 +2332,10 @@ export default function PlaylistsView(): JSX.Element {
       const ref = apiFileIdToRef(id)
       if (ref) favTrackMap.set(id, apiFileRefToTrack(ref))
     }
-    const likedCount = Math.max(favTrackMap.size, likedTrackIds.length)
+    const likedCount = likedTrackIds.length
     const likedPreviewTracks = [...favTrackMap.values()].slice(0, 4)
 
-    const recentPlayed = loadRecentTracks().filter(t => !!t.path || !!t.streamUrl).slice(0, 6)
+    const recentPlayed = loadRecentTracks().filter(t => !!t.path || !!t.streamUrl).slice(0, 8)
     const weekPlays = filterListeningPlaysByDays(listeningPlays ?? [], 7).length
     const eraCounts = new Map<string, number>()
     for (const t of recentPlayed) {

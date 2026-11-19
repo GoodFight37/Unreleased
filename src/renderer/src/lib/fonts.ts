@@ -20,8 +20,13 @@ export interface FontChoice {
 export const FONTS: FontChoice[] = [
   {
     id: 'system',
-    name: 'System',
-    stack: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    name: 'Jakarta (Default)',
+    stack: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  },
+  {
+    id: 'editorial',
+    name: 'Instrument Serif',
+    stack: "'Instrument Serif', Georgia, serif",
   },
   {
     id: 'grotesk',

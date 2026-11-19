@@ -116,13 +116,9 @@ fn surface_sdf(px: vec2f, s: Surface) -> f32 {
   var d = rounded_box(px - s.rect.xy, s.rect.zw, r);
   if (s.info.w > 0.5 && s.info.y < 4.5) {
     let playCenter = p.play.xy * p.size;
-    let playR = p.play.z * p.size.y * (1.0 + p.lens.w * 0.18);
+    let playR = p.play.z * p.size.y * (1.0 + p.lens.w * 0.12);
     let drop = length(px - playCenter) - playR;
-    d = smin(d, drop, 15.0);
-    let lensCenter = p.lens.xy * p.size;
-    let lensR = 14.0 + 10.0 * p.lens.z;
-    let lensd = length(px - lensCenter) - lensR;
-    d = smin(d, lensd + (1. - p.lens.z) * 48.0, 10.0);
+    d = smin(d, drop, 10.0);
   }
   return d;
 }
@@ -244,12 +240,12 @@ fn surface_sdf(px: vec2f, s: Surface) -> f32 {
       lensShift = lq * exp(-length(lq) * 18.) * p.lens.z * -0.58;
     }
     let dpq = (px - p.play.xy * p.size) / max(p.play.z * p.size.y, 1.0);
-    dropGlow = exp(-dot(dpq, dpq) * 0.9) * (0.55 + 0.45 * p.lens.w) * (1.0 + audioPunch * 0.42 + audioRms * 0.16);
+    dropGlow = exp(-dot(dpq, dpq) * 1.45) * (0.18 + 0.22 * p.lens.w) * (1.0 + audioPunch * 0.28 + audioRms * 0.12);
   }
-  let bev = edge * (0.85 + 0.55 * p.look.w) + pow(edge, 2.0) * p.look.w * 0.65;
-  let shift = normal * bev * (p.optics.x * (0.92 + interact * 0.6)) + lensShift;
+  let bev = edge * (0.95 + 0.6 * p.look.w) + pow(edge, 2.0) * p.look.w * 0.72;
+  let shift = normal * bev * (p.optics.x * (0.95 + interact * 0.6)) + lensShift;
   let refracted = clamp(uv - shift / vec2f(aspect, 1.), vec2f(0.), vec2f(1.));
-  let fringe = pow(edge, 2.2) * inside * p.optics.z * (1.8 + p.look.w * 0.9);
+  let fringe = pow(edge, 2.0) * inside * p.optics.z * (2.35 + p.look.w * 1.15);
   let sharp = background(refracted);
   let frost = textureSampleLevel(blurred, samp, refracted, 0.).rgb;
   let glass = mix(sharp, frost, p.look.x);

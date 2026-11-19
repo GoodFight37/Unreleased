@@ -53,11 +53,17 @@ function render({ catalogue = [], catalogueState = 'ready', recent = [], fileInd
       if (name.endsWith('/lazyView')) return { lazyOverlay: () => () => null }
       if (name.endsWith('/onThisDay')) return onThisDayMod
       if (name.endsWith('/footageCatalog')) return footageCatalogMod
+      if (name.endsWith('/DiscoverArchiveCulture')) return {
+        DiscoverTopBar: () => null,
+        DiscoverArchiveBackdrop: () => null,
+        DiscoverVaultCulture: () => null,
+      }
       if (name.endsWith('/FootageTile')) return {
         FootageTile: () => null,
         FootagePlayerModal: () => null,
         FootageFamilyChip: () => null,
         FootageLinkChip: () => null,
+        footageUrl: (p) => p,
         cleanFootageDisplayTitle: (s) => s,
         formatVideoSeconds: (n) => `${n}s`,
         releaseVideoStream: () => {},

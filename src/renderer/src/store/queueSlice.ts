@@ -20,7 +20,7 @@
 
 import type { StateCreator } from 'zustand'
 import type { Track } from '../types'
-import { apiFetch, getSongById, songToTrack } from '../lib/juicewrldApi'
+import { apiFetch, getSongById, loadAllSongs, songToTrack } from '../lib/juicewrldApi'
 import type { JWApiPaginatedResponse, JWApiSong } from '../lib/juicewrldApi'
 import { getOwnVersionMeta, getVersionGroup } from '../lib/versionsApi'
 import type { SongVersionMeta } from '../lib/versionsApi'
@@ -204,6 +204,7 @@ export interface QueueSlice {
   setIsPlaying: (playing: boolean) => void
   setProgress: (progress: number) => void
   setCurrentTime: (time: number) => void
+  setPlaybackPosition: (time: number, progress?: number) => void
   setRememberQueue: (enabled: boolean) => void
 
   // Queue editing
@@ -388,7 +389,7 @@ const VERSION_HOLD_MAX_MS = 5000
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const createQueueSlice: StateCreator<any, [], [], QueueSlice> = (set, get, api) => {
   const isFloat = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('float')
-  const rememberQueue = ls.get<boolean>('rememberQueue') === true
+  const rememberQueue = ls.get<boolean>('rememberQueue') !== false
   const restored = rememberQueue && !isFloat ? loadQueueSession() : null
   // Moving within the queue can land back on the song that's already playing
   // (a one-song repeat-all queue, skipping back at index 0). Clearing its
@@ -474,6 +475,8 @@ export const createQueueSlice: StateCreator<any, [], [], QueueSlice> = (set, get
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setProgress: (progress) => set({ progress }),
   setCurrentTime: (currentTime) => set({ currentTime }),
+  setPlaybackPosition: (currentTime, progress) =>
+    set(progress !== undefined ? { currentTime, progress } : { currentTime }),
   setRememberQueue: (enabled) => {
     ls.set('rememberQueue', enabled)
     if (!enabled) clearQueueSession()
@@ -619,18 +622,39 @@ export const createQueueSlice: StateCreator<any, [], [], QueueSlice> = (set, get
 
   // ── setRandomMode ──────────────────────────────────────────────────────────
   setRandomMode: (on) => {
-    const { currentTrack, radioMode, radioFmActive } = get()
+    const { currentTrack, radioMode, radioFmActive, queue, queueOriginal } = get()
     if (!on) {
       if (!radioMode) return
       ls.set('shuffle', false)
+      // Restore the user's pre-radio queue if we stashed one when entering Random,
+      // instead of leaving an empty queue after the current song finishes.
+      if (queueOriginal && queueOriginal.length > 1 && currentTrack) {
+        const idx = queueOriginal.findIndex((t: Track) => t.id === currentTrack.id)
+        const restored = idx >= 0 ? queueOriginal : [currentTrack, ...queueOriginal]
+        const nextIdx = idx >= 0 ? idx : 0
+        set({
+          shuffle: false,
+          radioMode: false,
+          radioNext: null,
+          _radioWaiting: false,
+          queue: restored,
+          queueIndex: nextIdx,
+          queueOriginal: null,
+        })
+        return
+      }
       set({ shuffle: false, radioMode: false, radioNext: null, _radioWaiting: false })
       return
     }
     if (!currentTrack || (radioMode && !radioFmActive)) return
     if (radioFmActive) { get().startRandomRadio(); return }
+    const savedQueue = queue.length > 1 ? queue : queueOriginal
     ls.set('shuffle', true)
     set({ shuffle: true })
     get().startRadio(currentTrack, null, { keepPlayState: true })
+    if (savedQueue && savedQueue.length > 1) {
+      set({ queueOriginal: savedQueue })
+    }
   },
 
   // ── nextTrack ──────────────────────────────────────────────────────────────
@@ -1068,9 +1092,25 @@ export const createQueueSlice: StateCreator<any, [], [], QueueSlice> = (set, get
         })
         .catch(handleError)
     } else {
+      const fallbackFromCatalog = async (): Promise<void> => {
+        try {
+          const all = await loadAllSongs()
+          if (!live()) return
+          const curId = get().currentTrack?.id
+          const playable = all.filter((s) => !!s.path && !isSessionEditPlaceholder(s.path) && `jw-${s.id}` !== curId)
+          if (playable.length === 0) { handleError(); return }
+          const pick = playable[Math.floor(Math.random() * playable.length)]
+          void handleTrack(songToTrack(pick))
+        } catch {
+          handleError()
+        }
+      }
       apiFetch<RadioResponse>('/radio/random/', {}, ctrl.signal)
-        .then((data) => handleTrack(songToTrack(data.song)))
-        .catch(handleError)
+        .then((data) => {
+          if (data?.song?.path) return handleTrack(songToTrack(data.song))
+          return fallbackFromCatalog()
+        })
+        .catch(() => { void fallbackFromCatalog() })
     }
   },
 

@@ -52,7 +52,7 @@ export class RadioStreamClient {
   private audioEl: HTMLAudioElement | null = null
   private mediaSource: MediaSource | null = null
   private sourceBuffer: SourceBuffer | null = null
-  private queue: Uint8Array[] = []
+  private queue: Uint8Array<ArrayBuffer>[] = []
   private listening = false
   private objectUrl: string | null = null
   private supportsMse = mseSupported()
@@ -324,7 +324,13 @@ export class RadioStreamClient {
     this.cleanupMedia()
   }
 
+  private static readonly MAX_MSE_QUEUE_CHUNKS = 96
+
   private enqueue(arrayBuffer: ArrayBuffer): void {
+    if (this.queue.length >= RadioStreamClient.MAX_MSE_QUEUE_CHUNKS) {
+      // Bound memory if SourceBuffer stalls under backpressure.
+      this.queue.splice(0, this.queue.length - RadioStreamClient.MAX_MSE_QUEUE_CHUNKS + 1)
+    }
     this.queue.push(new Uint8Array(arrayBuffer))
     this.pump()
   }
@@ -333,10 +339,8 @@ export class RadioStreamClient {
     const sb = this.sourceBuffer
     if (!sb || sb.updating || !this.queue.length) return
     const chunk = this.queue.shift()!
-    const copy = new Uint8Array(chunk.length)
-    copy.set(chunk)
     try {
-      sb.appendBuffer(copy)
+      sb.appendBuffer(chunk)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
         this.queue.unshift(chunk)

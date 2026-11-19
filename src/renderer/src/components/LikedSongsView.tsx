@@ -1,7 +1,8 @@
 import { useCascade } from '../hooks/useCascade'
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Heart, Play, Loader2, MoreHorizontal, ChevronLeft } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
+import { useVirtualWindow } from '../hooks/useVirtualWindow'
 import * as userApi from '../lib/userApi'
 import { useCanEdit } from '../hooks/useChannelRoles'
 import { Track, LibraryTrack } from '../types'
@@ -13,7 +14,7 @@ import { formatDuration } from '../lib/format'
 import { clickable } from '../lib/a11y'
 
 export default function LikedSongsView(): JSX.Element {
-  const { account, playTrack, playCollection, toggleLike, setShowUserAuth, setActiveView, previousView, developerMode, libraryTracks, likedTrackIds } = useStorePick('account', 'playTrack', 'playCollection', 'toggleLike', 'setShowUserAuth', 'setActiveView', 'previousView', 'developerMode', 'libraryTracks', 'likedTrackIds')
+  const { account, playTrack, playCollection, unlikeTrack, setShowUserAuth, setActiveView, previousView, developerMode, libraryTracks, likedTrackIds } = useStorePick('account', 'playTrack', 'playCollection', 'unlikeTrack', 'setShowUserAuth', 'setActiveView', 'previousView', 'developerMode', 'libraryTracks', 'likedTrackIds')
   const canEdit = useCanEdit()
   const [apiTracks, setApiTracks] = useState<Track[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,7 +50,7 @@ export default function LikedSongsView(): JSX.Element {
     if (userApi.trackIdToSongId(track.id) != null) {
       setApiTracks(prev => prev.filter(t => t.id !== track.id))
     }
-    toggleLike(track.id)
+    unlikeTrack(track.id)
   }
 
   // Liked local files never go through the API (toggleLike stores them purely
@@ -68,8 +69,12 @@ export default function LikedSongsView(): JSX.Element {
     .map((id) => { const ref = apiFileIdToRef(id); return ref ? apiFileRefToTrack(ref) : null })
     .filter((t): t is Track => t != null), [likedTrackIds])
 
-  const visible = [...apiTracks, ...localLikedTracks, ...likedApiFileTracks]
+  const visible = useMemo(() => [...apiTracks, ...localLikedTracks, ...likedApiFileTracks], [apiTracks, localLikedTracks, likedApiFileTracks])
   const cascade = useCascade(!loading && visible.length > 0)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const listContentRef = useRef<HTMLDivElement>(null)
+  const LIKED_ROW_STRIDE = 58
+  const windowRange = useVirtualWindow(scrollRef, listContentRef, visible.length, LIKED_ROW_STRIDE, 6)
 
   if (!account && localLikedTracks.length === 0 && likedApiFileTracks.length === 0) {
     return (
@@ -89,7 +94,7 @@ export default function LikedSongsView(): JSX.Element {
 
   return (
     <>
-    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto pb-player">
+    <div ref={scrollRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto pb-player">
       <div className="px-5 pt-5 pb-8">
         <button
           onClick={() => setActiveView(!developerMode ? 'playlists' : previousView && previousView !== 'liked' ? previousView : 'wrld')}
@@ -124,12 +129,18 @@ export default function LikedSongsView(): JSX.Element {
         ) : visible.length === 0 ? (
           <p className="text-text-muted text-sm">No liked songs yet. Tap the heart on any track to save it here.</p>
         ) : (
-          <div className={`space-y-0.5 ${cascade ? 'rows-cascade' : ''}`}>
-            {visible.map((track, i) => {
+          <div
+            ref={listContentRef}
+            className={`relative ${cascade ? 'rows-cascade' : ''}`}
+            style={{ height: windowRange.totalHeight }}
+          >
+            {visible.slice(windowRange.start, windowRange.end).map((track, offset) => {
+              const i = windowRange.start + offset
               const songId = userApi.trackIdToSongId(track.id)
               return (
                 <div
                   key={track.id}
+                  style={{ position: 'absolute', top: i * LIKED_ROW_STRIDE, left: 0, right: 0, height: LIKED_ROW_STRIDE - 2 }}
                   className="group flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-raised transition-colors"
                   onContextMenu={e => { e.preventDefault(); setCtxMenu({ track, songId, x: e.clientX, y: e.clientY }) }}
                 >
@@ -145,8 +156,6 @@ export default function LikedSongsView(): JSX.Element {
                     <p className="text-text-muted text-xs truncate">{track.artist}{track.album ? ` · ${track.album}` : ''}</p>
                   </div>
                   <span className="text-text-muted text-xs tabular-nums shrink-0 hidden sm:block">{formatDuration(track.duration, '')}</span>
-                  {/* Was opacity-0 group-hover:opacity-100 with no touch
-                      equivalent - invisible and undiscoverable on mobile. */}
                   <button
                     onClick={e => { e.stopPropagation(); setCtxMenu(prev => prev?.track.id === track.id ? null : { track, songId, x: e.clientX, y: e.clientY }) }}
                     className="text-text-muted hover:text-text-primary opacity-100 md:opacity-0 md:group-hover:opacity-100 transition shrink-0 w-11 h-11 md:w-auto md:h-auto flex items-center justify-center md:p-1.5"

@@ -29,22 +29,9 @@ const RIGHTS_EXCLUDED_NAMES = new Set([
 /** Priorityfeatured paths chosen by Malik (empty by default; always ranked first when populated). */
 export const FEATURED_FOOTAGE_PATHS: string[] = []
 
-/** Archive videos that have no audio track, mapped to a copy of the same piece that has sound (another channel). */
-export const FOOTAGE_AUDIO_REPLACEMENTS: Record<string, { path: string; channel: string }> = {
-  'Footage/Flex (with Polo G).mp4': {
-    path: 'Snippets/Polo G - Flex (feat. Juice WRLD)/Polo G - Flex (feat. Juice WRLD) (1).mov',
-    channel: 'legacy',
-  },
-  'Footage/Doubting Me (Studio Session).mp4': { path: 'Snippets/Doubting Me/Doubting Me (2).mp4', channel: 'legacy' },
-  'Footage/Doubting Me.mp4': { path: 'Snippets/Doubting Me/Doubting Me (1).mp4', channel: 'legacy' },
-  'Footage/No Laces.mp4': { path: 'Snippets/No Laces/No Laces (1).mov', channel: 'legacy' },
-  'Footage/Prime Time.mp4': { path: 'Snippets/Prime Time/Prime Time (1).mov', channel: 'legacy' },
-}
-
-/** Where to stream a footage file from: its copy with sound when the archive file has none. */
+/** Keep the archive source so server-side media corrections remain visible to every playback entry point. */
 export function footageSourceOf(path: string, channel?: string): { path: string; channel: string | undefined } {
-  const swap = FOOTAGE_AUDIO_REPLACEMENTS[path]
-  return swap ? { path: swap.path, channel: swap.channel } : { path, channel }
+  return { path, channel }
 }
 
 export function isVideoPath(path: string): boolean {

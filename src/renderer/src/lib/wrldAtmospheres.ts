@@ -1,6 +1,6 @@
 export type WrldBackdropMode = 'mesh' | 'glass' | 'off'
-export type WrldCuratedLyricId = 'classic' | 'karaoke' | 'cinema' | 'fisheye' | 'cut'
-export type WrldFanLyricId = 'classic' | 'cinema' | 'fisheye' | 'cut'
+export type WrldCuratedLyricId = 'classic' | 'focus' | 'karaoke' | 'cinema' | 'fisheye' | 'cut'
+export type WrldFanLyricId = 'classic' | 'focus' | 'cinema' | 'fisheye' | 'cut'
 export type EraAtmosphereId = '999' | 'gbgr' | 'drfl' | 'lnd'
 
 export interface WrldBackdropPreset {
@@ -35,6 +35,7 @@ export interface WrldCuratedLyricStyle {
 
 export const WRLD_CURATED_LYRICS: readonly WrldCuratedLyricStyle[] = [
   { id: 'classic', label: 'Classic', subtitle: 'Scrolling editorial column' },
+  { id: 'focus', label: 'Focus', subtitle: 'Current line only, past lyrics hidden' },
   { id: 'karaoke', label: 'Karaoke', subtitle: 'Word-lit sing-along' },
   { id: 'cinema', label: 'Cinema', subtitle: 'Widescreen centered lines' },
   { id: 'fisheye', label: '999 Edit', subtitle: '3D lyric-edit lens' },
@@ -44,6 +45,7 @@ export const WRLD_CURATED_LYRICS: readonly WrldCuratedLyricStyle[] = [
 /** Fan-facing lyric presentations (Developer mode keeps all extra looks). */
 export const WRLD_FAN_LYRICS: readonly { id: WrldFanLyricId; label: string; subtitle: string }[] = [
   { id: 'classic', label: 'Classic', subtitle: 'Scrolling editorial column' },
+  { id: 'focus', label: 'Focus', subtitle: 'Current line only, no past lyrics' },
   { id: 'cinema', label: 'Cinema', subtitle: 'Widescreen centered lines' },
   { id: 'fisheye', label: '999', subtitle: '3D lyric-edit lens' },
   { id: 'cut', label: 'Cut', subtitle: 'Cut-up type, each word lights as it is sung' },

@@ -6,7 +6,6 @@ import { loadFileIndex, peekFileIndex, type FileIndex } from '../lib/fileSearch'
 import { peekPlaylistCover } from '../lib/userApi'
 import { loadRecentPlaylistIds } from '../lib/recentPlaylists'
 import { loadStats as loadHeardleStats, todayKey as heardleToday } from '../lib/heardle'
-import { loadStats as loadWordleStats, todayKey as wordleToday } from '../lib/wordle'
 import { loadTierlistLibrary, rankedCount as tierlistRankedCount } from '../lib/tierlist'
 import { ALL_CHANNEL, fetchNews, peekNews, type NewsItem } from '../lib/newsApi'
 import { isHomeSectionVisible } from '../lib/homeSections'
@@ -175,7 +174,6 @@ export function useHomeData() {
 
   const games = useMemo((): GameCard[] => {
     const heardle = loadHeardleStats('daily')
-    const wordle = loadWordleStats()
     const tierlists = loadTierlistLibrary().lists
     const rankedCount = tierlists.reduce((n, l) => n + tierlistRankedCount(l), 0)
     const tierSub = rankedCount === 0
@@ -183,7 +181,6 @@ export function useHomeData() {
       : tierlists.length > 1 ? `${tierlists.length} lists · ${rankedCount} ranked` : `${rankedCount} ranked`
     return [
       { view: 'heardle', label: 'Heardle', kind: 'daily', streak: heardle.currentStreak, done: heardle.lastDay === heardleToday() },
-      { view: 'wordle', label: 'Wordle', kind: 'daily', streak: wordle.currentStreak, done: wordle.lastDay === wordleToday() },
       { view: 'tierlist', label: 'Tier List', kind: 'freeform', sub: tierSub },
     ]
   }, [])

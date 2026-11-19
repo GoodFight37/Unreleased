@@ -91,8 +91,8 @@ function track(id, extra = {}) {
 const ids = (tracks) => tracks.map((t) => t.id)
 const read = (h, key) => JSON.parse(h.storage.get(`unreleased:${key}`) ?? 'null')
 
-test('remember queue is opt-in and ordinary playback writes no session', () => {
-  const h = harness()
+test('an explicit opt-out writes no session during ordinary playback', () => {
+  const h = harness(new Map([['unreleased:rememberQueue', 'false']]))
   h.store.getState().playTrack(track('a'))
   h.store.getState().setCurrentTime(35)
   h.close()
@@ -102,8 +102,21 @@ test('remember queue is opt-in and ordinary playback writes no session', () => {
   assert.equal(harness(h.storage).store.getState().currentTrack, null)
 })
 
-test('enabling during playback restores the selected duplicate, source order and position paused', () => {
+test('remember queue defaults on and reopens at the saved position in pause', () => {
   const h = harness()
+  h.store.getState().playTrack(track('a'), [track('a'), track('b')])
+  h.store.getState().setCurrentTime(35)
+  h.close()
+  const restored = harness(h.storage).store.getState()
+  assert.equal(restored.rememberQueue, true)
+  assert.deepEqual(ids(restored.queue), ['a', 'b'])
+  assert.equal(restored.currentTrack.id, 'a')
+  assert.equal(restored.currentTime, 35)
+  assert.equal(restored.isPlaying, false)
+})
+
+test('enabling during playback restores the selected duplicate, source order and position paused', () => {
+  const h = harness(new Map([['unreleased:rememberQueue', 'false']]))
   const a = track('a'), b = track('b'), c = track('c')
   h.store.getState().playTrack(a, [a, b, a, c])
   h.store.getState().jumpToTrack(a, 2)

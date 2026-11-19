@@ -7,7 +7,6 @@ import {
   buildFootageSongIndex,
   classifyFootageEntry,
   excludedFootageReason,
-  FOOTAGE_AUDIO_REPLACEMENTS,
   linkFootageToCatalogue,
   parseFreestyleName,
   scoreStudioFootage,
@@ -30,8 +29,9 @@ import {
   footageUrl,
 } from './FootageTile'
 import { ProgressiveCover } from './ProgressiveCover'
+import ArchivePhotosGallery from './ArchivePhotosGallery'
 
-type FootageTabId = 'studio' | 'official' | 'snippet'
+type FootageTabId = 'studio' | 'photos' | 'official' | 'snippet'
 
 const ERA_KEY_BY_NUMBER: Record<number, string> = {
   1: 'jute',
@@ -306,16 +306,13 @@ export default function FootageView(): JSX.Element {
       if (fam === 'studio') {
         const link = linkFootageToCatalogue(entry, songIndex)
         const fileDate = /(\d{4}-\d{2}-\d{2})/.exec(entry.name || entry.path)?.[1] ?? null
-        const swap = FOOTAGE_AUDIO_REPLACEMENTS[entry.path]
         const item: FootageTileItem = {
-          path: swap?.path ?? entry.path,
-          streamChannel: swap?.channel,
+          path: entry.path,
           title: entry.name || entry.path.split('/').pop() || entry.path,
           family: 'studio',
           dateLabel: fileDate ? `file date ${fileDate}` : (entry.modified ? `file date ${entry.modified.slice(0, 10)}` : null),
           linked: link,
-          // The replacement has its own length: let the player measure it.
-          duration: swap ? null : entry.duration ?? null,
+          duration: entry.duration ?? null,
         }
         studioRoot.push(item)
         if (!browserOnly) {
@@ -539,6 +536,16 @@ export default function FootageView(): JSX.Element {
                   type="button"
                   role="tab"
                   className="coffre-ftab"
+                  aria-selected={tab === 'photos'}
+                  onClick={() => { setTab('photos'); setSelectedEraFolder(null) }}
+                >
+                  Archive photos
+                  <small>2018 · 2019 · 3,400+ stills</small>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  className="coffre-ftab"
                   aria-selected={tab === 'official'}
                   onClick={() => { setTab('official'); setSelectedEraFolder(null) }}
                 >
@@ -560,10 +567,14 @@ export default function FootageView(): JSX.Element {
               <p className="text-xs text-text-secondary mt-3 mb-5 max-w-3xl">
                 {tab === 'studio'
                   ? 'Juice working: studio sessions, behind-the-scenes, freestyles, tour and travel. Dates are file dates, and a name in a title is someone present, not who filmed.'
-                  : tab === 'official'
-                    ? 'Videos published on YouTube, with their upload date.'
-                    : 'Short previews of songs, filed by era and song. They are fragments, not full recordings.'}
+                  : tab === 'photos'
+                    ? 'Real archive photography of Juice WRLD across 2018, 2019 and the unsorted vault — click any still to view full-screen.'
+                    : tab === 'official'
+                      ? 'Videos published on YouTube, with their upload date.'
+                      : 'Short previews of songs, filed by era and song. They are fragments, not full recordings.'}
               </p>
+
+              {tab === 'photos' && <ArchivePhotosGallery />}
 
               {tab === 'studio' && (
                 <div className="space-y-8">

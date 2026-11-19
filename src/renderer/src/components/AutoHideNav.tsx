@@ -38,8 +38,9 @@ export default function AutoHideNav({ position, autoHide = true, pill = false, c
 }): JSX.Element {
   const hotZonePx = useStore((s) => s.autoHideNavZone)
   // The floating nav sits at z-40, above WRLD's fullscreen portal (z-30) -
-  // step out of the way entirely while that immersive view is up.
-  const wrldFullscreen = useStore((s) => s.wrldFullscreen)
+  // step out of the way entirely while WRLD is active so opening WRLD is an
+  // immediate immersive full-window view (one click, Back/Esc returns).
+  const hideForWrld = useStore((s) => s.wrldFullscreen || (!s.developerMode && s.activeView === 'wrld'))
   const [hovered, setHovered] = useState(false)
   const open = !autoHide || hovered
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -113,9 +114,9 @@ export default function AutoHideNav({ position, autoHide = true, pill = false, c
       for (const v of ['--nav-pill-top', '--nav-pill-left', '--nav-pill-right']) root.style.removeProperty(v)
       window.dispatchEvent(new Event(NAV_PILL_EVENT))
     }
-  }, [pill, position, wrldFullscreen])
+  }, [pill, position, hideForWrld])
 
-  if (wrldFullscreen) return <></>
+  if (hideForWrld) return <></>
   return (
     <>
       {autoHide && (

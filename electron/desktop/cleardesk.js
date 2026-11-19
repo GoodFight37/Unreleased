@@ -115,7 +115,7 @@ class ClearDesk extends EventEmitter {
           ...TOOL, ...display.bounds, frame: false, transparent: true, resizable: false, movable: false, minimizable: false,
           maximizable: false, fullscreenable: false, skipTaskbar: true, hasShadow: false, show: false, focusable: false,
           alwaysOnTop: true, enableLargerThanScreen: true, backgroundColor: '#00000000', title: 'Unreleased',
-          webPreferences: { preload: this.options.preload, backgroundThrottling: false, contextIsolation: true },
+          webPreferences: { preload: this.options.preload, backgroundThrottling: false, contextIsolation: true, sandbox: true },
         }, (win) => {
           one.win = win
           this.options.onWindow(win)

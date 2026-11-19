@@ -5,13 +5,12 @@ import { initCatalogSync } from './lib/catalogSync'
 import { setToken, getToken } from './lib/userApi'
 import { useThemeEffects, useAdaptiveAccent } from './lib/themeEffects'
 import { runWhenIdle, ELECTRON_TITLEBAR_CLEARANCE_X } from './lib/platform'
-import { applySeo } from './lib/seo'
 import { lazyOverlay, lazyView } from './lib/lazyView'
-import { preloadAllViews } from './lib/lazyViews'
 import { ViewType } from './types'
 import { ADMIN_PATH_TABS } from './hooks/useAdminQueue'
 import ViewFade from './components/ViewFade'
 import ViewSkeleton from './components/ViewSkeleton'
+import AlbumThemeStrip from './components/AlbumThemeStrip'
 import { captureLeaving, dashboardSwap, isWholePageSwap, reducedMotion } from './lib/dashboardSwap'
 import { useWrldExpandUnder } from './lib/wrldExpand'
 
@@ -95,9 +94,6 @@ const CommunityEditSubmitModal = lazyOverlay(() => import('./components/Communit
 const ConvertFormatModal = lazyOverlay(() => import('./components/ConvertFormatModal'))
 const BulkEditModal = lazyOverlay(() => import('./components/BulkEditModal'))
 const UrlImportModal = lazyOverlay(() => import('./components/UrlImportModal'))
-import InstallPrompt from './components/InstallPrompt'
-import CookieNotice from './components/CookieNotice'
-import DonationNotice from './components/DonationNotice'
 import { GlobalSongInfoHost } from './components/SongInfoModal'
 import Player from './components/Player'
 import SidePanels from './components/SidePanels'
@@ -255,9 +251,15 @@ export default function App(): JSX.Element {
   const { showNowPlaying, showQueue, showSettings, setShowSettings, showDiagnostics, setShowDiagnostics, activeView, sidebarPosition, navStyle: configuredNavStyle, appMenuPosition: configuredMenuPosition, loadAccount, completeDiscordLogin, showUserAuth, setShowUserAuth, loadLibrary, wrldFullscreen, loadOfflineLibrary, syncOfflinePlaylists, libraryAutoRefresh, libraryFolders, scanLibrary, prefetchApiData, refreshPlaylists, previousView, autoHideNav: configuredAutoHide, showNotifications, setShowNotifications } = useStorePick(
     'showNowPlaying', 'showQueue', 'showSettings', 'setShowSettings', 'showDiagnostics', 'setShowDiagnostics', 'activeView', 'sidebarPosition', 'navStyle', 'appMenuPosition', 'loadAccount', 'completeDiscordLogin', 'showUserAuth', 'setShowUserAuth', 'loadLibrary', 'wrldFullscreen', 'loadOfflineLibrary', 'syncOfflinePlaylists', 'libraryAutoRefresh', 'libraryFolders', 'scanLibrary', 'prefetchApiData', 'refreshPlaylists', 'previousView', 'autoHideNav', 'showNotifications', 'setShowNotifications')
   const developerMode = useStore((s) => s.developerMode)
-  const navStyle = developerMode ? configuredNavStyle : 'pill'
+  const interfaceStyle = useStore((s) => s.interfaceStyle)
+  const navStyle = developerMode ? configuredNavStyle : interfaceStyle === 'editorial' ? 'classic' : 'pill'
+  const effectiveSidebarPosition = developerMode ? sidebarPosition : interfaceStyle === 'editorial' ? 'left' : sidebarPosition
   const appMenuPosition = developerMode ? configuredMenuPosition : 'sidebar'
   const autoHideNav = developerMode && configuredAutoHide
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.interfaceStyle = developerMode ? 'spatial' : interfaceStyle
+  }, [developerMode, interfaceStyle])
   // Opening the terminal from a view that holds unsaved local state (the song
   // editor's draft, a half-filled submission, an open playlist...) must not
   // unmount it - closing the terminal would otherwise remount it empty. Derived
@@ -378,10 +380,6 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  // Give each route its own title/description/canonical. Web only — no-op in
-  // the desktop app, including electron:dev (see lib/seo.ts).
-  useEffect(() => { applySeo(activeView) }, [activeView])
-
   // Lyrics jobs the user started notify them here when they finish.
   useEffect(() => startLyricsJobWatch(), [])
 
@@ -454,13 +452,6 @@ export default function App(): JSX.Element {
   // making at that same moment. Overlap with those is still free — apiRequest
   // dedupes identical in-flight GETs.
   useEffect(() => runWhenIdle(() => { prefetchApiData() }), [prefetchApiData])
-
-  // Warm every view's chunk in the background, one per idle slot, so no
-  // navigation (or opening Settings) ever waits on loading one. Queued behind
-  // the data prefetch above. Re-runs when the account resolves so staff views
-  // join the queue; anything already warmed is skipped.
-  const account = useStore((s) => s.account)
-  useEffect(() => preloadAllViews(account), [account])
 
   // Warm the local library into the store during idle after boot, so the first
   // Library/Playlists open is instant instead of paying a cold disk read + IPC.
@@ -544,21 +535,30 @@ export default function App(): JSX.Element {
           (132px). */}
       {isElectron && appMenuPosition !== 'title-bar' && (
         <div
-          className={`fixed top-0 left-0 right-0 h-7 z-20 select-none pointer-events-none ${sidebarPosition === 'top' && navStyle !== 'pill' && !autoHideNav ? 'md:hidden' : ''}`}
+          className={`fixed top-0 left-0 right-0 h-7 z-20 select-none pointer-events-none ${effectiveSidebarPosition === 'top' && navStyle !== 'pill' && !autoHideNav ? 'md:hidden' : ''}`}
           style={{ WebkitAppRegion: 'drag', marginRight: ELECTRON_TITLEBAR_CLEARANCE_X } as React.CSSProperties}
         />
       )}
       {/* Sidebar stays first in the DOM; reverse variants place it visually
           on the right/bottom without reordering focus/tab order. */}
       <div className={`flex flex-1 overflow-hidden ${
-        sidebarPosition === 'right' ? 'flex-row-reverse'
-          : sidebarPosition === 'top' ? 'flex-col'
-          : sidebarPosition === 'bottom' ? 'flex-col-reverse'
+        effectiveSidebarPosition === 'right' ? 'flex-row-reverse'
+          : effectiveSidebarPosition === 'top' ? 'flex-col'
+          : effectiveSidebarPosition === 'bottom' ? 'flex-col-reverse'
           : 'flex-row'
       }`}>
-        {!isMobile && (autoHideNav || navStyle === 'pill')
-          ? <AutoHideNav position={sidebarPosition} autoHide={autoHideNav && navStyle !== 'pill'} pill={navStyle === 'pill'}><Sidebar /></AutoHideNav>
-          : <Sidebar />}
+        {(!developerMode && activeView === 'wrld') ? null
+          : !isMobile && (autoHideNav || navStyle === 'pill')
+            ? <AutoHideNav position={effectiveSidebarPosition} autoHide={autoHideNav && navStyle !== 'pill'} pill={navStyle === 'pill'}><Sidebar /></AutoHideNav>
+            : <Sidebar />}
+        {!isMobile && navStyle === 'pill' && !wrldFullscreen && !developerMode && activeView !== 'wrld' && (
+          <div
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            className="album-theme-pill glass-backdrop glass-specular fixed top-3 left-4 z-40 hidden xl:flex items-center px-2.5 py-1.5 rounded-full pointer-events-auto"
+          >
+            <AlbumThemeStrip compact />
+          </div>
+        )}
         <main className="flex-1 overflow-hidden flex flex-col relative">
           <div className="flex-1 overflow-hidden flex relative">
             {/* The view's own box. A view on SCROLL_UNDER runs under the
@@ -567,9 +567,11 @@ export default function App(): JSX.Element {
             <div
               ref={viewBoxRef}
               className={`flex-1 min-w-0 flex relative overflow-hidden ${scrollUnder ? 'scroll-under' : ''}`}
-              style={scrollUnder
-                ? { paddingTop: 'var(--nav-pill-clearance, 0px)' }
-                : { paddingTop: 'var(--nav-pill-clearance, 0px)', paddingBottom: 'var(--player-dock, 0px)' }}
+              style={(!developerMode && activeView === 'wrld')
+                ? undefined
+                : scrollUnder
+                  ? { paddingTop: 'var(--nav-pill-clearance, 0px)' }
+                  : { paddingTop: 'var(--nav-pill-clearance, 0px)', paddingBottom: 'var(--player-dock, 0px)' }}
             >
             <ErrorBoundary>
             <Suspense fallback={<ViewSkeleton />}>
@@ -675,10 +677,7 @@ export default function App(): JSX.Element {
           <SyncModal />
         </ErrorBoundary>
       )}
-      {showRecognition && <ErrorBoundary variant="overlay"><Suspense fallback={null}><RecognitionModal /></Suspense></ErrorBoundary>}
-      <ErrorBoundary fallback={null}><InstallPrompt /></ErrorBoundary>
-      <ErrorBoundary fallback={null}><CookieNotice /></ErrorBoundary>
-      <ErrorBoundary fallback={null}><DonationNotice /></ErrorBoundary>
+      {showRecognition && <ErrorBoundary variant="overlay"><RecognitionModal /></ErrorBoundary>}
       <ErrorBoundary variant="overlay"><GlobalSongInfoHost /></ErrorBoundary>
       <ErrorBoundary fallback={null}><DownloadManager /></ErrorBoundary>
       {showNotifications && (

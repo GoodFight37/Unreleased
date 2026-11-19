@@ -29,3 +29,12 @@ test('releases follow one validated path: no auto-release, every release-trigger
     assert.match(text, /github\.repository == 'GoodFight37\/Unreleased'/, `${name} must stay on the fork`)
   }
 })
+test('packaging excludes agent, design and PWA artifacts and drops dead dependencies', () => {
+  const files = pkg.build.files || []
+  for (const pat of ['!docs/**/*', '!.agents/**/*', '!.impeccable/**/*', '!dist/sw.js', '!dist/manifest.webmanifest']) {
+    assert.ok(files.includes(pat), `build.files must exclude ${pat}`)
+  }
+  assert.equal('html-to-image' in (pkg.dependencies || {}), false)
+  assert.equal('browser-id3-writer' in (pkg.dependencies || {}), false)
+  assert.equal('jsmediatags' in (pkg.dependencies || {}), false)
+})

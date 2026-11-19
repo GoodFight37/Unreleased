@@ -10,7 +10,7 @@ import { decodeLocalNotice, decodeNewsShare, decodePlaylistShare, decodeSongInfo
 import type { CommandCardPayload } from '../../lib/chatShare'
 import { useChatStore, useModerationNotice, type RoomRef, type UiMessage } from '../../store/chatStore'
 import { useStore } from '../../store/useStore'
-import { EMOJI_IMG } from './emoji'
+import { emojiGlyph } from './emoji'
 import rehypeChatEmoji from './emojiRehype'
 import BroadcastHistoryCard from './BroadcastHistoryCard'
 import ChangelogCard from './ChangelogCard'
@@ -66,12 +66,7 @@ function MarkdownText({ text, people, meId }: { text: string; people: ChatUserBr
     img: ({ src, alt, title, ...rest }) => {
       const emojiName = (rest as Record<string, unknown>)['data-emoji']
       if (typeof emojiName === 'string') {
-        // rehypeChatEmoji sets src from this same table, but it has to survive
-        // react-markdown's urlTransform to get here - which blanked it outright
-        // back when Vite inlined these PNGs as data: URLs. Re-resolving from
-        // the data-emoji name keeps the image right regardless of how the
-        // asset is emitted.
-        return <img src={EMOJI_IMG[emojiName]} alt={alt} title={title} draggable={false} className="inline-block h-[1.5em] w-[1.5em] align-[-0.3em] object-contain" />
+        return <span role="img" aria-label={alt || `:${emojiName}:`} title={title} className="inline-block leading-none text-[1.2em] align-[-0.12em]">{emojiGlyph(emojiName)}</span>
       }
       return <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noopener noreferrer">{alt || src}</a>
     },

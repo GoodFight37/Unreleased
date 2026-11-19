@@ -1,18 +1,18 @@
 import type { Element, ElementContent, Root, Text } from 'hast'
-import { EMOJI_IMG, splitChatEmoji } from './emoji'
+import { emojiGlyph, splitChatEmoji } from './emoji'
 
 function splitText(node: Text): ElementContent[] {
   const parts = splitChatEmoji(node.value)
   if (parts.length === 1 && !parts[0].name) return [node]
   return parts.map(({ text, name }) => {
     if (!name) return { type: 'text', value: text }
-    const img: Element = {
+    const span: Element = {
       type: 'element',
-      tagName: 'img',
-      properties: { src: EMOJI_IMG[name], alt: `:${name}:`, title: `:${name}:`, 'data-emoji': name },
-      children: [],
+      tagName: 'span',
+      properties: { role: 'img', 'aria-label': `:${name}:`, title: `:${name}:`, 'data-emoji': name, className: ['inline-block', 'leading-none', 'text-[1.2em]', 'align-[-0.12em]'] },
+      children: [{ type: 'text', value: emojiGlyph(name) }],
     }
-    return img
+    return span
   })
 }
 

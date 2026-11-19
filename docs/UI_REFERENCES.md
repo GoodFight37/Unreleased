@@ -6,16 +6,12 @@ Guide pour élever la finition visuelle, les micro-interactions et l'identité J
 
 | Source | URL | Ce qu'on reprend (CSS / SVG / WAAPI natif) | Ce qu'on exclut |
 |---|---|---|---|
-| **8bitcn UI** | https://www.8bitcn.com/ | Grille pixel nette, badges/tags compacts, bordures en escalier discrètes pour accents 999/Juice WRLD | Remplacer les cartes Liquid Glass par des boîtes 8-bit |
-| **NES.css** | https://nostalgic-css.github.io/NES.css/ | Sprites pixel-art propres (`image-rendering: pixelated`), animations `steps()` à zéro coût CPU | Contours noirs épais sur l'interface principale |
-| **Pixelarticons** | https://pixelarticons.com/ | Géométrie 24×24 / 32×32 `shape-rendering="crispEdges"`, icônes pixel lisibles à petite taille | Remplacer `lucide-react` dans la navigation/lecteur |
 | **Aceternity UI** | https://ui.aceternity.com/ | Spotlight radial doux sous pointeur, lueur de bordure fine (`border-beam` subtil) sur la carte hero | Gradients lourds ou `backdrop-filter` empilés |
 | **Magic UI** | https://magicui.design/ | Entrées `blur-fade` courtes (compositées `transform` + `opacity` uniquement), bordure lumineuse fine | Dépendances externes (`framer-motion`) |
-| **React Bits** | https://reactbits.dev/ | Micro-élévation ressort au survol, reflets spéculaires propres, transitions d'état fluides | Shaders plein écran supplémentaires inutiles |
+| **React Bits** | https://reactbits.dev/ | Micro-élévation douce au survol, reflets spéculaires propres, transitions d'état fluides | Shaders plein écran supplémentaires inutiles |
 | **Cult UI** | https://www.cult-ui.com/ | Hiérarchie éditoriale type Apple/bento, espacements respirants, boutons pill nets | Ombres portées opaques |
-| **Motion Primitives** | https://motion-primitives.com/ | Courbes d'amortissement courtes (180–280 ms `cubic-bezier(0.22, 1, 0.36, 1)`), zéro thrash layout | Animations continues en `Mode Jeu` ou `reducedMotion` |
-| **NeoBrutalism** | https://www.neobrutalism.dev/ | Hiérarchie typographique franche, labels de contexte lisibles immédiatement | Ombres dures `#000` et bordures opaques épaisses |
-| **Uiverse** | https://uiverse.io/ | Micro-interactions de boutons/badges en CSS pur (`transform`, `opacity`) | CSS non scope, `box-shadow` animés ou `filter` lourds |
+| **Motion Primitives** | https://motion-primitives.com/ | Courbes d'amortissement courtes (150–250 ms `cubic-bezier(0.22, 1, 0.36, 1)`), zéro thrash layout | Animations continues en `Mode Jeu` ou `reducedMotion` |
+| **Uiverse** | https://uiverse.io/ | Micro-interactions de boutons/badges en CSS pur (`transform`, `opacity`) | CSS non scopé, `box-shadow` animés ou `filter` lourds |
 
 ## 2. Discover : consigne de Malik du 17 novembre 2026
 

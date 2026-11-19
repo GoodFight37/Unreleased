@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Film, Music2, Play, X } from 'lucide-react'
+import { Film, Maximize2, Minimize2, Music2, Pause, Play, RotateCcw, RotateCw, Sparkles, Volume2, VolumeX, X } from 'lucide-react'
+import FootageDvdBouncer, { DVD_LOGO_OPTIONS, type DvdLogoId } from './FootageDvdBouncer'
+import { ls } from '../lib/persist'
 import { saveTrackerSearch } from '../lib/apiTrackerShared'
 import { buildStreamUrl } from '../lib/juicewrldApi'
 import { liveVisualsAllowed, useEffectsState } from '../lib/effectsPreference'
@@ -26,7 +28,7 @@ export interface FootageTileItem {
   thumbUrl?: string | null
   youtubeUrl?: string | null
   channel?: string | null
-  /** Overrides the channel the stream is read from (e.g. an audio replacement kept on another channel). */
+  /** Explicit source channel for entries from a different archive channel. */
   streamChannel?: string
 }
 
@@ -74,7 +76,7 @@ let activeHoverVideo: HTMLVideoElement | null = null
 let activeModalVideo: HTMLVideoElement | null = null
 let suppressingGateSync = false
 
-/** The stream URL of a footage file, from its copy with sound when the archive file has none. */
+/** The stream URL of the original archive file and channel. */
 export const footageUrl = (path: string, channel?: string): string => {
   const s = footageSourceOf(path, channel)
   return buildStreamUrl(s.path, s.channel || undefined)
@@ -503,6 +505,8 @@ export function FootageTile({
   )
 }
 
+const SPEEDS = [0.75, 1, 1.25, 1.5] as const
+
 export function FootagePlayerModal({
   item,
   channel = '',
@@ -512,15 +516,44 @@ export function FootagePlayerModal({
   channel?: string
   onClose: () => void
 }): JSX.Element {
+  const boxRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isPlaying = useStore((s) => s.isPlaying)
   const isRadioPlaying = useStore((s) => s.radioFmActive && !s.radioFmPaused)
-  const { reducedMotion } = useEffectsState()
+  const { reducedMotion, gameMode } = useEffectsState()
   const [musicPausedByVideo, setMusicPausedByVideo] = useState(false)
   const [noSound, setNoSound] = useState(false)
 
+  const [vPlaying, setVPlaying] = useState(true)
+  const [curTime, setCurTime] = useState(0)
+  const [dur, setDur] = useState(0)
+  const [bufEnd, setBufEnd] = useState(0)
+  const [muted, setMuted] = useState(false)
+  const [vol, setVol] = useState(1)
+  const [speedIdx, setSpeedIdx] = useState(1)
+  const [isFs, setIsFs] = useState(false)
+  const [chromeVisible, setChromeVisible] = useState(true)
+
+  const [dvdEnabled, setDvdEnabled] = useState<boolean>(() => ls.get<boolean>('footageDvdEnabled') ?? true)
+  const [dvdLogo, setDvdLogo] = useState<DvdLogoId>(() => ls.get<DvdLogoId>('footageDvdLogo') ?? 'mix')
+  const [cornerHits, setCornerHits] = useState(0)
+
+  const wakeChrome = useCallback(() => {
+    setChromeVisible(true)
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    hideTimerRef.current = setTimeout(() => {
+      if (videoRef.current && !videoRef.current.paused) setChromeVisible(false)
+    }, 2600)
+  }, [])
+
+  useEffect(() => () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current) }, [])
+
   useEffect(() => {
     setNoSound(false)
+    setCurTime(0)
+    setDur(0)
+    setBufEnd(0)
     stopActiveHoverPreview()
     footageModalVideoGate.videoWillPlay()
     setMusicPausedByVideo(footageModalVideoGate.isMusicPausedByVideo())
@@ -543,15 +576,89 @@ export function FootagePlayerModal({
   }, [isPlaying, isRadioPlaying])
 
   useEffect(() => {
+    const onFsChange = (): void => setIsFs(document.fullscreenElement === boxRef.current)
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])
+
+  const togglePlay = useCallback(() => {
+    const v = videoRef.current
+    if (!v) return
+    if (v.paused) { v.play().catch(() => {}); wakeChrome() }
+    else { v.pause(); setChromeVisible(true) }
+  }, [wakeChrome])
+
+  const seekBy = useCallback((delta: number) => {
+    const v = videoRef.current
+    if (!v || !Number.isFinite(v.duration)) return
+    v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + delta))
+    setCurTime(v.currentTime)
+    wakeChrome()
+  }, [wakeChrome])
+
+  const toggleMute = useCallback(() => {
+    const v = videoRef.current
+    if (!v) return
+    v.muted = !v.muted
+    setMuted(v.muted)
+    wakeChrome()
+  }, [wakeChrome])
+
+  const toggleFullscreen = useCallback(() => {
+    const box = boxRef.current
+    if (!box) return
+    if (document.fullscreenElement === box) document.exitFullscreen?.().catch(() => {})
+    else box.requestFullscreen?.().catch(() => {})
+    wakeChrome()
+  }, [wakeChrome])
+
+  const cycleSpeed = useCallback(() => {
+    const next = (speedIdx + 1) % SPEEDS.length
+    setSpeedIdx(next)
+    if (videoRef.current) videoRef.current.playbackRate = SPEEDS[next]
+    wakeChrome()
+  }, [speedIdx, wakeChrome])
+
+  const toggleDvd = (): void => {
+    setDvdEnabled((prev) => {
+      const next = !prev
+      ls.set('footageDvdEnabled', next)
+      return next
+    })
+  }
+
+  const cycleDvdLogo = (): void => {
+    const idx = DVD_LOGO_OPTIONS.findIndex((o) => o.id === dvdLogo)
+    const next = DVD_LOGO_OPTIONS[(idx + 1) % DVD_LOGO_OPTIONS.length].id
+    setDvdLogo(next)
+    ls.set('footageDvdLogo', next)
+  }
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        if (document.fullscreenElement) return
         e.stopPropagation()
         onClose()
+        return
       }
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.code === 'Space' || e.key.toLowerCase() === 'k') { e.preventDefault(); togglePlay() }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); seekBy(-10) }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); seekBy(10) }
+      else if (e.key.toLowerCase() === 'm') { e.preventDefault(); toggleMute() }
+      else if (e.key.toLowerCase() === 'f') { e.preventDefault(); toggleFullscreen() }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
+  }, [onClose, togglePlay, seekBy, toggleMute, toggleFullscreen])
+
+  const pct = dur > 0 ? Math.min(100, (curTime / dur) * 100) : 0
+  const bufPct = dur > 0 ? Math.min(100, (bufEnd / dur) * 100) : 0
+  const currentLogoLabel = DVD_LOGO_OPTIONS.find((o) => o.id === dvdLogo)?.label ?? 'Mix 999'
+  const isOneTakeSession = item.family === 'studio' && dur >= 600
+  const showChrome = chromeVisible || !vPlaying
 
   const content = (
     <div
@@ -561,38 +668,172 @@ export function FootagePlayerModal({
       aria-label={cleanFootageDisplayTitle(item.title)}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className={`coffre-vplay-box ${reducedMotion ? '' : 'animate-in'}`}>
+      <FootageDvdBouncer
+        enabled={dvdEnabled && !isFs}
+        logo={dvdLogo}
+        reducedMotion={reducedMotion || gameMode}
+        onCornerHit={() => setCornerHits((n) => n + 1)}
+      />
+      <div
+        ref={boxRef}
+        className={`coffre-vplay-box ${reducedMotion ? '' : 'animate-in'}`}
+        onPointerMove={wakeChrome}
+        onPointerLeave={() => { if (vPlaying) setChromeVisible(false) }}
+      >
         <button type="button" className="coffre-vplay-close" aria-label="Close video" onClick={onClose}>
-          <X size={18} />
+          <X size={17} />
         </button>
         <video
           ref={videoRef}
-          controls
           autoPlay
           preload="metadata"
           playsInline
           src={footageUrl(item.path, item.streamChannel ?? channel)}
+          onClick={togglePlay}
+          onDoubleClick={toggleFullscreen}
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget
+            if (Number.isFinite(v.duration)) setDur(v.duration)
+            v.playbackRate = SPEEDS[speedIdx]
+          }}
           onPlay={() => {
+            setVPlaying(true)
             footageModalVideoGate.videoWillPlay()
             setMusicPausedByVideo(footageModalVideoGate.isMusicPausedByVideo())
+            wakeChrome()
           }}
-          onTimeUpdate={(e) => { if (!noSound && videoHasNoSound(e.currentTarget)) setNoSound(true) }}
+          onPause={() => { setVPlaying(false); setChromeVisible(true) }}
+          onProgress={(e) => {
+            const v = e.currentTarget
+            if (v.buffered.length > 0) setBufEnd(v.buffered.end(v.buffered.length - 1))
+          }}
+          onTimeUpdate={(e) => {
+            const v = e.currentTarget
+            setCurTime(v.currentTime)
+            if (v.buffered.length > 0) setBufEnd(v.buffered.end(v.buffered.length - 1))
+            if (!noSound && videoHasNoSound(v)) setNoSound(true)
+          }}
         />
-        <div className="coffre-vplay-bar">
+        <div className="coffre-vplay-bar" style={{ opacity: showChrome ? 1 : 0 }}>
+          <span className="coffre-chip font-mono-ui !text-[10px] tracking-[0.14em] uppercase">999 VAULT</span>
+          <FootageFamilyChip family={item.family} />
+          {isOneTakeSession && <span className="coffre-chip">Full Session · One-Take</span>}
           {musicPausedByVideo && (
-            <>
-              <span className="coffre-chip">Music paused</span>
+            <button
+              type="button"
+              className="coffre-secondary !py-1 !px-2.5 !text-[11px]"
+              onClick={onClose}
+            >
+              Resume music
+            </button>
+          )}
+          {noSound && <span className="coffre-chip" title="The archive file has no audio track">No sound</span>}
+          <span className="font-semibold truncate max-w-[40%]">{cleanFootageDisplayTitle(item.title)}</span>
+          {!isFs && !reducedMotion && !gameMode && (
+            <div className="ml-auto flex items-center gap-1.5">
               <button
                 type="button"
-                className="coffre-secondary py-1 px-3 text-xs"
-                onClick={onClose}
+                onClick={toggleDvd}
+                title="Toggle bouncing Juice WRLD DVD screensaver around the video"
+                className={`coffre-secondary !py-1 !px-2.5 !text-[11px] ${dvdEnabled ? '!border-[var(--accent)] !text-white' : 'opacity-65'}`}
               >
-                Resume music
+                <Sparkles size={11} /> DVD {dvdEnabled ? 'On' : 'Off'}
               </button>
-            </>
+              {dvdEnabled && (
+                <button
+                  type="button"
+                  onClick={cycleDvdLogo}
+                  title="Switch bouncing Juice WRLD logo"
+                  className="coffre-secondary !py-1 !px-2.5 !text-[11px]"
+                >
+                  {currentLogoLabel}
+                </button>
+              )}
+              {cornerHits > 0 && (
+                <span className="coffre-chip font-mono-ui !text-[10px]" title="DVD exact corner hits">
+                  Corner ×{cornerHits}
+                </span>
+              )}
+            </div>
           )}
-          {noSound && <span className="coffre-chip" title="The archive file has no audio track">No sound in this file</span>}
-          <span className="font-semibold truncate">{cleanFootageDisplayTitle(item.title)}</span>
+        </div>
+
+        <div className={`coffre-vplay-controls ${showChrome ? '' : 'is-hidden'}`} onClick={(e) => e.stopPropagation()}>
+          <div
+            className="coffre-vplay-seek"
+            role="slider"
+            aria-label="Seek video"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(dur)}
+            aria-valuenow={Math.round(curTime)}
+            tabIndex={0}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect()
+              if (rect.width <= 0 || dur <= 0 || !videoRef.current) return
+              const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+              videoRef.current.currentTime = ratio * dur
+              setCurTime(ratio * dur)
+              wakeChrome()
+            }}
+          >
+            <div className="coffre-vplay-seek-track">
+              <div className="coffre-vplay-seek-buf" style={{ width: `${bufPct}%` }} />
+              <div className="coffre-vplay-seek-fill" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <button type="button" className="coffre-vplay-btn is-primary" onClick={togglePlay} aria-label={vPlaying ? 'Pause' : 'Play'}>
+                {vPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" className="translate-x-[1px]" />}
+              </button>
+              <button type="button" className="coffre-vplay-btn" onClick={() => seekBy(-10)} title="Back 10s (←)" aria-label="Back 10 seconds">
+                <RotateCcw size={15} />
+              </button>
+              <button type="button" className="coffre-vplay-btn" onClick={() => seekBy(10)} title="Forward 10s (→)" aria-label="Forward 10 seconds">
+                <RotateCw size={15} />
+              </button>
+              <span className="font-mono-ui text-[11px] text-white/85 tabular-nums ml-1.5">
+                {formatVideoSeconds(curTime)} / {formatVideoSeconds(dur)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {item.linked && <FootageLinkChip link={item.linked} strict />}
+              <button type="button" className="coffre-vplay-btn" onClick={toggleMute} title={muted ? 'Unmute (M)' : 'Mute (M)'} aria-label={muted ? 'Unmute' : 'Mute'}>
+                {muted || vol === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.02}
+                value={muted ? 0 : vol}
+                aria-label="Video volume"
+                onChange={(e) => {
+                  const next = Number(e.target.value)
+                  setVol(next)
+                  if (videoRef.current) {
+                    videoRef.current.volume = next
+                    videoRef.current.muted = next === 0
+                    setMuted(next === 0)
+                  }
+                }}
+                className="w-16 accent-[var(--accent)] cursor-pointer"
+              />
+              <button
+                type="button"
+                onClick={cycleSpeed}
+                title="Playback speed"
+                className="px-2 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-mono-ui font-semibold text-white/90 transition-colors"
+              >
+                {SPEEDS[speedIdx]}×
+              </button>
+              <button type="button" className="coffre-vplay-btn" onClick={toggleFullscreen} title={isFs ? 'Exit fullscreen (F)' : 'Fullscreen (F)'} aria-label={isFs ? 'Exit fullscreen' : 'Fullscreen'}>
+                {isFs ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

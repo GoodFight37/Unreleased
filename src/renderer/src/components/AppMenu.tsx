@@ -422,7 +422,6 @@ export default function AppMenu({ variant = 'bar', collapsed = false }: { varian
       { kind: 'item', label: 'Your listening', onClick: run(() => setActiveView('stats')) },
       { kind: 'sep' },
       { kind: 'item', label: 'Heardle', onClick: run(() => setActiveView('heardle')) },
-      { kind: 'item', label: 'Wordle', onClick: run(() => setActiveView('wordle')) },
       { kind: 'item', label: 'Tier lists', onClick: run(() => setActiveView('tierlist')) },
       { kind: 'sep' },
       { kind: 'item', label: 'Discord community', onClick: run(() => openExternal('https://discord.gg/jwa')) },

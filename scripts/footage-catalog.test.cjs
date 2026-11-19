@@ -336,8 +336,18 @@ test('videoHasNoSound only flags a playing, unmuted video that decoded no audio'
   assert.equal(videoHasNoSound({ muted: false, paused: false, currentTime: 3 }), false)
 })
 
-test('footageSourceOf streams the copy with sound for a silent archive file and leaves other files alone', () => {
-  assert.deepEqual(footageSourceOf('Footage/No Laces.mp4'), { path: 'Snippets/No Laces/No Laces (1).mov', channel: 'legacy' })
-  assert.deepEqual(footageSourceOf('Footage/Doubting Me (Studio Session).mp4', ''), { path: 'Snippets/Doubting Me/Doubting Me (2).mp4', channel: 'legacy' })
-  assert.deepEqual(footageSourceOf('Footage/Be Here (In The Mix).mp4', 'comp'), { path: 'Footage/Be Here (In The Mix).mp4', channel: 'comp' })
+test('footageSourceOf preserves original files and channels so server corrections are not masked', () => {
+  for (const path of [
+    'Footage/Flex (with Polo G).mp4',
+    'Footage/No Laces.mp4',
+    'Footage/Prime Time.mp4',
+    'Footage/Doubting Me.mp4',
+    'Footage/Doubting Me (Studio Session).mp4',
+    'Footage/Doubting Me [Part 1].mp4',
+    'Footage/Doubting Me [Part 2].mp4',
+  ]) {
+    assert.deepEqual(footageSourceOf(path), { path, channel: undefined })
+    assert.deepEqual(footageSourceOf(path, 'comp'), { path, channel: 'comp' })
+  }
+  assert.deepEqual(footageSourceOf('Snippets/No Laces/No Laces (1).mov', 'legacy'), { path: 'Snippets/No Laces/No Laces (1).mov', channel: 'legacy' })
 })

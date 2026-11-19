@@ -138,6 +138,9 @@ interface VizState {
   wrldAnimations: boolean
   /** Curated lyric presentation unlocked for all users in WRLD (defaults to classic). */
   wrldLyricLook: WrldCuratedLyricId
+  wrldCutAccent: 'juice' | 'cover'
+  /** Applies cover-derived primary/secondary colors to lyrics across all WRLD lyric styles. */
+  wrldCoverLyricColors: boolean
   /** Hides chrome and playback controls in WRLD for clean screen-recording/captures. */
   wrldCleanView: boolean
   /** Post frame, saved. */
@@ -156,6 +159,8 @@ interface VizState {
   setWrldAtmosphere: (id: WrldBackdropMode) => void
   setWrldAnimations: (on: boolean) => void
   setWrldLyricLook: (look: WrldCuratedLyricId) => void
+  setWrldCutAccent: (accent: 'juice' | 'cover') => void
+  setWrldCoverLyricColors: (on: boolean) => void
   setWrldCleanView: (on: boolean) => void
   setWrldVideos: (choice: MusicVideoChoice) => void
   setWrldVideoShown: (on: boolean) => void
@@ -189,6 +194,8 @@ export const useVizStore = create<VizState>((set) => ({
     return isWrldCuratedLyricId(v) ? v : 'classic'
   })(),
   wrldCleanView: false,
+  wrldCutAccent: ls.get('wrldCutAccent') === 'cover' ? 'cover' : 'juice',
+  wrldCoverLyricColors: ls.get<boolean>('wrldCoverLyricColors') ?? true,
   wrldFrame: normalizeWrldFrame(ls.get<unknown>('wrldFrame')),
   wrldInk: normalizeWrldInk(ls.get<unknown>('wrldInk')),
   wrldPostFont: ls.get<string>('wrldPostFont') ?? null,
@@ -242,11 +249,16 @@ export const useVizStore = create<VizState>((set) => ({
   setWrldLyricLook: (wrldLyricLook) => {
     set({ wrldLyricLook })
     ls.set('wrldLyricLook', wrldLyricLook)
-    if (wrldLyricLook !== 'classic') {
+    if (wrldLyricLook !== 'classic' && wrldLyricLook !== 'focus') {
       useStore.getState().setDesktop({ lyrics: { look: wrldLyricLook } })
     }
   },
   setWrldCleanView: (wrldCleanView) => set({ wrldCleanView }),
+  setWrldCutAccent: (wrldCutAccent) => { set({ wrldCutAccent }); ls.set('wrldCutAccent', wrldCutAccent) },
+  setWrldCoverLyricColors: (wrldCoverLyricColors) => {
+    set({ wrldCoverLyricColors })
+    ls.set('wrldCoverLyricColors', wrldCoverLyricColors)
+  },
   setWrldFrame: (wrldFrame) => { set({ wrldFrame }); ls.set('wrldFrame', wrldFrame) },
   setWrldInk: (wrldInk) => { set({ wrldInk }); ls.set('wrldInk', wrldInk) },
   setWrldPostFont: (wrldPostFont) => { set({ wrldPostFont }); ls.set('wrldPostFont', wrldPostFont) },
@@ -291,6 +303,7 @@ if (typeof window !== 'undefined') {
       case 'wrldAtmosphere': useVizStore.setState({ wrldAtmosphere: normalizeWrldBackdrop(value) }); break
       case 'wrldAnimations': useVizStore.setState({ wrldAnimations: value !== false }); break
       case 'wrldLyricLook': if (isWrldCuratedLyricId(value)) useVizStore.setState({ wrldLyricLook: value }); break
+      case 'wrldCutAccent': useVizStore.setState({ wrldCutAccent: value === 'cover' ? 'cover' : 'juice' }); break
       case 'wrldFrame': useVizStore.setState({ wrldFrame: normalizeWrldFrame(value) }); break
       case 'wrldInk': useVizStore.setState({ wrldInk: normalizeWrldInk(value) }); break
       case 'wrldPostFont': useVizStore.setState({ wrldPostFont: typeof value === 'string' ? value : null }); break

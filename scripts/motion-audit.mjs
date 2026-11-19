@@ -60,13 +60,16 @@ const main = async () => {
   if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) throw new Error('dist/ missing: run npm run build first')
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'unreleased-motion-audit-'))
   const app = await electron.launch({
-    args: ['.', '--load-dist', '--ui-verify', '--no-sandbox', '--mute-audio'],
+    args: ['.', '--load-dist', '--ui-verify', '--no-sandbox', '--mute-audio', '--window-position=-1920,-57', '--window-size=1920,1080'],
     cwd: ROOT,
     env: { ...process.env, UNRELEASED_UI_VERIFY_DIR: userData },
     timeout: 20_000,
   })
   const all = []
   try {
+    await app.evaluate(({ BrowserWindow }) => {
+      for (const window of BrowserWindow.getAllWindows()) window.setPosition(-1920, -57)
+    })
     const win = await app.firstWindow({ timeout: 15_000 })
     await win.setViewportSize({ width: 1280, height: 800 })
     await win.waitForFunction(() => Boolean(window.__store), { timeout: 15_000 })

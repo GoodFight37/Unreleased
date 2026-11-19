@@ -709,14 +709,33 @@ export function peekFavorites(): FavoriteEntry[] | undefined {
 }
 
 export async function addFavorite(songId: number): Promise<FavoriteEntry> {
-  return request(`${LIBRARY_BASE}/favorites/`, {
+  const entry = await request<FavoriteEntry>(`${LIBRARY_BASE}/favorites/`, {
     method: 'POST',
     body: JSON.stringify({ song_id: songId }),
   })
+  const cached = cacheGet<FavoriteEntry[]>(FAVORITES_URL)
+  if (cached && entry?.song) {
+    const clean: FavoriteEntry = { ...entry, song: songWithoutLyrics(entry.song) }
+    cacheSet(FAVORITES_URL, [clean, ...cached.filter((f) => f.song?.id !== songId)])
+  } else {
+    cacheDelete(FAVORITES_URL)
+  }
+  return entry
 }
 
 export async function removeFavorite(songId: number): Promise<void> {
-  return request(`${LIBRARY_BASE}/favorites/${songId}/`, { method: 'DELETE' })
+  const cached = cacheGet<FavoriteEntry[]>(FAVORITES_URL)
+  if (cached) {
+    cacheSet(FAVORITES_URL, cached.filter((f) => f.song?.id !== songId))
+  }
+  try {
+    await request(`${LIBRARY_BASE}/favorites/${songId}/`, { method: 'DELETE' })
+  } finally {
+    const latest = cacheGet<FavoriteEntry[]>(FAVORITES_URL)
+    if (latest) {
+      cacheSet(FAVORITES_URL, latest.filter((f) => f.song?.id !== songId))
+    }
+  }
 }
 
 // One request for the whole library: include_items=true makes the list endpoint

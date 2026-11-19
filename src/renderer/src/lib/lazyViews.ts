@@ -10,6 +10,11 @@ import { runWhenIdle } from './platform'
 // they're already in the main bundle.
 const LOADERS: Partial<Record<ViewType, () => Promise<unknown>>> = {
   home: () => import('../components/HomeView'),
+  'api-tracker': () => import('../components/ApiTrackerView'),
+  'api-files': () => import('../components/ApiFilesView'),
+  playlists: () => import('../components/PlaylistsView'),
+  liked: () => import('../components/LikedSongsView'),
+  library: () => import('../components/LibraryTab'),
   footage: () => import('../components/FootageView'),
   editor: () => import('../components/EditorPage'),
   admin: () => import('../components/AdminPage'),

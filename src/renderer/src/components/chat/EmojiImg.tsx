@@ -1,13 +1,15 @@
-import { EMOJI_IMG, emojiGlyph } from './emoji'
-import { LazyImg } from '../LazyImg'
+import { emojiGlyph } from './emoji'
 
-// Renders a reaction/picker entry as its iOS-style PNG, falling back to the
-// plain glyph for anything outside our shortcode table.
+// Renders a reaction/picker entry using native OS color emoji glyphs.
 export default function EmojiImg({ name, className }: { name: string; className?: string }): JSX.Element {
-  const src = EMOJI_IMG[name]
-  if (!src) return <span className={className}>{emojiGlyph(name)}</span>
-  // Lazy because the picker lays out the whole table at once - roughly 1900
-  // of these - and they're real asset requests now rather than data: URLs
-  // baked into the bundle. Only the rows actually scrolled to get fetched.
-  return <LazyImg src={src} alt={`:${name}:`} draggable={false} className={`inline-block object-contain ${className ?? ''}`} />
+  return (
+    <span
+      role="img"
+      aria-label={`:${name}:`}
+      title={`:${name}:`}
+      className={`inline-flex items-center justify-center leading-none select-none ${className ?? ''}`}
+    >
+      {emojiGlyph(name)}
+    </span>
+  )
 }

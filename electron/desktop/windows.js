@@ -15,7 +15,7 @@ let count = 0
 const asked = new Map() // window name -> { options, made, cancelled }
 
 function startHost(url, preload) {
-  host = new BrowserWindow({ ...TOOL, show: false, title: 'Unreleased', webPreferences: { preload, contextIsolation: true, backgroundThrottling: false } })
+  host = new BrowserWindow({ ...TOOL, show: false, title: 'Unreleased', webPreferences: { preload, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
   host.webContents.setWindowOpenHandler(({ frameName }) => {
     const one = asked.get(frameName)
     return one ? { action: 'allow', overrideBrowserWindowOptions: one.options } : { action: 'deny' }

@@ -431,27 +431,8 @@ export function shortcodesToGlyphs(text: string): string {
   return text.replace(PLAIN_SHORTCODE_RE, (match, name) => EMOJI[name] ?? match)
 }
 
-// iOS-style PNGs for every glyph above, keyed by the same shortcode name.
-//
-// They live in public/emoji/apple/<name>.png - one file per EMOJI key - and
-// are referenced by URL, never imported. Importing them (an eager glob) made
-// the dev server serve each of the ~1900 PNGs as its own JS module on every
-// load, and without `?no-inline` the build base64'd them into the chat bundle.
-// Plain URLs mean the browser fetches only the handful actually on screen.
-//
-// Built, the folder is resolved against this chunk (always in dist/assets/)
-// rather than the page: under file:// a root path points at the drive root,
-// and a page-relative one breaks once pushState rewrites the path (/news/<id>).
-// Kept in a variable so Vite doesn't try to resolve it as a build-time asset.
-const EMOJI_DIR_FROM_CHUNK = '../emoji/apple/'
-const EMOJI_DIR = import.meta.env.DEV ? '/emoji/apple/' : new URL(EMOJI_DIR_FROM_CHUNK, import.meta.url).href
-export const EMOJI_IMG: Record<string, string> = Object.fromEntries(
-  Object.keys(EMOJI).map((name) => [name, `${EMOJI_DIR}${name}.png`]),
-)
-
 // Reverse lookup so raw glyphs typed or pasted into message text can be
-// swapped for their iOS image too, longest glyph first to prefer full
-// sequences (e.g. the heart's variation selector) over bare prefixes.
+// matched cleanly, longest glyph first to prefer full sequences.
 export const NAME_BY_GLYPH: Record<string, string> = Object.fromEntries(
   Object.entries(EMOJI).map(([name, glyph]) => [glyph, name]),
 )
@@ -464,7 +445,7 @@ export function splitChatEmoji(text: string): { text: string; name?: string }[] 
   let end = 0
   for (const match of text.matchAll(EMOJI_RE)) {
     const name = match[1] ?? NAME_BY_GLYPH[match[0]]
-    if (!name || !Object.prototype.hasOwnProperty.call(EMOJI_IMG, name)) continue
+    if (!name || !Object.prototype.hasOwnProperty.call(EMOJI, name)) continue
     const start = match.index
     if (start > end) parts.push({ text: text.slice(end, start) })
     parts.push({ text: match[0], name })

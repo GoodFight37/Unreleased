@@ -589,6 +589,7 @@ export default function LiquidMeshBackdrop({
     const uCols = [0, 1, 2, 3].map((i) => gl.getUniformLocation(meshProg, `u_c${i}`))
 
     const ctrlPos = new Float32Array(32)
+    const ctrlPosAlt = new Float32Array(32)
     const ctrlUv = new Float32Array(32)
     const ctrlUvAlt = new Float32Array(32)
 
@@ -735,9 +736,9 @@ export default function LiquidMeshBackdrop({
       }
 
       fillControlPoints(ctrlPos, ctrlUv, phase, st.seed, beatEnv, cornerPairIdx, 0, atm.calmness, atm.energyPush)
-      fillControlPoints(ctrlPos, ctrlUvAlt, phase, st.prevSeed, beatEnv, cornerPairIdx, 0.35, atm.calmness, atm.energyPush)
-      // Re-apply primary control positions after alt UV fill
-      fillControlPoints(ctrlPos, ctrlUv, phase, st.seed, beatEnv, cornerPairIdx, 0, atm.calmness, atm.energyPush)
+      if (smoothMorph < 0.999) {
+        fillControlPoints(ctrlPosAlt, ctrlUvAlt, phase, st.prevSeed, beatEnv, cornerPairIdx, 0.35, atm.calmness, atm.energyPush)
+      }
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
       gl.viewport(0, 0, canvas.width, canvas.height)

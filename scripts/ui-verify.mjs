@@ -500,12 +500,15 @@ async function main() {
 
   try {
     electronApp = await electron.launch({
-      args: ['.', '--load-dist', '--ui-verify', '--no-sandbox', '--mute-audio'],
+      args: ['.', '--load-dist', '--ui-verify', '--no-sandbox', '--mute-audio', '--window-position=-1920,-57', '--window-size=1920,1080'],
       cwd: ROOT,
       env: { ...process.env, UNRELEASED_UI_VERIFY_DIR: tempUserData },
       timeout: 20_000,
     })
 
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      for (const window of BrowserWindow.getAllWindows()) window.setPosition(-1920, -57)
+    })
     const win = await electronApp.firstWindow({ timeout: 15_000 })
     await electronApp.evaluate(({ BrowserWindow }) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.setAudioMuted(true)

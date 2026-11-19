@@ -1,4 +1,4 @@
-﻿import { ReactNode, useRef, useState } from 'react'
+﻿import { ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { X, GripVertical, ListMusic, Trash2, History, ChevronDown, Radio, Search, RefreshCw } from 'lucide-react'
 import { useStore, useStorePick } from '../store/useStore'
 import { AlbumArtThumbnail } from './AlbumArtThumbnail'
@@ -35,29 +35,26 @@ export default function QueuePanel(): JSX.Element {
   // What was actually played before this song, newest first - not the queue's
   // own played slice, which a new queue (e.g. playing from the Tracker) wipes.
   const history = playHistory
-  const upcoming = queue.slice(queueIndex + 1)          // unplayed tracks
+  const upcoming = useMemo(() => queue.slice(queueIndex + 1), [queue, queueIndex])
 
   const query = search.trim().toLowerCase()
-  // Plain words match title/artist; field:"value" tokens (Tracker syntax) are
-  // checked against the catalogue by song id - see useSongFieldSearch.
   const fieldSearch = useSongFieldSearch(search)
-  const matchesQuery = (track: Track): boolean => {
+  const matchesQuery = useCallback((track: Track): boolean => {
     const q = fieldSearch.freeText
     return (!q || track.title.toLowerCase().includes(q) || track.artist.toLowerCase().includes(q))
       && fieldSearch.matchesFields(trackIdToSongId(track.id))
-  }
-  // Pair each track with its original absolute index so onPlay/onRemove keep
-  // working correctly after filtering shrinks the array - and with a key that
-  // survives edits: the song plus which of its copies this is, not its
-  // position, so removing, reordering or advancing moves the rows below
-  // (useListMotion) instead of remounting every one of them.
-  const copies = new Map<string, number>()
-  const upcomingIndexed = upcoming.map((track, i) => {
-    const n = copies.get(track.id) ?? 0
-    copies.set(track.id, n + 1)
-    return { track, i, key: `${track.id}#${n}` }
-  })
-  const filteredUpcoming = query ? upcomingIndexed.filter(({ track }) => matchesQuery(track)) : upcomingIndexed
+  }, [fieldSearch])
+  const upcomingIndexed = useMemo(() => {
+    const copies = new Map<string, number>()
+    return upcoming.map((track, i) => {
+      const n = copies.get(track.id) ?? 0
+      copies.set(track.id, n + 1)
+      return { track, i, key: `${track.id}#${n}` }
+    })
+  }, [upcoming])
+  const filteredUpcoming = useMemo(() => (
+    query ? upcomingIndexed.filter(({ track }) => matchesQuery(track)) : upcomingIndexed
+  ), [query, upcomingIndexed, matchesQuery])
 
   // Drag state (upcoming indices only)
   const [dragIdx, setDragIdx] = useState<number | null>(null)

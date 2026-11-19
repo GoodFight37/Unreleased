@@ -73,6 +73,7 @@ const NOT_APPLICABLE = {
   'downloadEmbed.embedForDownload': 'desktop download with tag embedding; the terminal get command downloads without it',
   'songVersions.isPlayableSong': 'player-side check on top of the version lookups the terminal already has',
   'songVersions.loadVersionEntries': 'Song info list built on the version lookups the terminal already has',
+  'songTruth.songTruth': 'pure catalogue labels and credits derived from supplied fields; no API request',
   'tierlist.albumKey': 'pure string normaliser, no request',
   'tierlist.albumMatcher': 'pure matcher, no request',
   'betaAdminApi.createBetaVersion': 'beta admin upload (Developer mode), not a terminal workflow',
@@ -103,6 +104,7 @@ const NOT_APPLICABLE = {
   'tierlistSync.fullSync': 'syncs the tier list page’s local copy through a React hook; the same endpoints are reached by the tierlist command',
   'tierlistSync.pushChanges': 'as fullSync',
   'catalogSync.initCatalogSync': 'startup hook that runs the same Sync passes as `offline now`',
+  'archivePhotos.*': 'archive photo browser over /files/browse (ls "Others/Photos/...")',
 }
 
 // Bare fetch() calls outside lib/ that are not calls to the app's API.
@@ -122,8 +124,8 @@ const STRAY_OK = {
 }
 
 // Modules that are the plumbing or are the terminal itself, not UI requests:
-// the HTTP primitives, the chat key store (IndexedDB) and the terminal's own file tools.
-const IGNORE_MODULES = new Set(['apiClient', 'chatKeyStore', 'terminalFiles', 'terminalFileTools'])
+// the HTTP primitives, the local IndexedDB caches/stores and the terminal's own file tools.
+const IGNORE_MODULES = new Set(['apiClient', 'apiCache', 'chatKeyStore', 'terminalFiles', 'terminalFileTools'])
 
 const PRIMITIVES = /\b(fetch|apiRequest|authedRequest|apiFetch|multipartRequest|sendXhr|writeVersions)\s*[(<]|new XMLHttpRequest|\bnew WebSocket\b|\brequest\s*[(<]/
 
