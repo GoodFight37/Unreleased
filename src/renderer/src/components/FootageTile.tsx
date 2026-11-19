@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Film, Maximize2, Minimize2, Music2, Pause, Play, RotateCcw, RotateCw, Sparkles, Volume2, VolumeX, X } from 'lucide-react'
-import FootageDvdBouncer, { DVD_LOGO_OPTIONS, normalizeDvdLogo, type DvdLogoId } from './FootageDvdBouncer'
+import { Film, Maximize2, Minimize2, Music2, Pause, Play, RefreshCw, RotateCcw, RotateCw, Sparkles, Volume2, VolumeX, X } from 'lucide-react'
+import StageBouncer, { BOUNCE_SPRITE_OPTIONS, normalizeBounceSprite, type BounceSpriteId } from './StageBouncer'
 import { ls } from '../lib/persist'
 import { saveTrackerSearch } from '../lib/apiTrackerShared'
 import { buildStreamUrl } from '../lib/juicewrldApi'
@@ -16,6 +16,7 @@ import {
 } from '../lib/footageCatalog'
 import { getActiveRadioClient } from '../lib/radioSocketService'
 import { useStore } from '../store/useStore'
+import { useVizStore } from '../store/vizStore'
 
 export interface FootageTileItem {
   path: string
@@ -536,8 +537,14 @@ export function FootagePlayerModal({
   const [chromeVisible, setChromeVisible] = useState(true)
 
   const [dvdEnabled, setDvdEnabled] = useState<boolean>(() => ls.get<boolean>('footageDvdEnabled') ?? true)
-  const [dvdLogo, setDvdLogo] = useState<DvdLogoId>(() => normalizeDvdLogo(ls.get<unknown>('footageDvdLogo')))
+  const [dvdLogo, setDvdLogo] = useState<BounceSpriteId>(() => normalizeBounceSprite(ls.get<unknown>('footageDvdLogo')))
   const [cornerHits, setCornerHits] = useState(0)
+
+  // Pause any background WRLD StageBouncer while this video modal is open so two bouncers never overlap.
+  useEffect(() => {
+    useVizStore.getState().bumpFootageModal(1)
+    return () => useVizStore.getState().bumpFootageModal(-1)
+  }, [])
 
   const wakeChrome = useCallback(() => {
     setChromeVisible(true)
@@ -628,8 +635,8 @@ export function FootagePlayerModal({
   }
 
   const cycleDvdLogo = (): void => {
-    const idx = DVD_LOGO_OPTIONS.findIndex((o) => o.id === dvdLogo)
-    const next = DVD_LOGO_OPTIONS[(idx + 1) % DVD_LOGO_OPTIONS.length].id
+    const idx = BOUNCE_SPRITE_OPTIONS.findIndex((o) => o.id === dvdLogo)
+    const next = BOUNCE_SPRITE_OPTIONS[(idx + 1) % BOUNCE_SPRITE_OPTIONS.length].id
     setDvdLogo(next)
     ls.set('footageDvdLogo', next)
   }
@@ -656,7 +663,7 @@ export function FootagePlayerModal({
 
   const pct = dur > 0 ? Math.min(100, (curTime / dur) * 100) : 0
   const bufPct = dur > 0 ? Math.min(100, (bufEnd / dur) * 100) : 0
-  const currentLogoLabel = DVD_LOGO_OPTIONS.find((o) => o.id === dvdLogo)?.label ?? 'Album Covers'
+  const currentLogoLabel = BOUNCE_SPRITE_OPTIONS.find((o) => o.id === dvdLogo)?.label ?? 'Album Covers'
   const isOneTakeSession = item.family === 'studio' && dur >= 600
   const showChrome = chromeVisible || !vPlaying
 
@@ -668,15 +675,17 @@ export function FootagePlayerModal({
       aria-label={cleanFootageDisplayTitle(item.title)}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <FootageDvdBouncer
+      <StageBouncer
         enabled={dvdEnabled && !isFs}
         logo={dvdLogo}
         reducedMotion={reducedMotion || gameMode}
+        obstacleRef={boxRef}
         onCornerHit={() => setCornerHits((n) => n + 1)}
+        className="fixed inset-0 z-[1] pointer-events-none overflow-hidden select-none"
       />
       <div
         ref={boxRef}
-        className={`coffre-vplay-box ${reducedMotion ? '' : 'animate-in'}`}
+        className={`coffre-vplay-box relative z-[2] ${reducedMotion ? '' : 'animate-in'}`}
         onPointerMove={wakeChrome}
         onPointerLeave={() => { if (vPlaying) setChromeVisible(false) }}
       >
@@ -715,44 +724,70 @@ export function FootagePlayerModal({
           }}
         />
         <div className="coffre-vplay-bar" style={{ opacity: showChrome ? 1 : 0 }}>
-          <span className="coffre-chip font-mono-ui !text-[10px] tracking-[0.14em] uppercase">999 VAULT</span>
-          <FootageFamilyChip family={item.family} />
-          {isOneTakeSession && <span className="coffre-chip">Full Session · One-Take</span>}
+          {/* Quiet non-interactive metadata tags (flat text, no button chrome) */}
+          <span className="pointer-events-none select-none font-mono-ui text-[10px] font-semibold tracking-[0.14em] uppercase text-white/55">
+            999 VAULT
+          </span>
+          <span aria-hidden="true" className="pointer-events-none select-none text-white/25 text-xs">·</span>
+          <span className="pointer-events-none select-none text-[11px] font-medium text-white/65 capitalize">
+            {item.family === 'studio' ? 'Studio' : item.family}
+          </span>
+          {isOneTakeSession && (
+            <>
+              <span aria-hidden="true" className="pointer-events-none select-none text-white/25 text-xs">·</span>
+              <span className="pointer-events-none select-none text-[11px] text-white/55">One-Take</span>
+            </>
+          )}
+          {noSound && (
+            <>
+              <span aria-hidden="true" className="pointer-events-none select-none text-white/25 text-xs">·</span>
+              <span className="pointer-events-none select-none text-[11px] text-amber-300/80" title="The archive file has no audio track">No sound</span>
+            </>
+          )}
+          <span aria-hidden="true" className="w-px h-3.5 bg-white/15 mx-0.5 shrink-0" />
+          <span className="font-semibold text-white truncate max-w-[34%]">{cleanFootageDisplayTitle(item.title)}</span>
           {musicPausedByVideo && (
             <button
               type="button"
-              className="coffre-secondary !py-1 !px-2.5 !text-[11px]"
               onClick={onClose}
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white bg-[rgb(var(--accent-rgb)/0.28)] hover:bg-[rgb(var(--accent-rgb)/0.42)] active:scale-[0.97] border border-[rgb(var(--accent-rgb)/0.7)] shadow-sm transition-all cursor-pointer shrink-0"
+              title="Close video and resume your song"
             >
+              <Play size={10} fill="currentColor" />
               Resume music
             </button>
           )}
-          {noSound && <span className="coffre-chip" title="The archive file has no audio track">No sound</span>}
-          <span className="font-semibold truncate max-w-[40%]">{cleanFootageDisplayTitle(item.title)}</span>
           {!isFs && !reducedMotion && !gameMode && (
             <div className="ml-auto flex items-center gap-1.5">
+              {cornerHits > 0 && (
+                <span className="pointer-events-none select-none font-mono-ui text-[10px] tracking-[0.08em] uppercase text-white/55 px-1.5 tabular-nums" title="Exact corner hits">
+                  Corner ×{cornerHits}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={toggleDvd}
-                title="Toggle bouncing Juice WRLD DVD screensaver around the video"
-                className={`coffre-secondary !py-1 !px-2.5 !text-[11px] ${dvdEnabled ? '!border-[var(--accent)] !text-white' : 'opacity-65'}`}
+                title="Toggle bouncing covers around the video player"
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border transition-all active:scale-[0.97] cursor-pointer ${
+                  dvdEnabled
+                    ? 'bg-[rgb(var(--accent-rgb)/0.26)] hover:bg-[rgb(var(--accent-rgb)/0.38)] border-[var(--accent)] text-white shadow-sm'
+                    : 'bg-white/10 hover:bg-white/18 border-white/25 text-white/75'
+                }`}
               >
-                <Sparkles size={11} /> DVD {dvdEnabled ? 'On' : 'Off'}
+                <span className={`w-1.5 h-1.5 rounded-full ${dvdEnabled ? 'bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]' : 'bg-white/35'}`} />
+                <Sparkles size={11} />
+                Bounce {dvdEnabled ? 'On' : 'Off'}
               </button>
               {dvdEnabled && (
                 <button
                   type="button"
                   onClick={cycleDvdLogo}
-                  title="Switch bouncing Juice WRLD logo"
-                  className="coffre-secondary !py-1 !px-2.5 !text-[11px]"
+                  title="Click to switch bouncing visual (Album Covers, Playing Cover, LND Butterfly)"
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white bg-white/14 hover:bg-white/24 active:scale-[0.97] border border-white/30 shadow-sm transition-all cursor-pointer"
                 >
-                  {currentLogoLabel}
+                  <span>{currentLogoLabel}</span>
+                  <RefreshCw size={10} className="opacity-75" />
                 </button>
-              )}
-              {cornerHits > 0 && (
-                <span className="coffre-chip font-mono-ui !text-[10px]" title="DVD exact corner hits">
-                  Corner ×{cornerHits}
-                </span>
               )}
             </div>
           )}

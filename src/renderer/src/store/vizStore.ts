@@ -105,6 +105,8 @@ interface VizState {
   /** How many pickers are open over the page (not saved). WRLD's visualizer and Edge light keep moving under them
    *  at a lower frame rate, so they don't fight the picker's own screens for the GPU. */
   vizCovered: number
+  /** How many Footage / Studio Session video modals are open (not saved). Pauses WRLD's background StageBouncer so two bouncers never overlap. */
+  footageModalCount: number
   /** The song's official video in place of the visualizer, when the archive has one: off, music videos, or
    *  visualizers and lyric videos too. */
   wrldVideos: MusicVideoChoice
@@ -132,6 +134,8 @@ interface VizState {
   setVizEdgeOverlay: (look: string | null) => void
   /** A picker opened (true) or closed (false). */
   coverViz: (on: boolean) => void
+  /** A Footage / Studio Session video modal opened (+1) or closed (-1). */
+  bumpFootageModal: (delta: 1 | -1) => void
   /** Curated WRLD backdrop style ('mesh' Apple-style fluid cover mesh, 'glass', or 'off'). */
   wrldAtmosphere: WrldBackdropMode
   /** Quick toggle to calm/disable WRLD animations (gaming / reduced distraction) without losing the chosen preset. */
@@ -195,6 +199,7 @@ export const useVizStore = create<VizState>((set) => ({
   wrldFmTab: ls.get('wrldFmTab') === 'chat' ? 'chat' : 'radio',
   wrldFmSound: ls.get<boolean>('wrldFmSound') === true,
   vizCovered: 0,
+  footageModalCount: 0,
   wrldAtmosphere: normalizeWrldBackdrop(ls.get<unknown>('wrldAtmosphere')),
   wrldAnimations: ls.get<boolean>('wrldAnimations') ?? true,
   wrldLyricLook: (() => {
@@ -296,6 +301,7 @@ export const useVizStore = create<VizState>((set) => ({
     return { wrldVideoPicks }
   }),
   setWrldVideoNow: (wrldVideoNow) => set({ wrldVideoNow }),
+  bumpFootageModal: (delta) => set((s) => ({ footageModalCount: Math.max(0, s.footageModalCount + delta) })),
 }))
 
 // Settings usually runs in a pop-out window with its own copy of this store. What it saves arrives here as a storage

@@ -138,6 +138,37 @@ export function getCurrentLineIndex(lines: SyncedLyricLine[], currentTime: numbe
   return low - 1
 }
 
+const SECTION_HEADER_RE = /^\[[^\]]+\]$/
+
+/**
+ * Synthesize estimated line timestamps for plain unsynced lyrics over a track's
+ * duration so Focus and Classic views scroll smoothly even when the API has no
+ * LRC timestamps (matching Cinema / 999 / Cut's auto-paced fallback).
+ */
+export function pacePlainLyrics(rawLyrics: string, duration: number): SyncedLyricLine[] {
+  const raw = rawLyrics
+    .split(/\r?\n|\r/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (!raw.length) return []
+  const withoutHeaders = raw.filter((line) => !SECTION_HEADER_RE.test(line))
+  const lines = withoutHeaders.length > 0 ? withoutHeaders : raw
+  const totalDur = Number.isFinite(duration) && duration > 0 ? duration : lines.length * 3
+  // Gently weight each line by word count so longer verses get a bit more time than short ad-lib lines.
+  const weights = lines.map((line) => {
+    const wordCount = line.split(/\s+/).filter(Boolean).length
+    const clamped = Math.min(Math.max(wordCount / 7, 0.35), 2.2)
+    return 0.65 + 0.35 * clamped
+  })
+  const weightSum = weights.reduce((acc, w) => acc + w, 0) || lines.length
+  let cursor = 0
+  return lines.map((text, i) => {
+    const time = cursor
+    cursor += (weights[i] / weightSum) * totalDur
+    return { time, text }
+  })
+}
+
 /** Ad-libs render at the same size as the line around them, just dimmer.
  *  Applied as `opacity` on the run, which multiplies with whatever opacity the
  *  line already carries (active vs. distant), so it reads as a consistent step

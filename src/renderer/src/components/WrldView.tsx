@@ -4,7 +4,7 @@ import { getFont } from '../lib/fonts'
 import { useAlbumColors } from '../desktop/artColors'
 import { hsbToRgb } from '../desktop/light/engine'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
-import FootageDvdBouncer from './FootageDvdBouncer'
+import StageBouncer from './StageBouncer'
 import SongFootagePill from './SongFootagePill'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
@@ -16,8 +16,9 @@ import { lazyOverlay } from '../lib/lazyView'
 import { ModalOverlay, LockToggle } from './Modal'
 import CoverEditor from './CoverEditor'
 import { useStore, useStorePick } from '../store/useStore'
+import { usePlayheadStore } from '../store/usePlayheadStore'
 import { useShallow } from 'zustand/react/shallow'
-import { getCurrentLineIndex, downloadSyncedLyrics, splitAdLibs, splitColorWords, ADLIB_OPACITY, useLyricsVisible, lyricsLoading } from '../lib/lyrics'
+import { getCurrentLineIndex, pacePlainLyrics, downloadSyncedLyrics, splitAdLibs, splitColorWords, ADLIB_OPACITY, useLyricsVisible, lyricsLoading } from '../lib/lyrics'
 import { formatDuration } from '../lib/format'
 import { setEqAnchor } from '../lib/eqAnchor'
 import { seekAudio, getAudioDuration, usePlayerLoading } from './Player'
@@ -44,7 +45,7 @@ import ContextMenu from './ContextMenu'
 import RadioChatPanel from './RadioChatPanel'
 import RadioFmControls from './RadioFmControls'
 import WrldFmWidget from './WrldFmWidget'
-import { backdropArt, getSkin } from '../lib/skins'
+import { backdropArt, getSkin, type SkinId } from '../lib/skins'
 import WrldVisualizer from './WrldVisualizer'
 import WrldWidgets from './WrldWidgets'
 import LyricStageView from './LyricStageView'
@@ -97,6 +98,57 @@ function WrldPanelLayer({ visible = true, exiting, animateIn, className, childre
       {children}
     </div>
   )
+}
+
+// Local WRLD-only stage themes driven by Album Bounce (Theme sync), so Settings
+// and other windows stay 100% untouched. GB&GR uses a soft misty sky-white look
+// rather than harsh blinding white.
+const BOUNCE_STAGE_PALETTES: Partial<Record<SkinId, {
+  softLight: boolean
+  baseBg: string
+  vars: Record<string, string>
+}>> = {
+  // Only tint local accent so WebGPU glass toolbars stay aligned with the global dark/light glass body (high contrast).
+  '999': {
+    softLight: false,
+    baseBg: '#120609',
+    vars: {
+      '--accent': '#f0404f',
+      '--accent-rgb': '240 64 79',
+    },
+  },
+  gbgr: {
+    softLight: true,
+    baseBg: '#d8e6f5',
+    vars: {
+      '--accent': '#1d6fe0',
+      '--accent-rgb': '29 111 224',
+    },
+  },
+  drfl: {
+    softLight: false,
+    baseBg: '#150a05',
+    vars: {
+      '--accent': '#ff8426',
+      '--accent-rgb': '255 132 38',
+    },
+  },
+  lnd: {
+    softLight: false,
+    baseBg: '#140814',
+    vars: {
+      '--accent': '#e864c0',
+      '--accent-rgb': '232 100 192',
+    },
+  },
+  fd: {
+    softLight: false,
+    baseBg: '#071016',
+    vars: {
+      '--accent': '#4ce4eb',
+      '--accent-rgb': '76 228 235',
+    },
+  },
 }
 
 export default function WrldView(): JSX.Element {
@@ -322,8 +374,26 @@ export default function WrldView(): JSX.Element {
   const hideForViz = wrldWidgets || postOn ? { display: 'none' } : undefined
 
   const videoShown = useVizStore(s => s.wrldVideoShown)
+  const { reducedMotion, gameMode } = useEffectsState()
+  const { wrldAtmosphere, wrldAnimations, wrldCleanView, wrldDvdBouncer, wrldDvdLogo, wrldDvdThemeSync, footageModalOpen } = useVizStore(useShallow(s => ({
+    wrldAtmosphere: s.wrldAtmosphere,
+    wrldAnimations: s.wrldAnimations,
+    wrldCleanView: s.wrldCleanView,
+    wrldDvdBouncer: s.wrldDvdBouncer,
+    wrldDvdLogo: s.wrldDvdLogo,
+    wrldDvdThemeSync: s.wrldDvdThemeSync,
+    footageModalOpen: s.footageModalCount > 0,
+  })))
+  const stageAnimated = wrldAnimations && !reducedMotion && !gameMode && !videoShown && wrldAtmosphere !== 'off'
+  const dvdControlsStage = wrldDvdBouncer && wrldDvdLogo === 'albums' && wrldDvdThemeSync
+  // Ephemeral WRLD-only album theme updated on each Album Bounce impact (never mutates global app theme).
+  const [bouncedAlbumId, setBouncedAlbumId] = useState<SkinId | null>(null)
+  useEffect(() => { if (!dvdControlsStage) setBouncedAlbumId(null) }, [dvdControlsStage])
+  const activeBounceId = dvdControlsStage ? bouncedAlbumId : null
+  const bouncePalette = activeBounceId ? (BOUNCE_STAGE_PALETTES[activeBounceId] ?? null) : null
+  const bouncedIsSoftLight = Boolean(bouncePalette?.softLight)
   const artTextIsDark = useArtTextContrast(artSrc, artError, isDarkSkin, radioFmActive, useThemeBackground ? !isDarkSkin : null)
-  const textIsDark = !videoShown && artTextIsDark
+  const textIsDark = !videoShown && (bouncePalette ? bouncedIsSoftLight : artTextIsDark)
 
   // ── Albums state ─────────────────────────────────────────────────────────────
   // Album objects carry track paths, not full song metadata, so a
@@ -490,22 +560,25 @@ export default function WrldView(): JSX.Element {
     )
   }, [showLyricsColumn])
 
+  const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
+
   // On the theme background these come from the skin's own text vars, so the
   // tab matches the rest of the app (and follows a skin change live) instead
   // of the fixed black/white pair the art treatment picks between. The two
   // faintest steps stay alpha-based - there's no theme var that dim, and
   // fading the primary color keeps them right on any skin.
-  const txtPri   = useThemeBackground ? 'var(--text-primary)'   : textIsDark ? 'rgba(10,8,14,0.92)' : 'rgba(255,255,255,1)'
-  const txtSec   = useThemeBackground ? 'var(--text-secondary)' : textIsDark ? 'rgba(10,8,14,0.78)' : 'rgba(255,255,255,0.88)'
-  const txtTer   = useThemeBackground ? 'var(--text-muted)'     : textIsDark ? 'rgba(10,8,14,0.68)' : 'rgba(255,255,255,0.78)'
-  const actionOnColor = useThemeBackground ? 'var(--accent)' : txtPri
-  const actionOnBg = useThemeBackground ? undefined : (textIsDark ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.18)')
-  const actionIdleColor = textIsDark ? 'rgba(10,8,14,0.58)' : 'rgba(255,255,255,0.62)'
-  const txtFaint = textIsDark ? 'rgba(0,0,0,0.22)'  : 'rgba(255,255,255,0.2)'
+  const usePlainTheme = useThemeBackground && !bouncePalette
+  const txtPri   = usePlainTheme ? 'var(--text-primary)'   : textIsDark ? 'rgba(14,29,52,0.94)' : 'rgba(255,255,255,1)'
+  const txtSec   = usePlainTheme ? 'var(--text-secondary)' : textIsDark ? 'rgba(14,29,52,0.78)' : 'rgba(255,255,255,0.88)'
+  const txtTer   = usePlainTheme ? 'var(--text-muted)'     : textIsDark ? 'rgba(14,29,52,0.66)' : 'rgba(255,255,255,0.78)'
+  const actionOnColor = usePlainTheme ? 'var(--accent)' : txtPri
+  const actionOnBg = usePlainTheme ? undefined : (textIsDark ? 'rgba(14,29,52,0.10)' : 'rgba(255,255,255,0.18)')
+  const actionIdleColor = textIsDark ? 'rgba(14,29,52,0.58)' : 'rgba(255,255,255,0.62)'
+  const txtFaint = textIsDark ? 'rgba(14,29,52,0.22)'  : 'rgba(255,255,255,0.2)'
   // Unplayed part of the progress/volume troughs. It used to be a hardcoded
   // white wash, which is invisible on a light surface - now it follows the
   // same polarity as the text.
-  const trackBg  = textIsDark ? 'rgba(0,0,0,0.15)'  : 'rgba(255,255,255,0.18)'
+  const trackBg  = textIsDark ? 'rgba(14,29,52,0.16)'  : 'rgba(255,255,255,0.18)'
 
   const handleAddToPlaylist = (playlistId: number): void => {
     const songId = currentTrack ? userApi.trackIdToSongId(currentTrack.id) : null
@@ -530,28 +603,16 @@ export default function WrldView(): JSX.Element {
   const { displayTitle, displayArtist, displayAlbum, fmDisabled, noTrack, toggleFm } = useWrldNowPlaying(
     radioFmActive, radioFmIsLive, radioFmNowPlaying, currentTrack,
   )
-  const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
-  const { reducedMotion, gameMode } = useEffectsState()
-  const { wrldAtmosphere, wrldAnimations, wrldCleanView, wrldDvdBouncer, wrldDvdLogo, wrldDvdThemeSync } = useVizStore(useShallow(s => ({
-    wrldAtmosphere: s.wrldAtmosphere,
-    wrldAnimations: s.wrldAnimations,
-    wrldCleanView: s.wrldCleanView,
-    wrldDvdBouncer: s.wrldDvdBouncer,
-    wrldDvdLogo: s.wrldDvdLogo,
-    wrldDvdThemeSync: s.wrldDvdThemeSync,
-  })))
-  const stageAnimated = wrldAnimations && !reducedMotion && !gameMode && !videoShown && wrldAtmosphere !== 'off'
-  const dvdControlsStage = wrldDvdBouncer && wrldDvdLogo === 'albums' && wrldDvdThemeSync
   const stageBackdropArt = useMemo(() => {
-    if (dvdControlsStage) {
-      const themeArt = buildImageUrl(backdropArt(theme, false, artSrc && !artError ? artSrc : null))
+    if (activeBounceId) {
+      const themeArt = buildImageUrl(backdropArt(activeBounceId, false, null))
       if (themeArt) return themeArt
     }
     return artSrc && !artError ? artSrc : null
-  }, [dvdControlsStage, theme, artSrc, artError])
+  }, [activeBounceId, artSrc, artError])
   const stageEra = useMemo(
-    () => resolveWrldEra(stageBackdropArt, dvdControlsStage ? getSkin(theme).name : (displayAlbum ?? null)),
-    [stageBackdropArt, dvdControlsStage, theme, displayAlbum],
+    () => resolveWrldEra(stageBackdropArt, activeBounceId ? getSkin(activeBounceId).name : (displayAlbum ?? null)),
+    [stageBackdropArt, activeBounceId, displayAlbum],
   )
   const titleBeatRef = useRef<HTMLParagraphElement>(null)
   useEffect(() => {
@@ -806,7 +867,12 @@ export default function WrldView(): JSX.Element {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   const inner = (
-    <div ref={pageRef} className="relative flex flex-col md:flex-row flex-1 h-full w-full overflow-hidden [--wrld-player-width:min(440px,46vh)]">
+    <div
+      ref={pageRef}
+      data-wrld-bounce-album={activeBounceId ?? undefined}
+      style={bouncePalette ? (bouncePalette.vars as React.CSSProperties) : undefined}
+      className="relative flex flex-col md:flex-row flex-1 h-full w-full overflow-hidden [--wrld-player-width:min(440px,46vh)]"
+    >
 
       {/* Lets the OS window be dragged from the top of the fullscreen overlay,
           since it now covers the normal draggable title-bar strip underneath. */}
@@ -831,9 +897,14 @@ export default function WrldView(): JSX.Element {
               needs something solid behind it here, because unlike mobile this
               page renders over a still-mounted bgView (App.tsx), so the page
               you came from bled through those corners. */}
-          {/* Post always gets the art/mesh stage under a dark veil, so its white words stay readable on a light cover. */}
-          <div className={`absolute inset-0 z-0 overflow-hidden ${!useThemeBackground && textIsDark && !postOn ? 'bg-[#f4f3f7]' : 'bg-black'}`} style={{ contain: 'strict' }}>
-            {useThemeBackground && !postOn && !dvdControlsStage ? (
+          {/* Post always gets the art/mesh stage under a dark veil unless GB&GR soft-light bounce is active. */}
+          <div
+            className={`absolute inset-0 z-0 overflow-hidden transition-colors duration-500 ${
+              bouncedIsSoftLight ? 'bg-[#d8e6f5]' : (!useThemeBackground && textIsDark && !postOn ? 'bg-[#f4f3f7]' : 'bg-black')
+            }`}
+            style={{ contain: 'strict', ...(bouncePalette ? { backgroundColor: bouncePalette.baseBg } : undefined) }}
+          >
+            {useThemeBackground && !postOn && !activeBounceId ? (
               <div
                 className="absolute inset-0 bg-surface"
                 style={gradientsEnabled ? {
@@ -841,41 +912,55 @@ export default function WrldView(): JSX.Element {
                                      radial-gradient(100% 85% at 0% 100%, rgb(var(--accent-2-rgb, var(--accent-rgb)) / 0.12), transparent 55%)`,
                 } : undefined}
               />
-            ) : wrldAtmosphere === 'glass' && artSrc && !artError ? (
+            ) : wrldAtmosphere === 'glass' && stageBackdropArt ? (
               // Blurred to 60px, so resolution is meaningless here - always the
               // degraded copy, which also gets the backdrop up on the first frame.
-              <FallbackImg key={artSrc} sources={[smallCoverUrl(artSrc), fullCoverUrl(artSrc), artSrc]}
-                className={`${stageAnimated ? 'wrld-drift ' : ''}absolute inset-0 w-full h-full object-cover`}
-                style={{ filter: `blur(60px) brightness(${isDarkSkin ? 0.42 : 0.52}) saturate(1.75)`, willChange: stageAnimated ? 'transform' : undefined }}
-                onError={() => setArtError(true)}
+              <FallbackImg
+                key={stageBackdropArt}
+                sources={[smallCoverUrl(stageBackdropArt), fullCoverUrl(stageBackdropArt), stageBackdropArt]}
+                className={`${stageAnimated ? 'wrld-drift ' : ''}absolute inset-0 w-full h-full object-cover transition-opacity duration-500`}
+                style={{
+                  filter: bouncedIsSoftLight
+                    ? 'blur(64px) brightness(0.92) saturate(1.25)'
+                    : `blur(60px) brightness(${isDarkSkin ? 0.42 : 0.52}) saturate(1.75)`,
+                  willChange: stageAnimated ? 'transform' : undefined,
+                }}
+                onError={() => { if (!activeBounceId) setArtError(true) }}
               />
             ) : (
               <LiquidMeshBackdrop
                 artUrl={stageBackdropArt}
                 eraAsset={stageEra.eraAsset}
                 atmosphere={stageEra.atmosphere}
-                isDark={postOn || !textIsDark}
+                isDark={bouncedIsSoftLight ? false : (postOn || !textIsDark)}
                 playing={playbackActive}
                 animated={stageAnimated && wrldAtmosphere === 'mesh'}
               />
             )}
+            {/* Soft misty veil when GB&GR lands in soft-light bounce mode so text stays calm and never blinding */}
+            {bouncedIsSoftLight && (
+              <div
+                className="absolute inset-0 pointer-events-none transition-opacity duration-500"
+                style={{ background: 'linear-gradient(180deg, rgba(226,238,251,0.58) 0%, rgba(212,229,248,0.46) 55%, rgba(196,219,244,0.62) 100%)' }}
+              />
+            )}
             {/* WRLD archive photo stills intentionally deferred for a dedicated full-res redesign. */}
-            {(!useThemeBackground || postOn) && (
+            {(!useThemeBackground || postOn || Boolean(activeBounceId)) && (
               <>
-                <div className={`absolute inset-0 pointer-events-none ${textIsDark && !postOn ? 'mesh-vignette--light' : 'mesh-vignette'}`} />
+                <div className={`absolute inset-0 pointer-events-none ${bouncedIsSoftLight || (textIsDark && !postOn) ? 'mesh-vignette--light' : 'mesh-vignette'}`} />
                 <div className="app-grain" />
               </>
             )}
-            {postOn && <div className="absolute inset-0 pointer-events-none bg-black/30" />}
-            {wrldDvdBouncer && (
-              <FootageDvdBouncer
-                enabled={wrldDvdBouncer && wrldAnimations}
+            {postOn && !bouncedIsSoftLight && <div className="absolute inset-0 pointer-events-none bg-black/30" />}
+            {wrldDvdBouncer && !footageModalOpen && (
+              <StageBouncer
+                enabled={wrldDvdBouncer && wrldAnimations && !footageModalOpen}
                 logo={wrldDvdLogo}
                 reducedMotion={reducedMotion || gameMode}
                 playingCoverUrl={artSrc && !artError ? artSrc : null}
                 themeSync={wrldDvdThemeSync}
                 onBounceAlbumChange={(albumId) => {
-                  useStore.getState().setTheme(albumId)
+                  setBouncedAlbumId(albumId)
                 }}
                 className="absolute inset-0 z-[5] pointer-events-none overflow-hidden select-none opacity-90"
               />
@@ -885,8 +970,8 @@ export default function WrldView(): JSX.Element {
           <WrldVisualizer
               rootRef={pageRef}
               fullscreen={fullscreen}
-              artUrl={artSrc && !artError ? artSrc : null}
-              albumName={displayAlbum ?? null}
+              artUrl={stageBackdropArt}
+              albumName={activeBounceId ? getSkin(activeBounceId).name : (displayAlbum ?? null)}
               trackKey={radioFmActive ? (radioFmNowPlaying?.title ?? null) : (currentTrack?.id ?? null)}
               albumKey={displayAlbum ?? null}
               // The held value, not !!rawLyrics: the toolbar derives its own
@@ -903,7 +988,14 @@ export default function WrldView(): JSX.Element {
           {wrldWidgets && !postOn && <WrldWidgets />}
           {wrldWidgets && !postOn && <WrldFmWidget />}
           {postOn && (
-            <WrldPostFrame rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} currentTrack={currentTrack} artUrl={artSrc && !artError ? artSrc : null} />
+            <WrldPostFrame
+              rawLyrics={rawLyrics}
+              isSynced={isSynced}
+              syncedLines={syncedLines}
+              currentTrack={currentTrack}
+              artUrl={stageBackdropArt}
+              lightBg={bouncedIsSoftLight}
+            />
           )}
 
           {/* Mobile layout */}
@@ -989,7 +1081,7 @@ export default function WrldView(): JSX.Element {
                   ? FmRadioPanel()
                   : radioFmActive && fmTab === 'chat'
                   ? <RadioChatPanel />
-                  : <LyricsPanel rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} radioFmActive={radioFmActive} currentTrack={currentTrack} isEditor={isEditor} txtPri={txtPri} txtSec={txtSec} txtTer={txtTer} txtFaint={txtFaint} artUrl={artSrc} lightBg={textIsDark} />}
+                  : <LyricsPanel rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} radioFmActive={radioFmActive} currentTrack={currentTrack} isEditor={isEditor} txtPri={txtPri} txtSec={txtSec} txtTer={txtTer} txtFaint={txtFaint} artUrl={stageBackdropArt} lightBg={textIsDark} />}
               </div>
             )}
 
@@ -1511,7 +1603,7 @@ export default function WrldView(): JSX.Element {
               )}
               {lyricsPresence.mounted && (
                 <WrldPanelLayer exiting={lyricsPresence.exiting} animateIn={viewCrossfade} className="absolute inset-0 flex flex-col">
-                  <LyricsPanel padded rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} radioFmActive={radioFmActive} currentTrack={currentTrack} isEditor={isEditor} txtPri={txtPri} txtSec={txtSec} txtTer={txtTer} txtFaint={txtFaint} artUrl={artSrc} lightBg={textIsDark} />
+                  <LyricsPanel padded rawLyrics={rawLyrics} isSynced={isSynced} syncedLines={syncedLines} radioFmActive={radioFmActive} currentTrack={currentTrack} isEditor={isEditor} txtPri={txtPri} txtSec={txtSec} txtTer={txtTer} txtFaint={txtFaint} artUrl={stageBackdropArt} lightBg={textIsDark} />
                 </WrldPanelLayer>
               )}
             </div>
@@ -2465,6 +2557,22 @@ const LyricsPanel = memo(function LyricsPanel({
     return playingSeconds()
   }, [])
 
+  // When a track has plain lyrics without LRC timestamps (e.g. Glo' Limit and other
+  // unreleased archive songs), auto-pace the lines across the track duration so
+  // Focus and Classic scroll smoothly just like Cinema / 999 / Cut.
+  const playheadDuration = usePlayheadStore((s) => s.duration)
+  const fmDurationMs = useStore((s) => (radioFmActive ? (s.radioFmNowPlaying?.duration_ms ?? 0) : 0))
+  const effectiveDuration = radioFmActive
+    ? fmDurationMs / 1000
+    : (playheadDuration > 0 ? playheadDuration : (currentTrack?.duration || getAudioDuration() || 0))
+  const pacedLines = useMemo(
+    () => (!isSynced && rawLyrics ? pacePlainLyrics(rawLyrics, effectiveDuration) : []),
+    [isSynced, rawLyrics, effectiveDuration],
+  )
+  const activeLines = isSynced && syncedLines.length > 0 ? syncedLines : pacedLines
+  const hasTimeline = activeLines.length > 0
+  const effectiveOffset = isSynced ? lyricsOffset : 0
+
   // Driven by requestAnimationFrame against the LIVE audio.currentTime rather
   // than the Zustand-stored value (which only updates on the native
   // 'timeupdate' event, ~4x/sec) - that throttling is what made the active
@@ -2476,8 +2584,8 @@ const LyricsPanel = memo(function LyricsPanel({
   // before the next rAf tick corrects it. That produced a visible "jump to
   // the top, then glide back down" flash on every fullscreen toggle.
   const [currentLineIdx, setCurrentLineIdx] = useState(() =>
-    isSynced && syncedLines.length > 0
-      ? getCurrentLineIndex(syncedLines, getLyricTime() - lyricsOffset)
+    hasTimeline
+      ? getCurrentLineIndex(activeLines, getLyricTime() - effectiveOffset)
       : -1
   )
   const lineIdxRef = useRef(currentLineIdx)
@@ -2486,10 +2594,10 @@ const LyricsPanel = memo(function LyricsPanel({
   // wide window), and then nothing follows the song here.
   const [vpHalf, setVpHalf] = useState(0)
   const inSight = vpHalf > 0
-  const classicList = !!rawLyrics && isSynced && syncedLines.length > 0 && (lyricLook === 'classic' || lyricLook === 'focus' || !currentTrack)
+  const classicList = !!rawLyrics && hasTimeline && (lyricLook === 'classic' || lyricLook === 'focus' || !currentTrack)
 
   useEffect(() => {
-    if (!isSynced || syncedLines.length === 0) {
+    if (!hasTimeline) {
       setCurrentLineIdx(-1)
       lineIdxRef.current = -1
       return
@@ -2498,7 +2606,7 @@ const LyricsPanel = memo(function LyricsPanel({
     let raf = 0
     const tick = (): void => {
       if (document.hidden) { raf = 0; return }
-      const idx = getCurrentLineIndex(syncedLines, getLyricTime() - lyricsOffset)
+      const idx = getCurrentLineIndex(activeLines, getLyricTime() - effectiveOffset)
       if (idx !== lineIdxRef.current) {
         lineIdxRef.current = idx
         setCurrentLineIdx(idx)
@@ -2515,7 +2623,7 @@ const LyricsPanel = memo(function LyricsPanel({
       document.removeEventListener('visibilitychange', onVis)
       cancelAnimationFrame(raf)
     }
-  }, [isSynced, syncedLines, lyricsOffset, inSight, lyricsPaused, getLyricTime])
+  }, [hasTimeline, activeLines, effectiveOffset, inSight, lyricsPaused, getLyricTime])
 
   // Center the active line by translating the whole lyric column rather than
   // using native `scrollIntoView({behavior:'smooth'})`. Native smooth-scroll
@@ -2542,7 +2650,7 @@ const LyricsPanel = memo(function LyricsPanel({
   }
 
   const handleWheel = (e: React.WheelEvent): void => {
-    if (!isSynced || syncedLines.length === 0) return
+    if (!hasTimeline) return
     e.preventDefault()
     const base = autoFollow ? translateY : manualTranslateY
     setManualTranslateY(clampTranslate(base + e.deltaY))
@@ -2550,7 +2658,7 @@ const LyricsPanel = memo(function LyricsPanel({
   }
 
   const handleTouchStart = (e: React.TouchEvent): void => {
-    if (!isSynced || syncedLines.length === 0) return
+    if (!hasTimeline) return
     dragRef.current = { startY: e.touches[0].clientY, startTranslate: autoFollow ? translateY : manualTranslateY }
   }
 
@@ -2571,7 +2679,7 @@ const LyricsPanel = memo(function LyricsPanel({
     const ro = new ResizeObserver(measure)
     ro.observe(vp)
     return () => ro.disconnect()
-  }, [classicList, syncedLines.length])
+  }, [classicList, activeLines.length])
 
   useLayoutEffect(() => {
     if (currentLineIdx < 0) { setTranslateY(0); return }
@@ -2642,7 +2750,7 @@ const LyricsPanel = memo(function LyricsPanel({
         trackId={currentTrack.id}
         title={currentTrack.title}
         artist={currentTrack.artist}
-        duration={currentTrack.duration}
+        duration={effectiveDuration || currentTrack.duration}
         rawLyrics={rawLyrics}
         isSynced={isSynced}
         syncedLines={syncedLines}
@@ -2652,11 +2760,11 @@ const LyricsPanel = memo(function LyricsPanel({
     )
   }
 
-  if (lyricLook === 'focus' && isSynced && syncedLines.length > 0) {
-    const activeLine = currentLineIdx >= 0 ? syncedLines[currentLineIdx] : null
+  if (lyricLook === 'focus' && hasTimeline) {
+    const activeLine = currentLineIdx >= 0 ? activeLines[currentLineIdx] : null
     const nextLine = currentLineIdx >= 0
-      ? syncedLines[currentLineIdx + 1] ?? null
-      : syncedLines[0] ?? null
+      ? activeLines[currentLineIdx + 1] ?? null
+      : activeLines[0] ?? null
     const focusAlignCls = lyricsAlign === 'left' ? 'items-start text-left' : 'items-center text-center'
     return (
       <div
@@ -2676,11 +2784,13 @@ const LyricsPanel = memo(function LyricsPanel({
               lineHeight: 1.16,
               letterSpacing: '-0.025em',
               color: activeColor,
-              textShadow: coverTint && !isLightLyrics ? `0 8px 34px rgb(${coverTint.primary.rgb} / 0.34)` : undefined,
+              textShadow: isLightLyrics
+                ? '0 2px 18px rgba(255,255,255,0.48)'
+                : (coverTint ? `0 8px 34px rgb(${coverTint.primary.rgb} / 0.34)` : undefined),
             }}
           >
             {activeLine.words && activeLine.words.length > 0 ? (
-              <WordLyricLine words={activeLine.words} active getTime={getLyricTime} offset={lyricsOffset} fill />
+              <WordLyricLine words={activeLine.words} active getTime={getLyricTime} offset={effectiveOffset} fill />
             ) : (
               splitAdLibs(activeLine.text).map((seg, si) => (
                 <span
@@ -2702,8 +2812,8 @@ const LyricsPanel = memo(function LyricsPanel({
         {nextLine && (
           <button
             type="button"
-            onClick={() => { if (!radioFmActive) seekAudio(Math.max(0, nextLine.time + lyricsOffset)) }}
-            className="max-w-3xl transition-opacity duration-200 opacity-35 hover:opacity-65 cursor-pointer"
+            onClick={() => { if (!radioFmActive) seekAudio(Math.max(0, nextLine.time + effectiveOffset)) }}
+            className={`max-w-3xl transition-opacity duration-200 cursor-pointer ${isLightLyrics ? 'opacity-70 hover:opacity-95' : 'opacity-35 hover:opacity-65'}`}
             style={{
               fontFamily: 'var(--font-lyrics)',
               fontSize: `calc(clamp(16px, 1.8vw, 24px) * ${Math.min(Math.max(lyricsScale, 0.8), 1.3)})`,
@@ -2720,7 +2830,7 @@ const LyricsPanel = memo(function LyricsPanel({
     )
   }
 
-  if (isSynced && syncedLines.length > 0) {
+  if (hasTimeline) {
     // Edge fade is done with a mask on the lines themselves, not an opaque
     // overlay - painting flat rgba(0,0,0,0.55) bands on top added darkness
     // confined to this panel's box, creating a visible "aura" rectangle that
@@ -2753,7 +2863,7 @@ const LyricsPanel = memo(function LyricsPanel({
         >
           {/* Half-viewport spacers so the first and last lines can sit at center. */}
           <div style={{ height: vpHalf }} />
-          {syncedLines.map((line, i) => {
+          {activeLines.map((line, i) => {
             if (!line.text) return <div key={i} className="h-3" />
             const isActive = i === currentLineIdx
             const dist     = Math.abs(i - currentLineIdx)
@@ -2775,10 +2885,10 @@ const LyricsPanel = memo(function LyricsPanel({
                 key={i}
                 ref={isActive ? activeRef : undefined}
                 data-viz-active={isActive || undefined}
-                // A line is active once currentTime - lyricsOffset reaches its
+                // A line is active once currentTime - effectiveOffset reaches its
                 // time, so that's where to land - seeking to the bare time
                 // left the previous line highlighted for `offset` seconds.
-                onClick={() => { if (!radioFmActive) seekAudio(Math.max(0, line.time + lyricsOffset)) }}
+                onClick={() => { if (!radioFmActive) seekAudio(Math.max(0, line.time + effectiveOffset)) }}
                 aria-current={isActive ? 'true' : undefined}
                 className={`wrld-lyric-line ${radioFmActive ? 'cursor-default' : 'cursor-pointer'} select-none ${lyricsAlign === 'center' ? 'origin-center mx-auto text-center' : 'origin-left'}`}
                 style={{
@@ -2811,8 +2921,10 @@ const LyricsPanel = memo(function LyricsPanel({
                   filter:     (!isActive && lyricsBlur) ? `blur(${(0.6 * lyricsBlurAmount).toFixed(2)}px)` : 'none',
                   transform:  `scale(${scale})`,
                   willChange: 'transform, opacity',
-                  transition: 'opacity 0.4s cubic-bezier(0.4,0,0.2,1), color 0.4s cubic-bezier(0.4,0,0.2,1), transform 0.4s cubic-bezier(0.4,0,0.2,1)',
-                  textShadow: isActive ? '0 0 30px rgba(255,255,255,0.12)' : 'none',
+                  transition: 'opacity 0.28s cubic-bezier(0.22,1,0.36,1), color 0.22s cubic-bezier(0.22,1,0.36,1), transform 0.32s cubic-bezier(0.22,1,0.36,1)',
+                  textShadow: isActive
+                    ? (isLightLyrics ? '0 1px 18px rgba(255,255,255,0.48)' : '0 0 30px rgba(255,255,255,0.12)')
+                    : 'none',
                 }}
               >
                 {line.words ? (
@@ -2872,14 +2984,16 @@ const LyricsPanel = memo(function LyricsPanel({
 // it. Quiet: one line, Serif, lots of air. 999: the fisheye as it is. Story crops the same frame to 9:16.
 
 const INK_WHITE = '255 255 255'
+const INK_DARK = '14 29 52'
 const INK_YELLOW = '255 214 10'
 
-const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedLines, currentTrack, artUrl }: {
+const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedLines, currentTrack, artUrl, lightBg = false }: {
   rawLyrics: string | null
   isSynced: boolean
   syncedLines: SyncedLyricLine[]
   currentTrack: Track | null
   artUrl: string | null
+  lightBg?: boolean
 }): JSX.Element {
   const { wrldLyricLook, ink, postFont } = useVizStore(useShallow(s => ({
     wrldLyricLook: s.wrldLyricLook, ink: s.wrldInk, postFont: s.wrldPostFont,
@@ -2889,7 +3003,7 @@ const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedL
   const stack = postFont ? getFont(postFont).stack : undefined
 
   const yellowOn = ink === 'yellow'
-  const inkRgb = yellowOn ? INK_YELLOW : INK_WHITE
+  const inkRgb = yellowOn ? (lightBg ? '164 102 0' : INK_YELLOW) : (lightBg ? INK_DARK : INK_WHITE)
   const inkColor = `rgb(${inkRgb})`
   const inkStyle = {
     color: inkColor,
@@ -2915,7 +3029,7 @@ const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedL
             isSynced={isSynced}
             syncedLines={syncedLines}
             artUrl={artUrl}
-            lightBg={false}
+            lightBg={lightBg}
             face={stack}
           />
         </div>
@@ -2930,11 +3044,11 @@ const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedL
             currentTrack={currentTrack}
             isEditor={false}
             txtPri={inkColor}
-            txtSec="rgba(255,255,255,0.42)"
-            txtTer="rgba(255,255,255,0.34)"
-            txtFaint="rgba(255,255,255,0.22)"
+            txtSec={lightBg ? 'rgba(14,29,52,0.72)' : 'rgba(255,255,255,0.42)'}
+            txtTer={lightBg ? 'rgba(14,29,52,0.58)' : 'rgba(255,255,255,0.34)'}
+            txtFaint={lightBg ? 'rgba(14,29,52,0.28)' : 'rgba(255,255,255,0.22)'}
             artUrl={artUrl}
-            lightBg={false}
+            lightBg={lightBg}
             overrideActiveColor={yellowOn ? inkColor : null}
           />
         </div>

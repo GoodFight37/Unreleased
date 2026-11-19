@@ -14,7 +14,7 @@ import { hasEscapeLayer, useEscapeToClose } from '../hooks/useEscapeToClose'
 import { useStore } from '../store/useStore'
 import { useVizStore, useWrldEdgeLook } from '../store/vizStore'
 import VizControls, { Toggle } from './VizControls'
-import { DVD_LOGO_OPTIONS } from './FootageDvdBouncer'
+import { BOUNCE_SPRITE_OPTIONS } from './StageBouncer'
 import WrldEdgeLight from './WrldEdgeLight'
 import WrldMusicVideo from './WrldMusicVideo'
 import LyricsControls from './LyricsControls'
@@ -446,7 +446,7 @@ export default function WrldVisualizer({
         return
       }
       const combo = eventToCombo(e)
-      if (combo === 'KeyC') {
+      if (combo === 'C') {
         const next = !useVizStore.getState().wrldCleanView
         useVizStore.getState().setWrldCleanView(next)
         setCleanPeek(false)
@@ -457,6 +457,8 @@ export default function WrldVisualizer({
           cleanArmedAt.current = performance.now() + 700
           overToolbar.current = false
           ;(document.activeElement as HTMLElement | null)?.blur?.()
+        } else {
+          wake()
         }
         announce(next ? 'Clean stage' : 'Controls shown')
         e.preventDefault()
@@ -625,26 +627,26 @@ export default function WrldVisualizer({
             onClick={() => {
               const next = !wrldDvdBouncer
               setWrldDvdBouncer(next)
-              announce(next ? 'DVD 999 on' : 'DVD 999 off')
+              announce(next ? 'Stage Bounce on' : 'Stage Bounce off')
             }}
             aria-pressed={wrldDvdBouncer}
-            title={wrldDvdBouncer ? 'Hide floating Album Covers / Juice WRLD DVD' : 'Show floating Album Covers / Juice WRLD DVD'}
+            title={wrldDvdBouncer ? 'Hide bouncing covers on the stage' : 'Show bouncing covers on the stage'}
           >
-            DVD 999
+            Bounce
           </button>
           {wrldDvdBouncer && (
             <button
               type="button"
               className={`h-9 px-2.5 shrink-0 rounded-[10px] text-[11px] font-medium transition-colors ${toolIdle}`}
               onClick={() => {
-                const idx = DVD_LOGO_OPTIONS.findIndex((o) => o.id === wrldDvdLogo)
-                const next = DVD_LOGO_OPTIONS[(idx + 1) % DVD_LOGO_OPTIONS.length]
+                const idx = BOUNCE_SPRITE_OPTIONS.findIndex((o) => o.id === wrldDvdLogo)
+                const next = BOUNCE_SPRITE_OPTIONS[(idx + 1) % BOUNCE_SPRITE_OPTIONS.length]
                 setWrldDvdLogo(next.id)
-                announce(`DVD: ${next.label}`)
+                announce(`Bounce: ${next.label}`)
               }}
-              title="Switch bouncing DVD style (Album Covers, Playing Cover, LND Butterfly)"
+              title="Switch bouncing visual (Album Covers, Playing Cover, LND Butterfly)"
             >
-              {DVD_LOGO_OPTIONS.find((o) => o.id === wrldDvdLogo)?.label ?? 'Album Covers'}
+              {BOUNCE_SPRITE_OPTIONS.find((o) => o.id === wrldDvdLogo)?.label ?? 'Album Covers'}
             </button>
           )}
           {wrldDvdBouncer && wrldDvdLogo === 'albums' && (
@@ -812,6 +814,8 @@ export default function WrldVisualizer({
               cleanArmedAt.current = performance.now() + 700
               overToolbar.current = false
               ;(document.activeElement as HTMLElement | null)?.blur?.()
+            } else {
+              wake()
             }
             announce(next ? 'Clean stage' : 'Controls shown')
           }}
@@ -983,14 +987,14 @@ export default function WrldVisualizer({
                   onClick={() => {
                     const next = !wrldDvdBouncer
                     setWrldDvdBouncer(next)
-                    announce(next ? 'DVD 999 on' : 'DVD 999 off')
+                    announce(next ? 'Stage Bounce on' : 'Stage Bounce off')
                   }}
                 />
               </div>
               {wrldDvdBouncer && (
                 <>
                   <div className="flex flex-wrap gap-1.5 mt-2.5">
-                    {DVD_LOGO_OPTIONS.map((opt) => (
+                    {BOUNCE_SPRITE_OPTIONS.map((opt) => (
                       <button
                         key={opt.id}
                         type="button"
@@ -1009,9 +1013,9 @@ export default function WrldVisualizer({
                   {wrldDvdLogo === 'albums' && (
                     <div className="flex items-center justify-between gap-3 mt-3 pt-2.5 border-t border-[var(--border)]/60">
                       <div className="min-w-0">
-                        <div className="text-[11px] font-semibold text-text-primary leading-tight">Sync Ambience theme</div>
+                        <div className="text-[11px] font-semibold text-text-primary leading-tight">Sync WRLD stage theme</div>
                         <div className="text-[10px] text-text-muted leading-tight mt-0.5">
-                          {wrldDvdThemeSync ? 'Every bounce switches the screen theme' : 'Bounces freely without changing theme'}
+                          {wrldDvdThemeSync ? 'Every bounce shifts WRLD stage only (keeps Settings untouched)' : 'Bounces freely without changing the stage'}
                         </div>
                       </div>
                       <Toggle

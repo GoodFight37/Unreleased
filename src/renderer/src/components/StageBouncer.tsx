@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { getSkin, type SkinId } from '../lib/skins'
 import { buildImageUrl } from '../lib/juicewrldApi'
 import { listenToMeter } from '../desktop/meter'
 
-export type DvdLogoId = 'albums' | 'cover' | 'butterfly'
+export type BounceSpriteId = 'albums' | 'cover' | 'butterfly'
+export type DvdLogoId = BounceSpriteId
 
-export const DVD_LOGO_OPTIONS: ReadonlyArray<{ id: DvdLogoId; label: string }> = [
+export const BOUNCE_SPRITE_OPTIONS: ReadonlyArray<{ id: BounceSpriteId; label: string }> = [
   { id: 'albums', label: 'Album Covers' },
   { id: 'cover', label: 'Playing Cover' },
   { id: 'butterfly', label: 'LND Butterfly' },
 ]
 
-export function normalizeDvdLogo(value: unknown): DvdLogoId {
+export const DVD_LOGO_OPTIONS = BOUNCE_SPRITE_OPTIONS
+
+export function normalizeBounceSprite(value: unknown): BounceSpriteId {
   return value === 'albums' || value === 'cover' || value === 'butterfly' ? value : 'albums'
 }
+
+export const normalizeDvdLogo = normalizeBounceSprite
 
 interface AlbumBounceItem {
   id: SkinId
@@ -43,10 +48,18 @@ const ALBUM_ITEMS: ReadonlyArray<AlbumBounceItem> = ALBUM_BOUNCE_SPECS.map(({ id
 const ALBUM_BOX = 108
 const BUTTERFLY_BOX = 94
 const CORNER_TOLERANCE = 32
+const OBSTACLE_PAD = 8
 const TRAIL_COUNT = 6
 const SPARK_COUNT = 8
 
-type EdgeSide = 'left' | 'right' | 'top' | 'bottom'
+type EdgeSide = 'left' | 'right' | 'top' | 'bottom' | 'obstacle'
+
+interface ObstacleRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
 
 interface ImpactWave {
   id: number
@@ -179,25 +192,67 @@ function LndButterflyGraphic({ color }: { color: string }): JSX.Element {
   )
 }
 
+function measureObstacle(host: HTMLElement, obstacle: HTMLElement | null | undefined, size: number): ObstacleRect | null {
+  if (!obstacle) return null
+  const hr = host.getBoundingClientRect()
+  const or = obstacle.getBoundingClientRect()
+  if (or.width < 40 || or.height < 40 || hr.width <= 0 || hr.height <= 0) return null
+  const rect: ObstacleRect = {
+    left: or.left - hr.left - OBSTACLE_PAD,
+    top: or.top - hr.top - OBSTACLE_PAD,
+    right: or.right - hr.left + OBSTACLE_PAD,
+    bottom: or.bottom - hr.top + OBSTACLE_PAD,
+  }
+  // Only collide when at least one corridor around the player box fits the bouncing sprite.
+  const hasCorridor =
+    rect.left >= size + 12 ||
+    hr.width - rect.right >= size + 12 ||
+    rect.top >= size + 12 ||
+    hr.height - rect.bottom >= size + 12
+  return hasCorridor ? rect : null
+}
+
+function pickSpawnOutside(hostW: number, hostH: number, size: number, obs: ObstacleRect | null): { x: number; y: number } {
+  const maxX = Math.max(0, hostW - size)
+  const maxY = Math.max(0, hostH - size)
+  if (!obs) {
+    return {
+      x: Math.min(maxX, 48 + Math.random() * Math.max(40, hostW * 0.35)),
+      y: Math.min(maxY, 48 + Math.random() * Math.max(40, hostH * 0.3)),
+    }
+  }
+  const corridors: Array<{ x: number; y: number; weight: number }> = []
+  if (obs.left >= size + 16) corridors.push({ x: Math.max(12, (obs.left - size) * 0.5), y: Math.min(maxY, 28 + Math.random() * Math.max(20, maxY * 0.6)), weight: obs.left })
+  if (hostW - obs.right >= size + 16) corridors.push({ x: Math.min(maxX, obs.right + (hostW - obs.right - size) * 0.5), y: Math.min(maxY, 28 + Math.random() * Math.max(20, maxY * 0.6)), weight: hostW - obs.right })
+  if (obs.top >= size + 16) corridors.push({ x: Math.min(maxX, 28 + Math.random() * Math.max(20, maxX * 0.6)), y: Math.max(12, (obs.top - size) * 0.5), weight: obs.top })
+  if (hostH - obs.bottom >= size + 16) corridors.push({ x: Math.min(maxX, 28 + Math.random() * Math.max(20, maxX * 0.6)), y: Math.min(maxY, obs.bottom + (hostH - obs.bottom - size) * 0.5), weight: hostH - obs.bottom })
+  if (corridors.length === 0) return { x: 16, y: 16 }
+  corridors.sort((a, b) => b.weight - a.weight)
+  return { x: corridors[0].x, y: corridors[0].y }
+}
+
 /** Kinetic 60-120fps Album Covers, Playing Cover & LND Butterfly bouncer with 2nd-order elastic spring physics,
- *  3D flip/banking, bass-reactive pulse, motion trail, spark bursts, and optional live Ambience theme sync. */
-export default function FootageDvdBouncer({
+ *  3D flip/banking, bass-reactive pulse, motion trail, spark bursts, obstacle rebounds, and optional local WRLD theme sync. */
+export default function StageBouncer({
   enabled,
   logo,
   reducedMotion,
   playingCoverUrl,
   themeSync = false,
+  obstacleRef,
   onCornerHit,
   onBounceAlbumChange,
   className = 'fixed inset-0 z-0 pointer-events-none overflow-hidden select-none',
 }: {
   enabled: boolean
-  logo: DvdLogoId
+  logo: BounceSpriteId
   reducedMotion: boolean
   /** Current track cover art, used in 'cover' mode (falls back to album covers if absent). */
   playingCoverUrl?: string | null
-  /** When true in Album Covers mode, every wall hit immediately updates the Ambience theme. */
+  /** When true in Album Covers mode, every wall hit immediately updates the local WRLD stage theme. */
   themeSync?: boolean
+  /** Optional bounding element (such as a video player card) the sprite physically bounces off. */
+  obstacleRef?: RefObject<HTMLElement | null>
   onCornerHit?: () => void
   /** Fires on every wall bounce in Album Covers mode when themeSync is enabled. */
   onBounceAlbumChange?: (albumId: SkinId, albumName: string, isCorner: boolean) => void
@@ -213,8 +268,10 @@ export default function FootageDvdBouncer({
   onBounceAlbumChangeRef.current = onBounceAlbumChange
   const themeSyncRef = useRef(themeSync)
   themeSyncRef.current = themeSync
-  const safeLogo = normalizeDvdLogo(logo)
-  const logoRef = useRef<DvdLogoId>(safeLogo)
+  const obstacleRefLatest = useRef(obstacleRef)
+  obstacleRefLatest.current = obstacleRef
+  const safeLogo = normalizeBounceSprite(logo)
+  const logoRef = useRef<BounceSpriteId>(safeLogo)
   logoRef.current = safeLogo
 
   const [albumIdx, setAlbumIdx] = useState(0)
@@ -248,8 +305,12 @@ export default function FootageDvdBouncer({
       audioBeat = Math.max(audioBeat, punch)
     })
 
-    let x = 48 + Math.random() * Math.max(40, host.clientWidth * 0.35)
-    let y = 48 + Math.random() * Math.max(40, host.clientHeight * 0.3)
+    let cachedObstacle = measureObstacle(host, obstacleRefLatest.current?.current, boxSizeRef.current)
+    let obstacleCheckTimer = 0
+    const spawn = pickSpawnOutside(host.clientWidth, host.clientHeight, boxSizeRef.current, cachedObstacle)
+    let x = spawn.x
+    let y = spawn.y
+
     // Lively 120fps kinetic cruise speed (~260 px/s diagonal) with post-bounce speed burst
     const baseVx = 215
     const baseVy = 172
@@ -330,6 +391,13 @@ export default function FootageDvdBouncer({
       const maxX = Math.max(0, host.clientWidth - size)
       const maxY = Math.max(0, host.clientHeight - size)
 
+      // Refresh obstacle bounds every ~250ms (catches modal open transition, video metadata resize, window resize)
+      obstacleCheckTimer += dt
+      if (obstacleCheckTimer >= 0.25) {
+        obstacleCheckTimer = 0
+        cachedObstacle = measureObstacle(host, obstacleRefLatest.current?.current, size)
+      }
+
       x += dirX * baseVx * speedBoost * dt
       y += dirY * baseVy * speedBoost * dt
 
@@ -337,11 +405,70 @@ export default function FootageDvdBouncer({
       let hitY = false
       let hitLeft = false
       let hitTop = false
-      if (x <= 0) { x = 0; dirX = 1; hitX = true; hitLeft = true }
-      else if (x >= maxX) { x = maxX; dirX = -1; hitX = true }
+      let hitObstacle = false
+      let impactCx: number | null = null
+      let impactCy: number | null = null
+      let impactNx = 0
+      let impactNy = 0
 
-      if (y <= 0) { y = 0; dirY = 1; hitY = true; hitTop = true }
-      else if (y >= maxY) { y = maxY; dirY = -1; hitY = true }
+      if (x <= 0) { x = 0; dirX = 1; hitX = true; hitLeft = true; impactNx = 1 }
+      else if (x >= maxX) { x = maxX; dirX = -1; hitX = true; impactNx = -1 }
+
+      if (y <= 0) { y = 0; dirY = 1; hitY = true; hitTop = true; impactNy = 1 }
+      else if (y >= maxY) { y = maxY; dirY = -1; hitY = true; impactNy = -1 }
+
+      // 2D AABB rebound against optional obstacle (e.g. Studio Session / Video player box)
+      if (cachedObstacle) {
+        const obs = cachedObstacle
+        const overlapsX = x + size > obs.left && x < obs.right
+        const overlapsY = y + size > obs.top && y < obs.bottom
+        if (overlapsX && overlapsY) {
+          const penLeft = (x + size) - obs.left
+          const penRight = obs.right - x
+          const penTop = (y + size) - obs.top
+          const penBottom = obs.bottom - y
+
+          // Prefer push-outs that stay inside the stage viewport
+          const scoreLeft = obs.left - size >= 0 ? penLeft : penLeft + 10000
+          const scoreRight = obs.right <= maxX ? penRight : penRight + 10000
+          const scoreTop = obs.top - size >= 0 ? penTop : penTop + 10000
+          const scoreBottom = obs.bottom <= maxY ? penBottom : penBottom + 10000
+
+          const bestX = Math.min(scoreLeft, scoreRight)
+          const bestY = Math.min(scoreTop, scoreBottom)
+          const resolveBoth = Math.abs(bestX - bestY) <= 14
+
+          hitObstacle = true
+          if (resolveBoth || bestX <= bestY) {
+            if (scoreLeft <= scoreRight) {
+              x = Math.max(0, obs.left - size)
+              dirX = -1
+              impactCx = obs.left
+              impactNx = -1
+            } else {
+              x = Math.min(maxX, obs.right)
+              dirX = 1
+              impactCx = obs.right
+              impactNx = 1
+            }
+            hitX = true
+          }
+          if (resolveBoth || bestY < bestX) {
+            if (scoreTop <= scoreBottom) {
+              y = Math.max(0, obs.top - size)
+              dirY = -1
+              impactCy = obs.top
+              impactNy = -1
+            } else {
+              y = Math.min(maxY, obs.bottom)
+              dirY = 1
+              impactCy = obs.bottom
+              impactNy = 1
+            }
+            hitY = true
+          }
+        }
+      }
 
       if (hitX || hitY) {
         // Post-impact kinetic speed kick
@@ -353,21 +480,22 @@ export default function FootageDvdBouncer({
           sy = 1.32
           vsx = 2.6
           vsy = -2.4
-          rotZVel = (dirY > 0 ? 1 : -1) * (hitLeft ? 155 : -155)
+          rotZVel = (dirY > 0 ? 1 : -1) * (impactNx > 0 ? 155 : -155)
         }
         if (hitY) {
           sx = 1.32
           sy = 0.68
           vsx = -2.4
           vsy = 2.6
-          rotZVel = (dirX > 0 ? 1 : -1) * (hitTop ? -155 : 155)
+          rotZVel = (dirX > 0 ? 1 : -1) * (impactNy > 0 ? -155 : 155)
         }
-        // Crisp 3D sleeve flip burst on every wall hit
-        flipYVel = (hitLeft || hitTop ? 1 : -1) * 920
+        // Crisp 3D sleeve flip burst on every impact
+        flipYVel = (impactNx > 0 || impactNy > 0 ? 1 : -1) * 920
 
-        const nearCorner =
-          (hitX && (y <= CORNER_TOLERANCE || y >= maxY - CORNER_TOLERANCE)) ||
-          (hitY && (x <= CORNER_TOLERANCE || x >= maxX - CORNER_TOLERANCE))
+        const nearCorner = hitObstacle
+          ? (hitX && hitY)
+          : (hitX && (y <= CORNER_TOLERANCE || y >= maxY - CORNER_TOLERANCE)) ||
+            (hitY && (x <= CORNER_TOLERANCE || x >= maxX - CORNER_TOLERANCE))
 
         const mode = logoRef.current
         const nextAlbumIdx = (albumIdxRef.current + 1) % ALBUM_ITEMS.length
@@ -377,14 +505,14 @@ export default function FootageDvdBouncer({
         setAlbumIdx(nextAlbumIdx)
         if (mode === 'albums') setSwapCount((c) => c + 1)
 
-        const cx = hitX ? (hitLeft ? 6 : host.clientWidth - 6) : x + size * 0.5
-        const cy = hitY ? (hitTop ? 6 : host.clientHeight - 6) : y + size * 0.5
-        const nx = hitX ? (hitLeft ? 1 : -1) : 0
-        const ny = hitY ? (hitTop ? 1 : -1) : 0
-        const side: EdgeSide = hitX ? (hitLeft ? 'left' : 'right') : (hitTop ? 'top' : 'bottom')
+        const cx = impactCx ?? (hitX ? (hitLeft ? 6 : host.clientWidth - 6) : x + size * 0.5)
+        const cy = impactCy ?? (hitY ? (hitTop ? 6 : host.clientHeight - 6) : y + size * 0.5)
+        const side: EdgeSide = hitObstacle
+          ? 'obstacle'
+          : (hitX ? (hitLeft ? 'left' : 'right') : (hitTop ? 'top' : 'bottom'))
 
         spawnWave(cx, cy, nextAlbum.color, nearCorner)
-        burstSparks(cx, cy, nx || dirX * 0.4, ny || dirY * 0.4, nextAlbum.color, nearCorner)
+        burstSparks(cx, cy, impactNx || dirX * 0.4, impactNy || dirY * 0.4, nextAlbum.color, nearCorner)
 
         const xPct = host.clientWidth > 0 ? Math.round((cx / host.clientWidth) * 100) : 50
         const yPct = host.clientHeight > 0 ? Math.round((cy / host.clientHeight) * 100) : 50
@@ -394,7 +522,7 @@ export default function FootageDvdBouncer({
           setEdgeWash((w) => ({ ...w, active: false }))
         }, nearCorner ? 1900 : 1200)
 
-        // Immediately switch the Ambience theme on EVERY wall bounce when Theme Sync is enabled
+        // Immediately switch the local WRLD stage theme on wall bounce when Theme Sync is enabled
         if (mode === 'albums' && themeSyncRef.current) {
           onBounceAlbumChangeRef.current?.(nextAlbum.id, nextAlbum.name, nearCorner)
         }
@@ -424,13 +552,11 @@ export default function FootageDvdBouncer({
       // Continuous lively flight tilt + damped post-bounce spin + 3D Y flip settling back to 0°
       rotZVel *= Math.exp(-3.4 * dt)
       rotZ += rotZVel * dt
-      // Gentle organic cruise sway so the cover NEVER feels frozen in mid-air
       const cruiseSway = Math.sin(elapsed * 2.6) * 9 + dirX * 6
       rotZ += (cruiseSway - rotZ) * (1 - Math.exp(-2.8 * dt))
 
       flipYVel *= Math.exp(-6.2 * dt)
       flipY += flipYVel * dt
-      // Settle flipY smoothly onto the nearest full 360° so the cover always faces forward after flipping
       const nearest360 = Math.round(flipY / 360) * 360
       flipY += (nearest360 - flipY) * (1 - Math.exp(-5.5 * dt))
 
@@ -513,20 +639,22 @@ export default function FootageDvdBouncer({
         }}
       />
 
-      {/* Crisp luminous edge flare bar along the impacted border */}
-      <div
-        className="pointer-events-none absolute transition-opacity duration-300 ease-out"
-        style={{
-          opacity: edgeWash.active ? 0.85 : 0,
-          ...(edgeWash.side === 'left'
-            ? { top: 0, bottom: 0, left: 0, width: 4, background: `linear-gradient(to bottom, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
-            : edgeWash.side === 'right'
-              ? { top: 0, bottom: 0, right: 0, width: 4, background: `linear-gradient(to bottom, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
-              : edgeWash.side === 'top'
-                ? { left: 0, right: 0, top: 0, height: 4, background: `linear-gradient(to right, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
-                : { left: 0, right: 0, bottom: 0, height: 4, background: `linear-gradient(to right, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }),
-        }}
-      />
+      {/* Crisp luminous edge flare bar along the impacted outer screen border */}
+      {edgeWash.side !== 'obstacle' && (
+        <div
+          className="pointer-events-none absolute transition-opacity duration-300 ease-out"
+          style={{
+            opacity: edgeWash.active ? 0.85 : 0,
+            ...(edgeWash.side === 'left'
+              ? { top: 0, bottom: 0, left: 0, width: 4, background: `linear-gradient(to bottom, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
+              : edgeWash.side === 'right'
+                ? { top: 0, bottom: 0, right: 0, width: 4, background: `linear-gradient(to bottom, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
+                : edgeWash.side === 'top'
+                  ? { left: 0, right: 0, top: 0, height: 4, background: `linear-gradient(to right, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
+                  : { left: 0, right: 0, bottom: 0, height: 4, background: `linear-gradient(to right, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }),
+          }}
+        />
+      )}
 
       {/* 6-node luminous motion trail behind the bouncing cover */}
       {Array.from({ length: TRAIL_COUNT }).map((_, i) => (
@@ -583,7 +711,7 @@ export default function FootageDvdBouncer({
       {/* Frosted Liquid Glass Corner Hit banner */}
       {cornerToast && (
         <div
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-black/72 border text-xs font-mono-ui font-bold tracking-[0.14em] uppercase backdrop-blur-xl shadow-2xl"
+          className="fixed top-6 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-black/72 border text-xs font-mono-ui font-bold tracking-[0.14em] uppercase backdrop-blur-xl shadow-2xl"
           style={{ borderColor: cornerToast.color, color: cornerToast.color, boxShadow: `0 12px 34px ${cornerToast.color}55` }}
         >
           {cornerToast.art && (
