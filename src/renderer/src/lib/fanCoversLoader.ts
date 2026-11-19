@@ -2,14 +2,16 @@
 //
 // Populates the synchronous cache in fanCovers.ts so overrideCoverUrl() can
 // assign deterministic fan covers to unreleased songs with zero flicker.
-import { buildCoverArtUrl, listFilesRecursive } from './juicewrldApi'
+import { buildStreamUrl, coverSearchQueries, filterSearchResults, getSongById, listFilesRecursive, searchFiles } from './juicewrldApi'
 import { getMediaType } from './fileTypes'
 import {
   getFanCoversIndex,
   isFanCoversIndexFresh,
   normalizeCoverTitle,
   normalizeEraKey,
+  recordSongFanCover,
   setFanCoversIndex,
+  stableHash,
   type FanCoversIndex,
 } from './fanCovers'
 
@@ -46,7 +48,7 @@ async function crawlArchiveFanCovers(): Promise<FanCoversIndex> {
 
     for (const entry of entries) {
       if (entry.type !== 'file' || getMediaType(entry.name) !== 'image') continue
-      const url = buildCoverArtUrl(entry.path, false)
+      const url = buildStreamUrl(entry.path)
       if (!url || allSet.has(url)) continue
       allSet.add(url)
 
@@ -68,7 +70,7 @@ async function crawlArchiveFanCovers(): Promise<FanCoversIndex> {
     const fanEntries = await listFilesRecursive(FAN_ARTISTS_ROOT)
     for (const entry of fanEntries) {
       if (entry.type !== 'file' || getMediaType(entry.name) !== 'image') continue
-      const url = buildCoverArtUrl(entry.path, false)
+      const url = buildStreamUrl(entry.path)
       if (!url || allSet.has(url)) continue
       allSet.add(url)
       registerTitle(entry.name, url)
@@ -113,4 +115,72 @@ export function ensureFanCoversLoaded(force = false): Promise<FanCoversIndex> {
     .catch(() => getFanCoversIndex())
     .finally(() => { _inflight = null })
   return _inflight
+}
+
+const _songLookupInflight = new Map<number, Promise<string | undefined>>()
+const _songLookupChecked = new Set<number>()
+
+/**
+ * Fast on-demand fan-cover lookup for a playing unreleased song (~150 ms).
+ * Searches `Cover Arts/` and archive images matching the song title (or alt
+ * titles), deterministically picks one via `stableHash(songId)`, and caches it
+ * in `fanCovers.ts` so every future play is instant.
+ */
+export function resolveSongFanCover(songId: number, fallbackTitle?: string | null): Promise<string | undefined> {
+  if (_songLookupChecked.has(songId)) return Promise.resolve(undefined)
+  const pending = _songLookupInflight.get(songId)
+  if (pending) return pending
+
+  const run = (async (): Promise<string | undefined> => {
+    let title = fallbackTitle ?? ''
+    let queries: string[] = []
+    try {
+      const song = await getSongById(songId)
+      if (song.category === 'released') return undefined
+      title = song.name || title
+      const existing = getFanCoversIndex().byTitle[normalizeCoverTitle(title)]
+      if (existing) return existing
+      queries = coverSearchQueries(song.name, (song.track_titles ?? []).filter(Boolean))
+    } catch {
+      if (!title) return undefined
+      queries = [title]
+    }
+    if (queries.length === 0) return undefined
+
+    const lists = await Promise.all(queries.slice(0, 2).map((q) =>
+      searchFiles(q).then((entries) => filterSearchResults(entries, q)).catch(() => []),
+    ))
+
+    const seen = new Set<string>()
+    const candidates: string[] = []
+    for (const list of lists) {
+      for (const e of list) {
+        if (e.type !== 'file' || getMediaType(e.name) !== 'image' || seen.has(e.path)) continue
+        seen.add(e.path)
+        const url = buildStreamUrl(e.path)
+        if (url) candidates.push(url)
+      }
+    }
+    if (candidates.length === 0) return undefined
+
+    // Prefer Cover Arts/<Artist>/ standard covers over "No Text" / "Alt" / generic paths
+    const standard = candidates.filter((u) => !/no\s*text|alt|blank|clean/i.test(decodeURIComponent(u)))
+    const pool = (standard.length > 0 ? standard : candidates).sort((a, b) => {
+      const aFan = /Cover%20Arts|Cover Arts/i.test(a) ? 0 : 1
+      const bFan = /Cover%20Arts|Cover Arts/i.test(b) ? 0 : 1
+      return aFan - bFan || a.localeCompare(b)
+    })
+
+    const chosen = pool[stableHash(songId) % pool.length]
+    recordSongFanCover(title, chosen)
+    return chosen
+  })()
+    .catch(() => undefined)
+    .finally(() => {
+      _songLookupChecked.add(songId)
+      _songLookupInflight.delete(songId)
+    })
+
+  _songLookupInflight.set(songId, run)
+  return run
 }

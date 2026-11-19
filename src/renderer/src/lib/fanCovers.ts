@@ -19,7 +19,7 @@ export interface FanCoversIndex {
 }
 
 const MODE_KEY = 'unreleasedCoverMode'
-const INDEX_KEY = 'fanCoversIndex:v2'
+const INDEX_KEY = 'fanCoversIndex:v3'
 const INDEX_TTL_MS = 24 * 60 * 60 * 1000
 
 const EMPTY_INDEX: FanCoversIndex = {
@@ -30,7 +30,7 @@ const EMPTY_INDEX: FanCoversIndex = {
 }
 
 function normalizeMode(v: unknown): UnreleasedCoverMode {
-  return v === 'fan_era' || v === 'manual_only' ? v : 'official_era'
+  return v === 'official_era' || v === 'manual_only' ? v : 'fan_era'
 }
 
 let _mode: UnreleasedCoverMode = normalizeMode(ls.get<unknown>(MODE_KEY))
@@ -107,10 +107,22 @@ export function setFanCoversIndex(next: FanCoversIndex): void {
   ls.set(INDEX_KEY, next)
 }
 
+/** Record an on-demand title-matched fan cover so future plays resolve instantaneously. */
+export function recordSongFanCover(title: string, url: string): void {
+  const key = normalizeCoverTitle(title)
+  if (!key || !url) return
+  if (_index.byTitle[key] === url) return
+  _index = {
+    ..._index,
+    byTitle: { ..._index.byTitle, [key]: url },
+  }
+  ls.set(INDEX_KEY, _index)
+}
+
 /**
  * Deterministic fan-cover lookup for an unreleased song.
  * Priority:
- *   1. Exact title-matched fan cover (if indexed)
+ *   1. Exact title-matched fan cover (if indexed or resolved on demand)
  *   2. Era-matched fan cover pool indexed by `stableHash(songId) % pool.length`
  *   3. Returns `undefined` when no pool exists so the caller falls back to the official era cover.
  */
@@ -119,11 +131,11 @@ export function peekFanCoverForSong(
   era: string | null | undefined,
   title?: string | null,
 ): string | undefined {
-  if (_index.all.length === 0) return undefined
   if (title) {
     const tKey = normalizeCoverTitle(title)
     if (tKey && _index.byTitle[tKey]) return _index.byTitle[tKey]
   }
+  if (_index.all.length === 0) return undefined
   const eraKey = normalizeEraKey(era)
   const pool = (eraKey && _index.byEra[eraKey]?.length ? _index.byEra[eraKey] : null)
     ?? (_index.all.length > 0 ? _index.all : null)

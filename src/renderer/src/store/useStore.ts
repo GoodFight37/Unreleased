@@ -25,7 +25,7 @@ import { getVersionGroup } from '../lib/versionsApi'
 import type { AdminTab } from '../hooks/useAdminQueue'
 import { advanceRotatedCover, resetCoverRotation } from '../lib/coverSuggestions'
 import { peekUnreleasedCoverMode, setUnreleasedCoverModeValue, type UnreleasedCoverMode } from '../lib/fanCovers'
-import { ensureFanCoversLoaded } from '../lib/fanCoversLoader'
+import { ensureFanCoversLoaded, resolveSongFanCover } from '../lib/fanCoversLoader'
 import { setEraCoverRaw, replaceEraCovers, sanitizeEraCovers } from '../lib/eraCovers'
 import { setActiveChannelCache } from '../lib/activeChannelState'
 import {
@@ -2063,6 +2063,20 @@ export const useStore = create<AppStore>((set, get, store) => ({
   },
 
   _maybeRotateCover: (songId) => {
+    if (get().songPrefs[songId]?.cover_url) return
+    if (get().unreleasedCoverMode === 'fan_era') {
+      const cur = get().currentTrack
+      const title = cur && userApi.trackIdToSongId(cur.id) === songId ? (cur.apiTitle ?? cur.title) : null
+      resolveSongFanCover(songId, title)
+        .then((url) => { if (url) get()._reapplySongPref(songId) })
+        .catch(() => {})
+      void ensureFanCoversLoaded().then((idx) => {
+        if (idx.all.length > 0 && get().unreleasedCoverMode === 'fan_era') {
+          get()._reapplySongPref(songId)
+        }
+      })
+      return
+    }
     if (!get().rotateSuggestedCovers) return
     // A cover the user picked always wins � rotation fills gaps, it doesn't
     // override choices.
