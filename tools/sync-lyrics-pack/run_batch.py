@@ -141,22 +141,85 @@ def separate_vocals_demucs(audio_path: Path, work_dir: Path, device: str) -> Pat
     return vocals if vocals.exists() else None
 
 
+def load_mono_16k(audio_path: Path, sample_rate: int = 16000):
+    """Load any audio file (mp3/m4a/flac/wav) as 16 kHz mono float32 tensor."""
+    import torch
+    import torchaudio
+
+    try:
+        wav, sr = torchaudio.load(str(audio_path))
+    except Exception:
+        # Fallback via ffmpeg to 16 kHz mono wav when torchaudio backend cannot decode m4a/mp3
+        wav_tmp = audio_path.with_suffix(".16k.wav")
+        cmd = [
+            "ffmpeg", "-y", "-v", "error",
+            "-i", str(audio_path),
+            "-ac", "1", "-ar", str(sample_rate),
+            str(wav_tmp),
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if res.returncode != 0 or not wav_tmp.exists():
+            raise RuntimeError("Could not decode audio with torchaudio or ffmpeg")
+        wav, sr = torchaudio.load(str(wav_tmp))
+
+    if wav.size(0) > 1:
+        wav = wav.mean(dim=0, keepdim=True)
+    if sr != sample_rate:
+        wav = torchaudio.functional.resample(wav, sr, sample_rate)
+    return wav
+
+
+def normalize_mms_word(word: str) -> str:
+    """Normalize a word to torchaudio MMS_FA dictionary characters (a-z and apostrophe)."""
+    cleaned = re.sub(r"[^a-z']+", "", word.lower())
+    return cleaned if cleaned else "*"
+
+
 class CtcAlignerRunner:
-    """Lazy-loaded ctc-forced-aligner (MMS-300M) wrapper for CUDA GPU."""
+    """Lazy-loaded native torchaudio MMS_FA (MMS-300M) forced aligner for CUDA GPU."""
 
     def __init__(self, device: str = "cuda"):
         self.device = device
+        self._bundle = None
         self._model = None
         self._tokenizer = None
+        self._aligner = None
 
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return
         import torch
-        from ctc_forced_aligner import load_alignment_model
+        import torchaudio
 
-        dtype = torch.float16 if self.device == "cuda" else torch.float32
-        self._model, self._tokenizer = load_alignment_model(self.device, dtype=dtype)
+        if self.device == "cuda" and not torch.cuda.is_available():
+            self.device = "cpu"
+        self._bundle = torchaudio.pipelines.MMS_FA
+        self._model = self._bundle.get_model(with_star=True).to(self.device)
+        self._model.eval()
+        self._tokenizer = self._bundle.get_tokenizer()
+        self._aligner = self._bundle.get_aligner()
+
+    def _compute_emission(self, wav):
+        """Compute log-prob emissions in 45s chunks so long studio sessions never OOM."""
+        import torch
+
+        sr = self._bundle.sample_rate
+        chunk_samples = sr * 45
+        emissions = []
+        with torch.inference_mode():
+            for start in range(0, wav.size(1), chunk_samples):
+                chunk = wav[:, start : start + chunk_samples].to(self.device)
+                if chunk.size(1) < 400:
+                    continue
+                if self.device == "cuda":
+                    with torch.amp.autocast("cuda", dtype=torch.float16):
+                        em, _ = self._model(chunk)
+                else:
+                    em, _ = self._model(chunk)
+                emissions.append(em.float().cpu())
+        if not emissions:
+            return None
+        return torch.cat(emissions, dim=1)
 
     def align_lines(
         self,
@@ -166,87 +229,81 @@ class CtcAlignerRunner:
         line_windows: list[tuple[float, float]] | None = None,
     ) -> tuple[str | None, float]:
         """
-        Align cleaned lyric lines to audio and return (enhanced_lrc, confidence_score).
-        If line_windows is provided (from an existing line-LRC), words are constrained
-        inside each line's start/end window to prevent chorus drift.
+        Align cleaned lyric lines to audio using torchaudio MMS_FA and return
+        (enhanced_lrc, confidence_score).
         """
         self._ensure_loaded()
-        from ctc_forced_aligner import (
-            generate_emissions,
-            get_alignments,
-            get_spans,
-            load_audio,
-            postprocess_results,
-            preprocess_text,
-        )
-
-        audio_waveform = load_audio(str(audio_path), self._model.dtype, self._model.device)
-        emissions, stride = generate_emissions(self._model, audio_waveform, batch_size=8)
-
-        joined = "\n".join(lines)
-        tokens_starred, text_starred = preprocess_text(joined, romanize=True, language="eng")
-        segments, scores, blank_token = get_alignments(emissions, tokens_starred, self._tokenizer)
-        spans = get_spans(tokens_starred, segments, blank_token)
-        word_timestamps = postprocess_results(text_starred, spans, stride, scores)
-
-        if not word_timestamps:
+        wav = load_mono_16k(audio_path, self._bundle.sample_rate)
+        emission = self._compute_emission(wav)
+        if emission is None or emission.size(1) == 0:
             return None, 0.0
 
-        # Map aligned words back onto the original cleaned lines
-        lrc_lines: list[str] = []
-        word_cursor = 0
+        # Flatten words while tracking which line each word belongs to
+        flat_words: list[tuple[int, str, str]] = []
+        for line_idx, line in enumerate(lines):
+            for raw_word in line.split():
+                flat_words.append((line_idx, raw_word, normalize_mms_word(raw_word)))
+
+        if not flat_words:
+            return None, 0.0
+
+        transcript = [w[2] for w in flat_words]
+        tokens = self._tokenizer(transcript)
+        # Align on CPU float32 emission (fast native C++ Viterbi in torchaudio)
+        token_spans = self._aligner(emission[0], tokens)
+
+        num_frames = emission.size(1)
+        sec_per_frame = (wav.size(1) / float(self._bundle.sample_rate)) / float(num_frames)
+
+        # Group aligned word spans back into LRC lines
+        per_line: list[list[tuple[str, float, float, float]]] = [[] for _ in lines]
         prob_sum = 0.0
         aligned_count = 0
-        total_words = 0
         last_end = 0.0
         crowded_words = 0
 
-        for idx, line in enumerate(lines):
-            words = line.split()
-            if not words:
+        for idx, (line_idx, raw_word, _) in enumerate(flat_words):
+            spans = token_spans[idx] if idx < len(token_spans) else []
+            if spans:
+                st = spans[0].start * sec_per_frame
+                en = max(st + 0.04, spans[-1].end * sec_per_frame)
+                sc = sum(s.score for s in spans) / len(spans)
+            else:
+                st = last_end
+                en = st + 0.12
+                sc = 0.0
+
+            if line_windows and line_idx < len(line_windows):
+                win_start, win_end = line_windows[line_idx]
+                st = min(max(st, win_start), max(win_start, win_end - 0.05))
+
+            if en - st < 0.03:
+                crowded_words += 1
+            last_end = max(last_end, en)
+            prob_sum += max(0.0, min(1.0, float(sc)))
+            aligned_count += 1
+            per_line[line_idx].append((raw_word, st, en, float(sc)))
+
+        lrc_lines: list[str] = []
+        for line_idx, items in enumerate(per_line):
+            if not items:
                 continue
-            total_words += len(words)
-            line_tokens: list[str] = []
-            line_start: float | None = None
-            win_start, win_end = line_windows[idx] if line_windows and idx < len(line_windows) else (None, None)
+            line_start = items[0][1]
+            rendered = " ".join(f"<{format_ts(st)}>{word}" for word, st, _, _ in items)
+            lrc_lines.append(f"[{format_ts(line_start)}]{rendered}")
 
-            for w in words:
-                if word_cursor < len(word_timestamps):
-                    wt = word_timestamps[word_cursor]
-                    word_cursor += 1
-                    st = float(wt.get("start", last_end))
-                    en = float(wt.get("end", st + 0.15))
-                    sc = float(wt.get("score", 0.5))
-                    # Clamp into known line window when upgrading a line-LRC to word-LRC
-                    if win_start is not None and win_end is not None:
-                        st = min(max(st, win_start), max(win_start, win_end - 0.05))
-                    if line_start is None:
-                        line_start = st
-                    if en - st < 0.02:
-                        crowded_words += 1
-                    last_end = max(last_end, en)
-                    prob_sum += max(0.0, min(1.0, sc))
-                    aligned_count += 1
-                    line_tokens.append(f"<{format_ts(st)}>{w}")
-                else:
-                    line_tokens.append(w)
-
-            if line_start is None:
-                line_start = win_start if win_start is not None else last_end
-            lrc_lines.append(f"[{format_ts(line_start)}]{' '.join(line_tokens)}")
-
-        if aligned_count == 0 or total_words == 0:
+        if aligned_count == 0 or not lrc_lines:
             return None, 0.0
 
         mean_prob = prob_sum / aligned_count
-        coverage_ratio = aligned_count / total_words
         crowd_penalty = min(0.35, (crowded_words / max(1, aligned_count)) * 0.5)
+        audio_dur = duration_sec or (wav.size(1) / float(self._bundle.sample_rate))
         duration_penalty = 0.0
-        if duration_sec and duration_sec > 15:
-            if last_end > duration_sec * 1.15 or last_end < duration_sec * 0.25:
+        if audio_dur > 15:
+            if last_end > audio_dur * 1.15 or last_end < audio_dur * 0.25:
                 duration_penalty = 0.25
 
-        score = max(0.0, min(1.0, (mean_prob * 0.65 + coverage_ratio * 0.35) - crowd_penalty - duration_penalty))
+        score = max(0.0, min(1.0, mean_prob - crowd_penalty - duration_penalty))
         return "\n".join(lrc_lines), round(score, 4)
 
 
@@ -320,8 +377,8 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path("tools/sync-lyrics-pack/out"))
     parser.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
     parser.add_argument("--limit", type=int, default=0, help="Optional cap on songs to process this run (0 = all)")
-    parser.add_argument("--demucs-threshold", type=float, default=0.80, help="Retry with htdemucs below this score")
-    parser.add_argument("--min-score", type=float, default=0.55, help="Minimum confidence score to include in final pack")
+    parser.add_argument("--demucs-threshold", type=float, default=0.42, help="Retry with htdemucs below this MMS_FA score")
+    parser.add_argument("--min-score", type=float, default=0.18, help="Minimum MMS_FA confidence score to include in final pack")
     parser.add_argument("--skip-demucs", action="store_true", help="Run Pass 0 + Pass 1 only (fastest dry run)")
     parser.add_argument("--export-only", action="store_true", help="Only rebuild synced-lyrics-pack.json.gz from checkpoint")
     args = parser.parse_args()
