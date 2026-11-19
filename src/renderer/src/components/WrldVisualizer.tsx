@@ -771,6 +771,22 @@ export default function WrldVisualizer({
                   }}
                 />
               </div>
+              <div className={`flex items-center justify-between gap-3 ${!hasLyrics && post === 'off' ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-text-primary leading-tight">Story 9:16</div>
+                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Vertical frame with TikTok safe zones (Esc to return)</div>
+                </div>
+                <Toggle
+                  on={post === 'story'}
+                  onClick={() => {
+                    if (!hasLyrics && post === 'off') return
+                    const next = post === 'story' ? 'post' : 'story'
+                    setWrldPost(next)
+                    setShowAmbiance(false)
+                    announce(next === 'story' ? 'Story frame 9:16' : 'Full-stage lyrics')
+                  }}
+                />
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[11px] font-semibold text-text-primary leading-tight">Cover lyric colors</div>

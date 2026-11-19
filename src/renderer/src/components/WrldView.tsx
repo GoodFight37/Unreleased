@@ -4,7 +4,8 @@ import { getFont } from '../lib/fonts'
 import { useAlbumColors } from '../desktop/artColors'
 import { hsbToRgb } from '../desktop/light/engine'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
-import StageBouncer, { BOUNCE_ALBUM_MAP, type BounceAlbumId } from './StageBouncer'
+import StageBouncer, { BOUNCE_ALBUM_MAP, type BounceAlbumId, type BounceCue, type BounceWall } from './StageBouncer'
+import { pickCue } from '../lib/bouncerPlan'
 import SongFootagePill from './SongFootagePill'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
@@ -112,6 +113,11 @@ interface BounceStagePalette {
   backdropFilter?: string
   vars: Record<string, string>
 }
+
+// Story frame: a full-height 9:16 box, and the fractions of it that TikTok's own UI covers (top bar, caption, right buttons).
+const STORY_FRAME = 'inset-y-0 left-1/2 -translate-x-1/2 aspect-[9/16] max-w-full'
+const STORY_SAFE = { t: 0.09, r: 0.13, b: 0.24, l: 0.04 }
+const STORY_LYRICS = 'left-[6%] right-[14%] top-[38%] bottom-[24%]'
 
 const BOUNCE_STAGE_PALETTES: Record<BounceAlbumId, BounceStagePalette> = {
   // Only tint local accent so WebGPU glass toolbars stay aligned with the global dark/light glass body (high contrast).
@@ -499,7 +505,9 @@ export default function WrldView(): JSX.Element {
   const savedWrldWidgets = useVizStore(s => s.wrldWidgets)
   const wrldWidgets = developerMode && savedWrldWidgets
   // Post: the lyrics alone on the stage (WrldPostFrame); the player, cover, title and menus step aside.
-  const postOn = useVizStore(s => s.wrldPost !== 'off')
+  const wrldPostMode = useVizStore(s => s.wrldPost)
+  const postOn = wrldPostMode !== 'off'
+  const storyOn = wrldPostMode === 'story'
   const hideForViz = wrldWidgets || postOn ? { display: 'none' } : undefined
 
   const videoShown = useVizStore(s => s.wrldVideoShown)
@@ -616,6 +624,38 @@ export default function WrldView(): JSX.Element {
   const { rawLyrics, isSynced, isEditor, syncedLines } = useWrldLyricsSource(
     radioFmActive, radioFmMatchedSong, currentTrackFull, account,
   )
+
+  // The stage bouncer flies under the lyrics and the progress bar (it fades back there), aims its corner hit at a lyric
+  // line that opens a section, and each time it slides under the lyrics they get a small push.
+  const lyricsPanelRef = useRef<HTMLDivElement>(null)
+  const lyricsObsRef = useRef<HTMLDivElement>(null)
+  const progressObsRef = useRef<HTMLDivElement>(null)
+  const mobileLyricsObsRef = useRef<HTMLDivElement>(null)
+  const postObsRef = useRef<HTMLDivElement>(null)
+  // Index 0 is always the lyrics (the one that gets pushed). A hidden layout measures as nothing and is ignored.
+  const bounceObstacles = useMemo(
+    () => (postOn ? [postObsRef] : wrldCleanView ? [lyricsObsRef, mobileLyricsObsRef] : [lyricsObsRef, mobileLyricsObsRef, progressObsRef]),
+    [postOn, wrldCleanView],
+  )
+  const cueLinesRef = useRef<SyncedLyricLine[]>([])
+  cueLinesRef.current = isSynced ? syncedLines : []
+  const bounceCue = useCallback((target: number | null, minLead: number): BounceCue | null => {
+    const st = useStore.getState()
+    if (st.radioFmActive ? st.radioFmPaused : !st.isPlaying) return null
+    return pickCue(cueLinesRef.current, playingSeconds(), minLead, st.radioFmActive ? 1 : (st.playbackSpeed || 1), target)
+  }, [])
+  const nudgeLyrics = useCallback((index: number, wall: BounceWall) => {
+    if (index !== 0) return
+    const el = (postOn ? postObsRef : lyricsPanelRef).current
+    if (!el) return
+    const dx = wall === 'r' ? 5 : wall === 'l' ? -5 : 0
+    const dy = wall === 'b' ? 5 : wall === 't' ? -5 : 0
+    // `translate` composes with the panel's own transform animation, so the two never fight.
+    el.animate(
+      [{ translate: '0 0' }, { translate: `${dx}px ${dy}px`, offset: 0.3 }, { translate: '0 0' }],
+      { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    )
+  }, [postOn])
   // FM's Radio/Lyrics tabs stand on their own regardless of lyrics
   // availability, so the manual override only applies to normal playback -
   // same scope as the auto-collapse behavior it's overriding.
@@ -1021,8 +1061,9 @@ export default function WrldView(): JSX.Element {
               page renders over a still-mounted bgView (App.tsx), so the page
               you came from bled through those corners. */}
           {/* Post always gets the art/mesh stage under a dark veil unless GB&GR soft-light bounce is active. */}
+          {storyOn && <div className="absolute inset-0 z-0 bg-black" />}
           <div
-            className={`absolute inset-0 z-0 overflow-hidden transition-colors duration-500 ${
+            className={`absolute ${storyOn ? STORY_FRAME : 'inset-0'} z-0 overflow-hidden transition-colors duration-500 ${
               bouncedIsSoftLight ? 'bg-[#d8e6f5]' : (!useThemeBackground && textIsDark && !postOn ? 'bg-[#f4f3f7]' : 'bg-black')
             }`}
             style={{ contain: 'strict', ...(bouncePalette ? { backgroundColor: bouncePalette.baseBg } : undefined) }}
@@ -1094,6 +1135,12 @@ export default function WrldView(): JSX.Element {
                 onBounceAlbumChange={(albumId) => {
                   setBouncedAlbumId(albumId)
                 }}
+                underRefs={bounceObstacles}
+                safeInsets={storyOn ? STORY_SAFE : undefined}
+                sizeRatio={storyOn ? 0.175 : undefined}
+                scheduleCorners
+                cornerCue={bounceCue}
+                onObstacleHit={nudgeLyrics}
                 className="absolute inset-0 z-[5] pointer-events-none overflow-hidden select-none opacity-90"
               />
             )}
@@ -1127,6 +1174,8 @@ export default function WrldView(): JSX.Element {
               currentTrack={currentTrack}
               artUrl={stageBackdropArt}
               lightBg={bouncedIsSoftLight}
+              story={storyOn}
+              obstacleRef={postObsRef}
             />
           )}
 
@@ -1212,7 +1261,7 @@ export default function WrldView(): JSX.Element {
 
             {/* Content - keyed by view so it rises in again on each switch */}
             {showLyricsColumn && (
-              <div key={radioFmActive ? fmTab : 'lyrics'} className="flex-1 min-h-0 flex flex-col animate-wrld-view-in">
+              <div ref={mobileLyricsObsRef} key={radioFmActive ? fmTab : 'lyrics'} className="flex-1 min-h-0 flex flex-col animate-wrld-view-in">
                 {radioFmActive && fmTab === 'radio'
                   ? FmRadioPanel()
                   : radioFmActive && fmTab === 'chat'
@@ -1446,7 +1495,7 @@ export default function WrldView(): JSX.Element {
               </div>
 
               {/* Progress bar - FM gets a read-only version (no scrubbing on live radio); hidden cleanly in Clean stage mode */}
-              <div className={`w-full max-w-[var(--wrld-player-width)] transition-opacity duration-300 ${wrldCleanView ? 'opacity-0 pointer-events-none' : ''}`} data-viz="meta">
+              <div ref={progressObsRef} className={`w-full max-w-[var(--wrld-player-width)] transition-opacity duration-300 ${wrldCleanView ? 'opacity-0 pointer-events-none' : ''}`} data-viz="meta">
                 {radioFmActive
                   ? <FmProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />
                   : <ProgressBar txtPri={txtPri} txtTer={txtTer} trackBg={trackBg} />}
@@ -1690,10 +1739,13 @@ export default function WrldView(): JSX.Element {
                 inside keeps its covers - see below. */}
             {(panelPresence.mounted || queueEverOpened) && (
             <div
+              ref={lyricsPanelRef}
               className={`absolute inset-y-0 right-0 z-10 overflow-hidden ${panelPresence.exiting ? 'animate-wrld-panel-out' : 'animate-wrld-panel-in'}`}
               style={{ left: 'max(40%, 320px)', ...(panelPresence.mounted ? null : { display: 'none' }) }}
               data-viz="panel"
             >
+              {/* Where the lyric lines are: the stage bouncer fades back while it flies under this. */}
+              <div ref={lyricsObsRef} aria-hidden="true" className="absolute inset-x-0 bottom-0 top-[8%] pointer-events-none" />
               {/* Divider - FM only */}
               {radioFmActive && <div className="absolute left-0 top-10 bottom-10 w-px bg-white/10" />}
               {/* Kept mounted (hidden via CSS) once opened rather than
@@ -3162,13 +3214,17 @@ const INK_WHITE = '255 255 255'
 const INK_DARK = '14 29 52'
 const INK_YELLOW = '255 214 10'
 
-const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedLines, currentTrack, artUrl, lightBg = false }: {
+const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedLines, currentTrack, artUrl, lightBg = false, story = false, obstacleRef }: {
   rawLyrics: string | null
   isSynced: boolean
   syncedLines: SyncedLyricLine[]
   currentTrack: Track | null
   artUrl: string | null
   lightBg?: boolean
+  /** 9:16 frame: the lyrics sit in the lower middle, clear of TikTok's top bar, caption and right-hand buttons. */
+  story?: boolean
+  /** The box the lyrics fill, so the stage bouncer flies around it. */
+  obstacleRef?: React.RefObject<HTMLDivElement>
 }): JSX.Element {
   const { wrldLyricLook, ink, postFont } = useVizStore(useShallow(s => ({
     wrldLyricLook: s.wrldLyricLook, ink: s.wrldInk, postFont: s.wrldPostFont,
@@ -3191,9 +3247,9 @@ const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedL
     : null
 
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center" style={inkStyle}>
+    <div className={`absolute ${story ? STORY_FRAME : 'inset-0'} z-20 flex items-center justify-center`} style={inkStyle}>
       {stageLook && currentTrack && rawLyrics ? (
-        <div className="absolute inset-x-0 top-[8%] bottom-[12%] flex flex-col pointer-events-none">
+        <div ref={obstacleRef} className={`absolute ${story ? STORY_LYRICS : 'inset-x-0 top-[8%] bottom-[12%]'} flex flex-col pointer-events-none`}>
           <LyricStageView
             look={stageLook}
             trackId={currentTrack.id}
@@ -3209,7 +3265,7 @@ const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedL
           />
         </div>
       ) : (
-        <div className="w-full max-w-4xl h-full mx-auto px-6 md:px-12 pt-14 pb-20 flex flex-col">
+        <div ref={obstacleRef} className={story ? `absolute ${STORY_LYRICS} flex flex-col` : 'w-full max-w-4xl h-full mx-auto px-6 md:px-12 pt-14 pb-20 flex flex-col'}>
           <LyricsPanel
             padded
             rawLyrics={rawLyrics}

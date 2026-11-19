@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { buildImageUrl } from '../lib/juicewrldApi'
 import { listenToMeter } from '../desktop/meter'
+import { computeField, planCorner, type Field, type Rect } from '../lib/bouncerPlan'
 
 export type BounceSpriteId = 'albums' | 'cover' | 'butterfly'
 export type DvdLogoId = BounceSpriteId
@@ -89,26 +90,23 @@ export const BOUNCE_ALBUM_MAP: Readonly<Record<BounceAlbumId, AlbumBounceItem>> 
 
 const ALBUM_BOX = 108
 const BUTTERFLY_BOX = 94
-const CORNER_TOLERANCE = 32
+const CORNER_TOLERANCE = 26
+const NEAR_MISS = 130
 const OBSTACLE_PAD = 8
 const TRAIL_COUNT = 6
-const SPARK_COUNT = 8
-
-type EdgeSide = 'left' | 'right' | 'top' | 'bottom' | 'obstacle'
-
-interface ObstacleRect {
-  left: number
-  top: number
-  right: number
-  bottom: number
-}
+const SPARK_COUNT = 14
+/** A real corner freezes the cover for a beat: scenic hit-stop, not a UI transition. */
+const HIT_STOP_S = 0.08
+/** Fewest seconds between one scheduled corner and the next. */
+const MIN_LEAD_S = 6
+const WALLS = ['l', 'r', 't', 'b'] as const
+export type BounceWall = (typeof WALLS)[number]
 
 interface ImpactWave {
   id: number
   x: number
   y: number
   color: string
-  corner: boolean
 }
 
 interface SparkState {
@@ -121,6 +119,13 @@ interface SparkState {
   maxLife: number
   size: number
   color: string
+}
+
+export interface BounceCue {
+  /** Song time of the lyric line the corner is aimed at. */
+  key: number
+  /** Seconds from now until that line. */
+  inSec: number
 }
 
 function GlassCoverSleeve({
@@ -234,47 +239,24 @@ function LndButterflyGraphic({ color }: { color: string }): JSX.Element {
   )
 }
 
-function measureObstacle(host: HTMLElement, obstacle: HTMLElement | null | undefined, size: number): ObstacleRect | null {
+function measureObstacle(host: HTMLElement, obstacle: HTMLElement | null | undefined): Rect | null {
   if (!obstacle) return null
   const hr = host.getBoundingClientRect()
   const or = obstacle.getBoundingClientRect()
-  if (or.width < 40 || or.height < 40 || hr.width <= 0 || hr.height <= 0) return null
-  const rect: ObstacleRect = {
+  if (or.width < 8 || or.height < 8 || hr.width <= 0 || hr.height <= 0) return null
+  return {
     left: or.left - hr.left - OBSTACLE_PAD,
     top: or.top - hr.top - OBSTACLE_PAD,
     right: or.right - hr.left + OBSTACLE_PAD,
     bottom: or.bottom - hr.top + OBSTACLE_PAD,
   }
-  // Only collide when at least one corridor around the player box fits the bouncing sprite.
-  const hasCorridor =
-    rect.left >= size + 12 ||
-    hr.width - rect.right >= size + 12 ||
-    rect.top >= size + 12 ||
-    hr.height - rect.bottom >= size + 12
-  return hasCorridor ? rect : null
 }
 
-function pickSpawnOutside(hostW: number, hostH: number, size: number, obs: ObstacleRect | null): { x: number; y: number } {
-  const maxX = Math.max(0, hostW - size)
-  const maxY = Math.max(0, hostH - size)
-  if (!obs) {
-    return {
-      x: Math.min(maxX, 48 + Math.random() * Math.max(40, hostW * 0.35)),
-      y: Math.min(maxY, 48 + Math.random() * Math.max(40, hostH * 0.3)),
-    }
-  }
-  const corridors: Array<{ x: number; y: number; weight: number }> = []
-  if (obs.left >= size + 16) corridors.push({ x: Math.max(12, (obs.left - size) * 0.5), y: Math.min(maxY, 28 + Math.random() * Math.max(20, maxY * 0.6)), weight: obs.left })
-  if (hostW - obs.right >= size + 16) corridors.push({ x: Math.min(maxX, obs.right + (hostW - obs.right - size) * 0.5), y: Math.min(maxY, 28 + Math.random() * Math.max(20, maxY * 0.6)), weight: hostW - obs.right })
-  if (obs.top >= size + 16) corridors.push({ x: Math.min(maxX, 28 + Math.random() * Math.max(20, maxX * 0.6)), y: Math.max(12, (obs.top - size) * 0.5), weight: obs.top })
-  if (hostH - obs.bottom >= size + 16) corridors.push({ x: Math.min(maxX, 28 + Math.random() * Math.max(20, maxX * 0.6)), y: Math.min(maxY, obs.bottom + (hostH - obs.bottom - size) * 0.5), weight: hostH - obs.bottom })
-  if (corridors.length === 0) return { x: 16, y: 16 }
-  corridors.sort((a, b) => b.weight - a.weight)
-  return { x: corridors[0].x, y: corridors[0].y }
-}
+type Ref<T> = RefObject<T | null>
 
-/** Kinetic 60-120fps Album Covers, Playing Cover & LND Butterfly bouncer with 2nd-order elastic spring physics,
- *  3D flip/banking, bass-reactive pulse, motion trail, spark bursts, obstacle rebounds, and optional local WRLD theme sync. */
+/** Album Covers, Playing Cover & LND Butterfly bouncer. It flies in the largest box the lyrics leave free; wall hits are a
+ *  thin light, and with `scheduleCorners` its speed is worked out so a real corner hit lands on a chosen lyric line, with
+ *  a glow building toward it. A corner freezes the cover for ~80 ms, then bursts and swaps album (and local WRLD theme). */
 export default function StageBouncer({
   enabled,
   logo,
@@ -283,8 +265,15 @@ export default function StageBouncer({
   playingCoverUrl,
   themeSync = false,
   obstacleRef,
+  obstacleRefs,
+  underRefs,
+  safeInsets,
+  sizeRatio,
+  scheduleCorners = false,
+  cornerCue,
   onCornerHit,
   onBounceAlbumChange,
+  onObstacleHit,
   className = 'fixed inset-0 z-0 pointer-events-none overflow-hidden select-none',
 }: {
   enabled: boolean
@@ -294,13 +283,27 @@ export default function StageBouncer({
   reducedMotion: boolean
   /** Current track cover art, used in 'cover' mode (falls back to album covers if absent). */
   playingCoverUrl?: string | null
-  /** When true in Album Covers mode, every wall hit immediately updates the local WRLD stage theme. */
+  /** When true in Album Covers mode, every corner hit updates the local WRLD stage theme. */
   themeSync?: boolean
-  /** Optional bounding element (such as a video player card) the sprite physically bounces off. */
-  obstacleRef?: RefObject<HTMLElement | null>
+  /** Elements (a video card, the lyrics, the progress bar) the cover never flies over. */
+  obstacleRef?: Ref<HTMLElement>
+  obstacleRefs?: ReadonlyArray<Ref<HTMLElement>>
+  /** Elements the cover flies under, not around: over them it fades back so the text on top stays crisp. The first
+   *  one that the cover enters calls `onObstacleHit`. No walls. */
+  underRefs?: ReadonlyArray<Ref<HTMLElement>>
+  /** Fractions of the stage kept clear on each side (platform safe zones). */
+  safeInsets?: { t: number; r: number; b: number; l: number }
+  /** Cover width as a fraction of the stage width, instead of the fixed size. */
+  sizeRatio?: number
+  /** Work out the speed so a corner hit lands on the cue. Without it the cover just cruises. */
+  scheduleCorners?: boolean
+  /** Next lyric line to aim at (target null), or how long until a line already aimed at. */
+  cornerCue?: (target: number | null, minLead: number) => BounceCue | null
   onCornerHit?: () => void
-  /** Fires on every wall bounce in Album Covers mode when themeSync is enabled. */
+  /** Fires on every corner hit in Album Covers mode when themeSync is enabled. */
   onBounceAlbumChange?: (albumId: BounceAlbumId, albumName: string, isCorner: boolean) => void
+  /** The cover hit the wall that rests on obstacle `index` (the lyrics push back). */
+  onObstacleHit?: (index: number, wall: BounceWall) => void
   className?: string
 }): JSX.Element | null {
   const albumItems = useMemo(
@@ -312,37 +315,28 @@ export default function StageBouncer({
 
   const hostRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
+  const washRef = useRef<HTMLDivElement>(null)
+  const glowRef = useRef<HTMLDivElement>(null)
+  const wallRefs = useRef<Array<HTMLDivElement | null>>([])
   const trailRefs = useRef<Array<HTMLDivElement | null>>([])
   const sparkRefs = useRef<Array<HTMLDivElement | null>>([])
-  const onCornerHitRef = useRef(onCornerHit)
-  onCornerHitRef.current = onCornerHit
-  const onBounceAlbumChangeRef = useRef(onBounceAlbumChange)
-  onBounceAlbumChangeRef.current = onBounceAlbumChange
-  const themeSyncRef = useRef(themeSync)
-  themeSyncRef.current = themeSync
-  const obstacleRefLatest = useRef(obstacleRef)
-  obstacleRefLatest.current = obstacleRef
+  const latest = useRef({ onCornerHit, onBounceAlbumChange, onObstacleHit, themeSync, obstacleRef, obstacleRefs, underRefs, safeInsets, sizeRatio, scheduleCorners, cornerCue })
+  latest.current = { onCornerHit, onBounceAlbumChange, onObstacleHit, themeSync, obstacleRef, obstacleRefs, underRefs, safeInsets, sizeRatio, scheduleCorners, cornerCue }
   const safeLogo = normalizeBounceSprite(logo)
   const logoRef = useRef<BounceSpriteId>(safeLogo)
   logoRef.current = safeLogo
 
   const [albumIdx, setAlbumIdx] = useState(0)
   const [swapCount, setSwapCount] = useState(0)
-  const [edgeWash, setEdgeWash] = useState<{ color: string; xPct: number; yPct: number; side: EdgeSide; active: boolean }>({
-    color: ALL_BOUNCE_ALBUMS[0].color,
-    xPct: 50,
-    yPct: 50,
-    side: 'left',
-    active: false,
-  })
   const [waves, setWaves] = useState<ImpactWave[]>([])
-  const [cornerToast, setCornerToast] = useState<{ label: string; color: string; art?: string } | null>(null)
+  const [cornerToast, setCornerToast] = useState<{ id: number; label: string; color: string; art?: string } | null>(null)
   const albumIdxRef = useRef(0)
   albumIdxRef.current = albumIdx
 
-  const boxSize = safeLogo === 'butterfly' ? BUTTERFLY_BOX : ALBUM_BOX
-  const boxSizeRef = useRef(boxSize)
-  boxSizeRef.current = boxSize
+  const baseBox = safeLogo === 'butterfly' ? BUTTERFLY_BOX : ALBUM_BOX
+  const [boxPx, setBoxPx] = useState(baseBox)
+  const boxRef = useRef(boxPx)
+  boxRef.current = boxPx
 
   useEffect(() => {
     if (!enabled || reducedMotion) return
@@ -357,74 +351,183 @@ export default function StageBouncer({
       audioBeat = Math.max(audioBeat, punch)
     })
 
-    let cachedObstacle = measureObstacle(host, obstacleRefLatest.current?.current, boxSizeRef.current)
-    let obstacleCheckTimer = 0
-    const spawn = pickSpawnOutside(host.clientWidth, host.clientHeight, boxSizeRef.current, cachedObstacle)
-    let x = spawn.x
-    let y = spawn.y
+    const wantedSize = (): number => {
+      const ratio = latest.current.sizeRatio
+      const base = logoRef.current === 'butterfly' ? BUTTERFLY_BOX : ALBUM_BOX
+      return ratio ? Math.round(Math.min(260, Math.max(64, host.clientWidth * ratio))) : base
+    }
+    const measureField = (size: number): Field => {
+      const { obstacleRefs: many, obstacleRef: one } = latest.current
+      const els = many ? many.map((r) => r.current) : [one?.current]
+      return computeField({ w: host.clientWidth, h: host.clientHeight }, latest.current.safeInsets, els.map((el) => measureObstacle(host, el)), size)
+    }
 
-    // Lively 120fps kinetic cruise speed (~260 px/s diagonal) with post-bounce speed burst
-    const baseVx = 215
-    const baseVy = 172
+    let size = wantedSize()
+    if (size !== boxRef.current) setBoxPx(size)
+    let field = measureField(size)
+    let fieldCheck = 0
+    const measureUnder = (): Array<Rect | null> => (latest.current.underRefs ?? []).map((r) => measureObstacle(host, r.current))
+    let under = measureUnder()
+    let dim = 1
+    let wasUnder = -1
+    let lastNudge = -10
+
+    // Cruise speed follows the size of the box it flies in, so a narrow story frame isn't a blur.
+    const cruise = (): { vx: number; vy: number } => {
+      if (!latest.current.scheduleCorners) return { vx: 215, vy: 172 }
+      const k = Math.min(1.4, Math.max(0.7, Math.sqrt((field.maxX - field.minX + size) * (field.maxY - field.minY + size)) / 560))
+      return { vx: 215 * k, vy: 172 * k }
+    }
+
+    let x = field.minX + Math.random() * (field.maxX - field.minX)
+    let y = field.minY + Math.random() * (field.maxY - field.minY)
     let dirX = Math.random() < 0.5 ? 1 : -1
     let dirY = Math.random() < 0.5 ? 1 : -1
-    let speedBoost = 1
+    let { vx, vy } = cruise()
 
-    // 2nd-order spring oscillator for elastic squash & stretch
+    // 2nd-order spring for the squash & stretch of an impact
     let sx = 1
     let sy = 1
     let vsx = 0
     let vsy = 0
-
-    // Continuous lively 3D tilt, spin, and flip momentum
     let rotZ = 0
-    let rotZVel = 18 * dirX
-    let flipY = 0
-    let flipYVel = 0
+    let rotZVel = 0
     let elapsed = 0
 
-    // Ring buffer for smooth 6-node luminous motion trail
+    // Sim clock in seconds. It runs through the hit-stop, so it keeps pace with the song.
+    let simT = 0
+    let freezeUntil = 0
+    let lastCornerAt = -10
+    let glowBoost = 0
+    let needsPlan = true
+    let nextDriftCheck = 1
+    let plan: { at: number; key: number | null; fromCue: boolean } | null = null
+
     const trailHistory: Array<{ x: number; y: number }> = Array.from({ length: TRAIL_COUNT * 4 }, () => ({ x, y }))
     let trailHead = 0
+    let trailColor = ''
 
-    // Pooled GPU impact sparks (zero React state updates)
     const sparks: SparkState[] = Array.from({ length: SPARK_COUNT }, () => ({
-      active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0.45, size: 6, color: ALL_BOUNCE_ALBUMS[0].color,
+      active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0.45, size: 1, color: ALL_BOUNCE_ALBUMS[0].color,
     }))
 
     let last = performance.now()
     let raf = 0
     let waveSeq = 1
-    let toastTimer: ReturnType<typeof setTimeout> | null = null
-    let washTimer: ReturnType<typeof setTimeout> | null = null
-
-    const spawnWave = (wx: number, wy: number, color: string, corner: boolean): void => {
-      const id = waveSeq++
-      setWaves((prev) => [...prev.slice(-4), { id, x: wx, y: wy, color, corner }])
-      window.setTimeout(() => {
-        setWaves((prev) => prev.filter((w) => w.id !== id))
-      }, corner ? 900 : 580)
+    const timers = new Set<number>()
+    const later = (fn: () => void, ms: number): void => {
+      const id = window.setTimeout(() => { timers.delete(id); fn() }, ms)
+      timers.add(id)
     }
 
-    const burstSparks = (cx: number, cy: number, nx: number, ny: number, color: string, corner: boolean): void => {
-      const count = corner ? SPARK_COUNT : Math.min(6, SPARK_COUNT)
-      for (let i = 0; i < count; i++) {
-        const spread = ((i / Math.max(1, count - 1)) - 0.5) * 2.1
-        const baseAngle = Math.atan2(ny, nx)
-        const ang = baseAngle + spread + (Math.random() - 0.5) * 0.28
-        const spd = (corner ? 260 : 190) + Math.random() * 190
+    const currentColor = (): string => {
+      const items = albumItemsRef.current
+      return items[albumIdxRef.current % items.length].color
+    }
+
+    // A short thin light where the cover touched a wall; brighter against the lyrics. WAAPI, one tiny element per wall.
+    const wallFlash = (wall: BounceWall, cx: number, cy: number, color: string, strong: boolean): void => {
+      const el = wallRefs.current[WALLS.indexOf(wall)]
+      if (!el) return
+      const vertical = wall === 'l' || wall === 'r'
+      const len = strong ? 240 : 130
+      const th = strong ? 5 : 3
+      el.style.width = `${vertical ? th : len}px`
+      el.style.height = `${vertical ? len : th}px`
+      el.style.background = `linear-gradient(${vertical ? 'to bottom' : 'to right'}, transparent, ${color}, transparent)`
+      el.style.boxShadow = `0 0 ${strong ? 30 : 16}px ${color}`
+      el.style.transform = vertical
+        ? `translate3d(${(cx - (wall === 'l' ? 0 : th)).toFixed(1)}px, ${(cy - len / 2).toFixed(1)}px, 0)`
+        : `translate3d(${(cx - len / 2).toFixed(1)}px, ${(cy - (wall === 't' ? 0 : th)).toFixed(1)}px, 0)`
+      el.animate(
+        [{ opacity: 0 }, { opacity: strong ? 1 : 0.7, offset: 0.18 }, { opacity: 0 }],
+        { duration: strong ? 180 : 340, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      )
+    }
+
+    const burstSparks = (cx: number, cy: number, nx: number, ny: number, color: string): void => {
+      for (let i = 0; i < SPARK_COUNT; i++) {
+        const spread = (i / (SPARK_COUNT - 1) - 0.5) * 2.3
+        const ang = Math.atan2(ny, nx) + spread + (Math.random() - 0.5) * 0.3
+        const spd = 240 + Math.random() * 220
+        const el = sparkRefs.current[i]
+        if (el) { el.style.backgroundColor = color; el.style.boxShadow = `0 0 10px ${color}` }
         sparks[i] = {
-          active: true,
-          x: cx,
-          y: cy,
-          vx: Math.cos(ang) * spd,
-          vy: Math.sin(ang) * spd,
-          life: 0,
-          maxLife: (corner ? 0.58 : 0.42) + Math.random() * 0.16,
-          size: corner ? 8 + Math.random() * 5 : 5 + Math.random() * 4,
-          color,
+          active: true, x: cx, y: cy, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, life: 0,
+          maxLife: 0.55 + Math.random() * 0.2, size: 0.7 + Math.random() * 0.8, color,
         }
       }
+    }
+
+    const cornerWash = (cx: number, cy: number, color: string): void => {
+      const el = washRef.current
+      if (!el) return
+      el.style.background = `radial-gradient(circle 720px at ${cx.toFixed(0)}px ${cy.toFixed(0)}px, ${color}a6 0%, ${color}30 46%, transparent 76%)`
+      el.animate([{ opacity: 0 }, { opacity: 0.55, offset: 0.12 }, { opacity: 0 }], { duration: 950, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+    }
+
+    // Speeds so both axes reach a wall together at the cue (or at a random moment when there is no cue).
+    const makePlan = (): void => {
+      needsPlan = false
+      plan = null
+      if (!latest.current.scheduleCorners) return
+      const cue = latest.current.cornerCue?.(null, MIN_LEAD_S) ?? null
+      const frozen = Math.max(0, freezeUntil - simT)
+      const base = cruise()
+      const p = planCorner({
+        w: field.maxX - field.minX, h: field.maxY - field.minY,
+        px: x - field.minX, py: y - field.minY,
+        dirX: dirX as 1 | -1, dirY: dirY as 1 | -1,
+        baseVx: base.vx, baseVy: base.vy,
+        T: (cue ? cue.inSec : 7 + Math.random() * 4) - frozen,
+        tol: CORNER_TOLERANCE, near: NEAR_MISS,
+        edge: { l: field.tags.l === 'edge', r: field.tags.r === 'edge', t: field.tags.t === 'edge', b: field.tags.b === 'edge' },
+      })
+      if (!p) { vx = base.vx; vy = base.vy; return }
+      vx = p.vx
+      vy = p.vy
+      plan = { at: simT + frozen + p.T, key: cue && p.exact ? cue.key : null, fromCue: cue !== null }
+      const glow = glowRef.current
+      if (glow) {
+        const items = albumItemsRef.current
+        const nextColor = items[(albumIdxRef.current + 1) % items.length].color
+        const gx = p.fx === 'l' ? field.minX : field.maxX + size
+        const gy = p.fy === 't' ? field.minY : field.maxY + size
+        glow.style.background = `radial-gradient(circle, ${nextColor}cc 0%, ${nextColor}44 38%, transparent 70%)`
+        glow.style.transform = `translate3d(${(gx - 260).toFixed(0)}px, ${(gy - 260).toFixed(0)}px, 0)`
+      }
+    }
+
+    const onCorner = (cx: number, cy: number, nx: number, ny: number): void => {
+      lastCornerAt = simT
+      freezeUntil = simT + HIT_STOP_S
+      sx = 0.64; sy = 1.36; vsx = 3.4; vsy = -3.2
+      rotZVel = (nx * ny >= 0 ? 1 : -1) * 150
+
+      const items = albumItemsRef.current
+      const nextIdx = (albumIdxRef.current + 1) % items.length
+      albumIdxRef.current = nextIdx
+      const next = items[nextIdx]
+      const mode = logoRef.current
+      setAlbumIdx(nextIdx)
+      if (mode === 'albums') setSwapCount((c) => c + 1)
+
+      const id = waveSeq++
+      setWaves((prev) => [...prev.slice(-2), { id, x: cx, y: cy, color: next.color }])
+      later(() => setWaves((prev) => prev.filter((w) => w.id !== id)), 900)
+      burstSparks(cx, cy, nx, ny, next.color)
+      cornerWash(cx, cy, next.color)
+
+      if (mode === 'albums' && latest.current.themeSync) latest.current.onBounceAlbumChange?.(next.id, next.name, true)
+      latest.current.onCornerHit?.()
+      setCornerToast(
+        mode === 'albums'
+          ? { id, label: `CORNER HIT · ${next.name.toUpperCase()}`, color: next.color, art: next.art }
+          : { id, label: 'CORNER HIT · 999', color: next.color },
+      )
+      later(() => setCornerToast((t) => (t && t.id === id ? null : t)), 1700)
+      glowBoost = 0
+      makePlan()
     }
 
     const step = (now: number): void => {
@@ -436,234 +539,154 @@ export default function StageBouncer({
       const dt = Math.min(0.033, Math.max(0.001, (now - last) / 1000))
       last = now
       elapsed += dt
+      simT += dt
       audioBeat *= Math.exp(-8 * dt)
-      speedBoost += (1 - speedBoost) * (1 - Math.exp(-4.5 * dt))
+      glowBoost *= Math.exp(-3 * dt)
 
-      const size = boxSizeRef.current
-      const maxX = Math.max(0, host.clientWidth - size)
-      const maxY = Math.max(0, host.clientHeight - size)
-
-      // Refresh obstacle bounds every ~250ms (catches modal open transition, video metadata resize, window resize)
-      obstacleCheckTimer += dt
-      if (obstacleCheckTimer >= 0.25) {
-        obstacleCheckTimer = 0
-        cachedObstacle = measureObstacle(host, obstacleRefLatest.current?.current, size)
-      }
-
-      x += dirX * baseVx * speedBoost * dt
-      y += dirY * baseVy * speedBoost * dt
-
-      let hitX = false
-      let hitY = false
-      let hitLeft = false
-      let hitTop = false
-      let hitObstacle = false
-      let impactCx: number | null = null
-      let impactCy: number | null = null
-      let impactNx = 0
-      let impactNy = 0
-
-      if (x <= 0) { x = 0; dirX = 1; hitX = true; hitLeft = true; impactNx = 1 }
-      else if (x >= maxX) { x = maxX; dirX = -1; hitX = true; impactNx = -1 }
-
-      if (y <= 0) { y = 0; dirY = 1; hitY = true; hitTop = true; impactNy = 1 }
-      else if (y >= maxY) { y = maxY; dirY = -1; hitY = true; impactNy = -1 }
-
-      // 2D AABB rebound against optional obstacle (e.g. Studio Session / Video player box)
-      if (cachedObstacle) {
-        const obs = cachedObstacle
-        const overlapsX = x + size > obs.left && x < obs.right
-        const overlapsY = y + size > obs.top && y < obs.bottom
-        if (overlapsX && overlapsY) {
-          const penLeft = (x + size) - obs.left
-          const penRight = obs.right - x
-          const penTop = (y + size) - obs.top
-          const penBottom = obs.bottom - y
-
-          // Prefer push-outs that stay inside the stage viewport
-          const scoreLeft = obs.left - size >= 0 ? penLeft : penLeft + 10000
-          const scoreRight = obs.right <= maxX ? penRight : penRight + 10000
-          const scoreTop = obs.top - size >= 0 ? penTop : penTop + 10000
-          const scoreBottom = obs.bottom <= maxY ? penBottom : penBottom + 10000
-
-          const bestX = Math.min(scoreLeft, scoreRight)
-          const bestY = Math.min(scoreTop, scoreBottom)
-          const resolveBoth = Math.abs(bestX - bestY) <= 14
-
-          hitObstacle = true
-          if (resolveBoth || bestX <= bestY) {
-            if (scoreLeft <= scoreRight) {
-              x = Math.max(0, obs.left - size)
-              dirX = -1
-              impactCx = obs.left
-              impactNx = -1
-            } else {
-              x = Math.min(maxX, obs.right)
-              dirX = 1
-              impactCx = obs.right
-              impactNx = 1
-            }
-            hitX = true
-          }
-          if (resolveBoth || bestY < bestX) {
-            if (scoreTop <= scoreBottom) {
-              y = Math.max(0, obs.top - size)
-              dirY = -1
-              impactCy = obs.top
-              impactNy = -1
-            } else {
-              y = Math.min(maxY, obs.bottom)
-              dirY = 1
-              impactCy = obs.bottom
-              impactNy = 1
-            }
-            hitY = true
-          }
+      // Re-measure every ~250ms (modal open, video metadata, window resize, lyrics panel sliding in)
+      fieldCheck += dt
+      if (fieldCheck >= 0.25) {
+        fieldCheck = 0
+        const nextSize = wantedSize()
+        if (nextSize !== size) { size = nextSize; setBoxPx(size) }
+        under = measureUnder()
+        const nf = measureField(size)
+        const moved = Math.abs(nf.minX - field.minX) + Math.abs(nf.maxX - field.maxX) + Math.abs(nf.minY - field.minY) + Math.abs(nf.maxY - field.maxY)
+        if (moved > 3) {
+          field = nf
+          x = Math.min(field.maxX, Math.max(field.minX, x))
+          y = Math.min(field.maxY, Math.max(field.minY, y))
+          if (latest.current.scheduleCorners) needsPlan = true
         }
       }
 
-      if (hitX || hitY) {
-        // Post-impact kinetic speed kick
-        speedBoost = 1.42
+      // The song moved (seek, pause, another song): aim again, at the next wall hit so the speed change is hidden.
+      if (latest.current.scheduleCorners && simT >= nextDriftCheck) {
+        nextDriftCheck = simT + 1
+        const remaining = plan ? plan.at - simT : -1
+        if (!plan || remaining < -0.5) needsPlan = true
+        else if (plan.key !== null) {
+          const c = latest.current.cornerCue?.(plan.key, 0) ?? null
+          if ((!c || Math.abs(c.inSec - remaining) > 1.2) && remaining > 1.8) needsPlan = true
+        } else if (!plan.fromCue && latest.current.cornerCue?.(null, MIN_LEAD_S)) needsPlan = true
+      }
 
-        // Real 2nd-order elastic squash & stretch impact impulse
-        if (hitX) {
-          sx = 0.68
-          sy = 1.32
-          vsx = 2.6
-          vsy = -2.4
-          rotZVel = (dirY > 0 ? 1 : -1) * (impactNx > 0 ? 155 : -155)
+      // First plan (and any plan with no corner pending) is made at once; later ones wait for a wall hit.
+      if (needsPlan && plan === null) makePlan()
+
+      if (simT >= freezeUntil) {
+        x += dirX * vx * dt
+        y += dirY * vy * dt
+      }
+
+      const hitL = x <= field.minX
+      const hitR = x >= field.maxX
+      const hitT = y <= field.minY
+      const hitB = y >= field.maxY
+      if (hitL || hitR || hitT || hitB) {
+        if (hitL) { x = field.minX; dirX = 1 } else if (hitR) { x = field.maxX; dirX = -1 }
+        if (hitT) { y = field.minY; dirY = 1 } else if (hitB) { y = field.maxY; dirY = -1 }
+        const hitX = hitL || hitR
+        const hitY = hitT || hitB
+        const gapX = Math.min(x - field.minX, field.maxX - x) // how far x is from a side wall
+        const gapY = Math.min(y - field.minY, field.maxY - y)
+        const gap = Math.min(hitX ? gapY : Infinity, hitY ? gapX : Infinity)
+        const color = currentColor()
+        const wallOf = (w: BounceWall): void => {
+          const tag = field.tags[w]
+          const cx = w === 'l' ? field.minX : w === 'r' ? field.maxX + size : x + size / 2
+          const cy = w === 't' ? field.minY : w === 'b' ? field.maxY + size : y + size / 2
+          wallFlash(w, cx, cy, color, tag !== 'edge')
+          if (tag !== 'edge') latest.current.onObstacleHit?.(tag, w)
         }
-        if (hitY) {
-          sx = 1.32
-          sy = 0.68
-          vsx = -2.4
-          vsy = 2.6
-          rotZVel = (dirX > 0 ? 1 : -1) * (impactNy > 0 ? -155 : 155)
-        }
-        // Crisp 3D sleeve flip burst on every impact
-        flipYVel = (impactNx > 0 || impactNy > 0 ? 1 : -1) * 920
+        if (hitL) wallOf('l'); else if (hitR) wallOf('r')
+        if (hitT) wallOf('t'); else if (hitB) wallOf('b')
 
-        const nearCorner = hitObstacle
-          ? (hitX && hitY)
-          : (hitX && (y <= CORNER_TOLERANCE || y >= maxY - CORNER_TOLERANCE)) ||
-            (hitY && (x <= CORNER_TOLERANCE || x >= maxX - CORNER_TOLERANCE))
-
-        const mode = logoRef.current
-        const items = albumItemsRef.current
-        const nextAlbumIdx = (albumIdxRef.current + 1) % items.length
-        albumIdxRef.current = nextAlbumIdx
-        const nextAlbum = items[nextAlbumIdx]
-
-        setAlbumIdx(nextAlbumIdx)
-        if (mode === 'albums') setSwapCount((c) => c + 1)
-
-        const cx = impactCx ?? (hitX ? (hitLeft ? 6 : host.clientWidth - 6) : x + size * 0.5)
-        const cy = impactCy ?? (hitY ? (hitTop ? 6 : host.clientHeight - 6) : y + size * 0.5)
-        const side: EdgeSide = hitObstacle
-          ? 'obstacle'
-          : (hitX ? (hitLeft ? 'left' : 'right') : (hitTop ? 'top' : 'bottom'))
-
-        spawnWave(cx, cy, nextAlbum.color, nearCorner)
-        burstSparks(cx, cy, impactNx || dirX * 0.4, impactNy || dirY * 0.4, nextAlbum.color, nearCorner)
-
-        const xPct = host.clientWidth > 0 ? Math.round((cx / host.clientWidth) * 100) : 50
-        const yPct = host.clientHeight > 0 ? Math.round((cy / host.clientHeight) * 100) : 50
-        setEdgeWash({ color: nextAlbum.color, xPct, yPct, side, active: true })
-        if (washTimer) clearTimeout(washTimer)
-        washTimer = setTimeout(() => {
-          setEdgeWash((w) => ({ ...w, active: false }))
-        }, nearCorner ? 1900 : 1200)
-
-        // Immediately switch the local WRLD stage theme on wall bounce when Theme Sync is enabled
-        if (mode === 'albums' && themeSyncRef.current) {
-          onBounceAlbumChangeRef.current?.(nextAlbum.id, nextAlbum.name, nearCorner)
-        }
-
-        if (nearCorner) {
-          onCornerHitRef.current?.()
-          setCornerToast(
-            mode === 'albums'
-              ? { label: `CORNER HIT · ${nextAlbum.name.toUpperCase()}`, color: nextAlbum.color, art: nextAlbum.art }
-              : { label: 'CORNER HIT · 999', color: nextAlbum.color },
-          )
-          if (toastTimer) clearTimeout(toastTimer)
-          toastTimer = setTimeout(() => setCornerToast(null), 1700)
+        if (gap <= CORNER_TOLERANCE && simT - lastCornerAt > 1.5) {
+          const cornerX = x - field.minX < field.maxX - x ? field.minX : field.maxX + size
+          const cornerY = y - field.minY < field.maxY - y ? field.minY : field.maxY + size
+          onCorner(cornerX, cornerY, cornerX < host.clientWidth / 2 ? 1 : -1, cornerY < host.clientHeight / 2 ? 1 : -1)
+        } else {
+          if (gap > CORNER_TOLERANCE && gap <= NEAR_MISS) glowBoost = Math.max(glowBoost, 0.85 * (1 - gap / NEAR_MISS) + 0.25)
+          if (hitX) { sx = 0.86; sy = 1.14; vsx = 1.7; vsy = -1.5; rotZVel = (dirY > 0 ? 1 : -1) * (hitL ? 70 : -70) }
+          if (hitY) { sx = 1.14; sy = 0.86; vsx = -1.5; vsy = 1.7; rotZVel = (dirX > 0 ? 1 : -1) * (hitT ? -70 : 70) }
+          if (needsPlan) makePlan()
         }
       }
 
-      // Integrate 2nd-order damped harmonic spring for lively bouncy recovery (k=260, d=14)
-      const k = 260
-      const d = 14
-      const ax = (1 - sx) * k - vsx * d
-      const ay = (1 - sy) * k - vsy * d
+      // Damped spring back to rest (k=260, d=14), then a gentle sway
+      const ax = (1 - sx) * 260 - vsx * 14
+      const ay = (1 - sy) * 260 - vsy * 14
       vsx += ax * dt
       vsy += ay * dt
       sx += vsx * dt
       sy += vsy * dt
-
-      // Continuous lively flight tilt + damped post-bounce spin + 3D Y flip settling back to 0°
       rotZVel *= Math.exp(-3.4 * dt)
       rotZ += rotZVel * dt
-      const cruiseSway = Math.sin(elapsed * 2.6) * 9 + dirX * 6
-      rotZ += (cruiseSway - rotZ) * (1 - Math.exp(-2.8 * dt))
+      rotZ += (Math.sin(elapsed * 2.6) * 7 + dirX * 5 - rotZ) * (1 - Math.exp(-2.8 * dt))
 
-      flipYVel *= Math.exp(-6.2 * dt)
-      flipY += flipYVel * dt
-      const nearest360 = Math.round(flipY / 360) * 360
-      flipY += (nearest360 - flipY) * (1 - Math.exp(-5.5 * dt))
+      // Under the lyrics the cover fades back (opacity only) and the lyrics get one small push as it arrives.
+      const ccx = x + size / 2
+      const ccy = y + size / 2
+      let inside = -1
+      for (let i = 0; i < under.length; i++) {
+        const u = under[i]
+        if (u && ccx > u.left && ccx < u.right && ccy > u.top && ccy < u.bottom) { inside = i; break }
+      }
+      dim += ((inside >= 0 ? 0.38 : 1) - dim) * (1 - Math.exp(-9 * dt))
+      item.style.opacity = dim.toFixed(3)
+      if (inside >= 0 && wasUnder < 0 && simT - lastNudge > 0.5) {
+        lastNudge = simT
+        const u = under[inside] as Rect
+        latest.current.onObstacleHit?.(inside, ccx < (u.left + u.right) / 2 ? 'r' : 'l')
+      }
+      wasUnder = inside
 
-      // Subtle 3D banking into movement vector + audio beat breathing
-      const tiltX = -dirY * 11 + Math.cos(elapsed * 2.1) * 5
-      const tiltY = dirX * 12 + flipY
       const beatScale = 1 + audioBeat * 0.085
+      item.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) rotate(${rotZ.toFixed(2)}deg) scale(${(sx * beatScale).toFixed(3)}, ${(sy * beatScale).toFixed(3)})`
 
-      item.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) perspective(720px) rotateX(${tiltX.toFixed(2)}deg) rotateY(${tiltY.toFixed(2)}deg) rotateZ(${rotZ.toFixed(2)}deg) scale3d(${(sx * beatScale).toFixed(3)}, ${(sy * beatScale).toFixed(3)}, 1)`
+      // Glow building toward the planned corner: opacity only.
+      const glow = glowRef.current
+      if (glow) {
+        const toCorner = plan ? Math.min(1, Math.max(0, 1 - (plan.at - simT) / 4.5)) : 0
+        glow.style.opacity = Math.min(0.85, toCorner * toCorner * 0.6 + (plan ? glowBoost * 0.5 : 0)).toFixed(3)
+      }
 
-      // Update 6-node luminous motion trail directly in DOM (0 React renders)
+      // Luminous trail (transform/opacity per frame; the colour is written only when the album changes)
       trailHistory[trailHead] = { x: x + size * 0.5, y: y + size * 0.5 }
       trailHead = (trailHead + 1) % trailHistory.length
-      const items = albumItemsRef.current
-      const activeCol = items[albumIdxRef.current % items.length].color
+      const activeCol = currentColor()
+      const recolor = activeCol !== trailColor
+      trailColor = activeCol
       for (let i = 0; i < TRAIL_COUNT; i++) {
         const el = trailRefs.current[i]
         if (!el) continue
-        const backIdx = (trailHead - 1 - (i + 1) * 3 + trailHistory.length) % trailHistory.length
-        const pt = trailHistory[backIdx]
+        const pt = trailHistory[(trailHead - 1 - (i + 1) * 3 + trailHistory.length) % trailHistory.length]
         const frac = 1 - i / TRAIL_COUNT
-        const s = 0.25 + frac * 0.65
-        el.style.transform = `translate3d(${(pt.x - 28).toFixed(1)}px, ${(pt.y - 28).toFixed(1)}px, 0) scale(${s.toFixed(3)})`
+        el.style.transform = `translate3d(${(pt.x - 28).toFixed(1)}px, ${(pt.y - 28).toFixed(1)}px, 0) scale(${(0.25 + frac * 0.65).toFixed(3)})`
         el.style.opacity = (frac * 0.28).toFixed(3)
-        el.style.background = `radial-gradient(circle, ${activeCol}cc 0%, ${activeCol}22 60%, transparent 75%)`
+        if (recolor) el.style.background = `radial-gradient(circle, ${activeCol}cc 0%, ${activeCol}22 60%, transparent 75%)`
       }
 
-      // Update pooled GPU spark particles
+      // Corner sparks: fixed-size dots, moved and faded with transform/opacity only
       for (let i = 0; i < SPARK_COUNT; i++) {
         const sp = sparks[i]
         const el = sparkRefs.current[i]
         if (!el) continue
         if (!sp.active) {
-          el.style.opacity = '0'
+          if (el.style.opacity !== '0') el.style.opacity = '0'
           continue
         }
         sp.life += dt
-        if (sp.life >= sp.maxLife) {
-          sp.active = false
-          el.style.opacity = '0'
-          continue
-        }
-        sp.vx *= Math.exp(-3.2 * dt)
-        sp.vy *= Math.exp(-3.2 * dt)
+        if (sp.life >= sp.maxLife) { sp.active = false; el.style.opacity = '0'; continue }
+        const damp = Math.exp(-3.2 * dt)
+        sp.vx *= damp
+        sp.vy *= damp
         sp.x += sp.vx * dt
         sp.y += sp.vy * dt
         const p = sp.life / sp.maxLife
-        const sc = 1 - p * 0.7
-        el.style.width = `${sp.size}px`
-        el.style.height = `${sp.size}px`
-        el.style.backgroundColor = sp.color
-        el.style.boxShadow = `0 0 12px ${sp.color}`
-        el.style.opacity = ((1 - p) * 0.92).toFixed(3)
-        el.style.transform = `translate3d(${(sp.x - sp.size * 0.5).toFixed(1)}px, ${(sp.y - sp.size * 0.5).toFixed(1)}px, 0) scale(${sc.toFixed(3)})`
+        el.style.opacity = ((1 - p) * 0.95).toFixed(3)
+        el.style.transform = `translate3d(${(sp.x - 6).toFixed(1)}px, ${(sp.y - 6).toFixed(1)}px, 0) scale(${(sp.size * (1 - p * 0.6)).toFixed(3)})`
       }
     }
 
@@ -672,8 +695,7 @@ export default function StageBouncer({
     return () => {
       cancelAnimationFrame(raf)
       offMeter()
-      if (toastTimer) clearTimeout(toastTimer)
-      if (washTimer) clearTimeout(washTimer)
+      timers.forEach((id) => window.clearTimeout(id))
     }
   }, [enabled, reducedMotion])
 
@@ -681,34 +703,25 @@ export default function StageBouncer({
 
   const activeAlbum = albumItems[albumIdx % albumItems.length]
   const sleeveArt = safeLogo === 'cover' && playingCoverUrl ? playingCoverUrl : activeAlbum.art
+  const k = boxPx / baseBox
 
   return (
     <div ref={hostRef} className={className} aria-hidden="true">
-      {/* Directional edge-impact color bloom sweeping across the stage */}
-      <div
-        className="pointer-events-none absolute inset-0 transition-opacity duration-500 ease-out"
-        style={{
-          opacity: edgeWash.active ? (safeLogo === 'albums' ? 0.46 : 0.28) : 0,
-          background: `radial-gradient(circle 760px at ${edgeWash.xPct}% ${edgeWash.yPct}%, ${edgeWash.color}a6 0%, ${edgeWash.color}30 46%, transparent 76%)`,
-        }}
-      />
+      {/* Corner color bloom: painted once per corner, then only its opacity moves */}
+      <div ref={washRef} className="pointer-events-none absolute inset-0" style={{ opacity: 0 }} />
 
-      {/* Crisp luminous edge flare bar along the impacted outer screen border */}
-      {edgeWash.side !== 'obstacle' && (
+      {/* Glow at the corner the cover is heading for, growing as the cue nears */}
+      <div ref={glowRef} className="pointer-events-none absolute top-0 left-0 w-[520px] h-[520px] rounded-full will-change-transform" style={{ opacity: 0 }} />
+
+      {/* Thin light where the cover touches a wall (one per wall, reused) */}
+      {WALLS.map((w, i) => (
         <div
-          className="pointer-events-none absolute transition-opacity duration-300 ease-out"
-          style={{
-            opacity: edgeWash.active ? 0.85 : 0,
-            ...(edgeWash.side === 'left'
-              ? { top: 0, bottom: 0, left: 0, width: 4, background: `linear-gradient(to bottom, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
-              : edgeWash.side === 'right'
-                ? { top: 0, bottom: 0, right: 0, width: 4, background: `linear-gradient(to bottom, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
-                : edgeWash.side === 'top'
-                  ? { left: 0, right: 0, top: 0, height: 4, background: `linear-gradient(to right, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }
-                  : { left: 0, right: 0, bottom: 0, height: 4, background: `linear-gradient(to right, transparent, ${edgeWash.color}, transparent)`, boxShadow: `0 0 26px ${edgeWash.color}` }),
-          }}
+          key={`wall-${w}`}
+          ref={(el) => { wallRefs.current[i] = el }}
+          className="pointer-events-none absolute top-0 left-0 rounded-full will-change-transform"
+          style={{ opacity: 0 }}
         />
-      )}
+      ))}
 
       {/* 6-node luminous motion trail behind the bouncing cover */}
       {Array.from({ length: TRAIL_COUNT }).map((_, i) => (
@@ -720,53 +733,60 @@ export default function StageBouncer({
         />
       ))}
 
-      {/* Pooled GPU wall-impact light sparks */}
+      {/* Pooled corner sparks */}
       {Array.from({ length: SPARK_COUNT }).map((_, i) => (
         <div
           key={`spark-${i}`}
           ref={(el) => { sparkRefs.current[i] = el }}
-          className="pointer-events-none absolute top-0 left-0 rounded-full will-change-transform"
+          className="pointer-events-none absolute top-0 left-0 w-3 h-3 rounded-full will-change-transform"
           style={{ opacity: 0 }}
         />
       ))}
 
-      {/* Double concentric wall impact ripples & full-screen corner supernova */}
+      {/* Corner supernova */}
       {waves.map((w) => (
         <div
           key={w.id}
-          className={`pointer-events-none absolute rounded-full ${w.corner ? 'dvd-corner-wave' : 'dvd-edge-ripple'}`}
+          className="pointer-events-none absolute rounded-full dvd-corner-wave"
           style={{
             left: w.x,
             top: w.y,
-            width: w.corner ? 320 : 140,
-            height: w.corner ? 320 : 140,
-            border: w.corner ? `2.5px solid ${w.color}` : `2px solid ${w.color}dd`,
-            background: w.corner
-              ? `radial-gradient(circle, ${w.color}78 0%, ${w.color}28 55%, transparent 76%)`
-              : `radial-gradient(circle, ${w.color}50 0%, transparent 72%)`,
-            boxShadow: `0 0 ${w.corner ? 60 : 28}px ${w.color}99`,
+            width: 320,
+            height: 320,
+            border: `2.5px solid ${w.color}`,
+            background: `radial-gradient(circle, ${w.color}78 0%, ${w.color}28 55%, transparent 76%)`,
+            boxShadow: `0 0 60px ${w.color}99`,
           }}
         />
       ))}
 
-      {/* Kinetic 120fps bouncing album cover sleeve or LND butterfly */}
+      {/* Album cover sleeve or LND butterfly */}
       <div
         ref={itemRef}
         className="absolute top-0 left-0 flex items-center justify-center will-change-transform"
-        style={{ width: boxSize, height: boxSize, transformStyle: 'preserve-3d' }}
+        style={{ width: boxPx, height: boxPx }}
       >
-        {safeLogo === 'butterfly' ? (
-          <LndButterflyGraphic color={activeAlbum.color} />
-        ) : (
-          <GlassCoverSleeve art={sleeveArt} color={activeAlbum.color} swapKey={safeLogo === 'albums' ? swapCount : 0} />
-        )}
+        <div className="flex items-center justify-center shrink-0" style={{ width: baseBox, height: baseBox, transform: k === 1 ? undefined : `scale(${k.toFixed(3)})` }}>
+          {safeLogo === 'butterfly' ? (
+            <LndButterflyGraphic color={activeAlbum.color} />
+          ) : (
+            <GlassCoverSleeve art={sleeveArt} color={activeAlbum.color} swapKey={safeLogo === 'albums' ? swapCount : 0} />
+          )}
+        </div>
       </div>
 
-      {/* Frosted Liquid Glass Corner Hit banner */}
+      {/* Liquid Glass corner banner: translucent, blurred, light text with a soft shadow, below the platform's top bar */}
       {cornerToast && (
         <div
-          className="fixed top-6 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-black/72 border text-xs font-mono-ui font-bold tracking-[0.14em] uppercase backdrop-blur-xl shadow-2xl"
-          style={{ borderColor: cornerToast.color, color: cornerToast.color, boxShadow: `0 12px 34px ${cornerToast.color}55` }}
+          key={cornerToast.id}
+          className={`dvd-corner-toast absolute left-1/2 ${safeInsets ? 'top-[10%]' : 'top-[18%]'} z-40 inline-flex items-center gap-2.5 px-4 py-2 rounded-full border text-xs font-mono-ui font-bold tracking-[0.14em] uppercase text-white backdrop-blur-xl`}
+          style={{
+            borderColor: `${cornerToast.color}cc`,
+            // Tinted glass over a deep, translucent base so the white text keeps >= 4.5:1 even on a pale stage.
+            background: `linear-gradient(135deg, ${cornerToast.color}66, rgba(255,255,255,0.06)), rgba(10, 14, 28, 0.58)`,
+            textShadow: '0 1px 10px rgba(0,0,0,0.65), 0 0 2px rgba(0,0,0,0.5)',
+            boxShadow: `0 10px 30px ${cornerToast.color}44, inset 0 1px 0 rgba(255,255,255,0.4)`,
+          }}
         >
           {cornerToast.art && (
             <img src={cornerToast.art} alt="" className="w-5 h-5 rounded-md object-cover border border-white/25" />
