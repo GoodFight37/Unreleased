@@ -1,131 +1,219 @@
 import { useEffect, useRef, useState } from 'react'
-import juicePixelSrc from '../assets/juice-pixel.png'
+import { getSkin, type SkinId } from '../lib/skins'
+import { buildImageUrl } from '../lib/juicewrldApi'
 
-export type DvdLogoId = 'mix' | 'pixel' | 'carton' | '999' | 'heart' | 'butterfly'
+export type DvdLogoId = 'albums' | 'cover' | 'butterfly'
 
 export const DVD_LOGO_OPTIONS: ReadonlyArray<{ id: DvdLogoId; label: string }> = [
-  { id: 'mix', label: 'Mix 999' },
-  { id: 'pixel', label: 'Juice Pixel' },
-  { id: 'carton', label: 'Juice Carton' },
-  { id: '999', label: '999 Emblem' },
-  { id: 'heart', label: 'GB&GR Heart' },
+  { id: 'albums', label: 'Album Covers' },
+  { id: 'cover', label: 'Playing Cover' },
   { id: 'butterfly', label: 'LND Butterfly' },
 ]
 
-const CYCLE_LOGOS: ReadonlyArray<Exclude<DvdLogoId, 'mix'>> = ['pixel', 'carton', '999', 'heart', 'butterfly']
+export function normalizeDvdLogo(value: unknown): DvdLogoId {
+  return value === 'albums' || value === 'cover' || value === 'butterfly' ? value : 'albums'
+}
 
-const ALBUM_COLORS = [
-  '#f0404f', // 999 crimson
-  '#5ca8ff', // GB&GR sky blue
-  '#ff8c38', // DRFL race orange
-  '#f070b8', // LND rose magenta
-  '#5ce1e6', // FD ice cyan
-  '#facc15', // Lyrical Lemonade yellow
-] as const
+interface AlbumBounceItem {
+  id: SkinId
+  name: string
+  color: string
+  art: string
+}
 
-const BOX_W = 86
-const BOX_H = 86
-const CORNER_TOLERANCE = 12
+const ALBUM_BOUNCE_SPECS: ReadonlyArray<{ id: SkinId; color: string }> = [
+  { id: '999', color: '#f0404f' },
+  { id: 'gbgr', color: '#4da6ff' },
+  { id: 'drfl', color: '#ff8426' },
+  { id: 'lnd', color: '#e864c0' },
+  { id: 'fd', color: '#4ce4eb' },
+]
 
-function LogoGraphic({ kind, color }: { kind: Exclude<DvdLogoId, 'mix'>; color: string }): JSX.Element {
-  if (kind === 'pixel') {
-    return (
-      <img
-        src={juicePixelSrc}
-        alt=""
-        draggable={false}
-        className="w-[78px] h-[78px] object-contain select-none"
-        style={{
-          imageRendering: 'pixelated',
-          filter: `drop-shadow(0 0 12px ${color}aa) drop-shadow(0 6px 14px rgba(0,0,0,0.65))`,
-        }}
-      />
-    )
+const ALBUM_ITEMS: ReadonlyArray<AlbumBounceItem> = ALBUM_BOUNCE_SPECS.map(({ id, color }) => {
+  const skin = getSkin(id)
+  return {
+    id,
+    name: skin.name,
+    color,
+    art: buildImageUrl(skin.art ?? `/assets/${id}.webp`) ?? '',
   }
+})
 
-  if (kind === 'carton') {
-    return (
-      <svg viewBox="0 0 80 86" width="76" height="82" aria-hidden="true" style={{ filter: `drop-shadow(0 0 12px ${color}99)` }}>
-        {/* Iconic Juice / Milk Carton homage */}
-        <path d="M22 14 L58 14 L64 26 L16 26 Z" fill={color} fillOpacity="0.22" stroke={color} strokeWidth="2.6" strokeLinejoin="round" />
-        <rect x="22" y="7" width="36" height="7" rx="2" fill={color} fillOpacity="0.35" stroke={color} strokeWidth="2.4" />
-        <rect x="16" y="26" width="48" height="52" rx="6" fill="rgba(10,10,14,0.72)" stroke={color} strokeWidth="2.6" />
-        <path d="M16 38 H64" stroke={color} strokeWidth="1.8" strokeOpacity="0.55" />
-        <circle cx="40" cy="54" r="11" fill={color} fillOpacity="0.2" stroke={color} strokeWidth="2" />
-        <text x="40" y="58" textAnchor="middle" fill={color} fontSize="10.5" fontWeight="900" fontFamily="monospace" letterSpacing="0.8">999</text>
-        <text x="40" y="34.5" textAnchor="middle" fill="#ffffff" fontSize="6.5" fontWeight="800" fontFamily="monospace" letterSpacing="1.3">JUICE</text>
-      </svg>
-    )
-  }
+const ALBUM_BOX = 104
+const BUTTERFLY_BOX = 92
+const CORNER_TOLERANCE = 30
 
-  if (kind === 'heart') {
-    return (
-      <svg viewBox="0 0 84 78" width="76" height="72" aria-hidden="true" style={{ filter: `drop-shadow(0 0 12px ${color}99)` }}>
-        <path
-          d="M42 70 C20 55 8 42 8 26 C8 14 17 6 28 6 C35 6 39 10 42 15 C45 10 49 6 56 6 C67 6 76 14 76 26 C76 42 64 55 42 70 Z"
-          fill={color}
-          fillOpacity="0.22"
-          stroke={color}
-          strokeWidth="3"
-          strokeLinejoin="round"
-        />
-        <path d="M43 16 L36 30 L47 39 L38 54 L43 66" fill="none" stroke="#ffffff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )
-  }
+interface ImpactWave {
+  id: number
+  x: number
+  y: number
+  color: string
+  corner: boolean
+}
 
-  if (kind === 'butterfly') {
-    return (
-      <svg viewBox="0 0 86 76" width="78" height="70" aria-hidden="true" style={{ filter: `drop-shadow(0 0 12px ${color}99)` }}>
-        <path
-          d="M43 34 C35 12 10 8 8 24 C6 36 20 42 32 42 C18 46 12 60 22 66 C32 72 41 58 43 46 C45 58 54 72 64 66 C74 60 68 46 54 42 C66 42 80 36 78 24 C76 8 51 12 43 34 Z"
-          fill={color}
-          fillOpacity="0.25"
-          stroke={color}
-          strokeWidth="2.6"
-          strokeLinejoin="round"
-        />
-        <line x1="43" y1="22" x2="43" y2="56" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" />
-        <path d="M43 24 C40 16 36 13 33 12 M43 24 C46 16 50 13 53 12" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    )
-  }
-
-  // '999' emblem
+function GlassCoverSleeve({
+  art,
+  color,
+  swapKey,
+}: {
+  art: string
+  color: string
+  swapKey: number
+}): JSX.Element {
   return (
     <div
-      className="flex flex-col items-center justify-center w-[84px] h-[54px] rounded-2xl border-2 bg-black/55 backdrop-blur-sm select-none"
+      key={swapKey}
+      className="dvd-cover-swap relative w-[96px] h-[96px] rounded-[22px] overflow-hidden select-none"
       style={{
-        borderColor: color,
-        boxShadow: `0 0 18px ${color}88, inset 0 1px 0 rgba(255,255,255,0.28)`,
+        boxShadow: `0 16px 40px ${color}66, 0 0 0 1.5px ${color}b0, inset 0 1px 0 rgba(255,255,255,0.48)`,
       }}
     >
-      <span className="font-mono-ui text-[22px] font-black leading-none tracking-[0.12em]" style={{ color }}>999</span>
-      <span className="font-mono-ui text-[8px] font-bold tracking-[0.26em] text-white/80 mt-0.5">WRLD</span>
+      {art ? (
+        <img
+          src={art}
+          alt=""
+          draggable={false}
+          className="w-full h-full object-cover select-none"
+        />
+      ) : (
+        <div
+          className="w-full h-full flex items-center justify-center bg-black/75 font-mono-ui text-lg font-black"
+          style={{ color }}
+        >
+          999
+        </div>
+      )}
+      {/* Specular Liquid Glass sheen & inner edge refraction */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(135deg, rgba(255,255,255,0.36) 0%, rgba(255,255,255,0.06) 36%, transparent 54%, rgba(0,0,0,0.24) 100%)',
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-[22px]"
+        style={{ boxShadow: `inset 0 0 20px ${color}40` }}
+      />
     </div>
   )
 }
 
-/** DVD-style bouncing Juice WRLD screensaver running in the outer backdrop around windowed Footage. */
+/** Multi-layered iridescent Legends Never Die butterfly emblem. */
+function LndButterflyGraphic({ color }: { color: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 120 104"
+      width="88"
+      height="76"
+      aria-hidden="true"
+      style={{ filter: `drop-shadow(0 0 18px ${color}99) drop-shadow(0 8px 18px rgba(0,0,0,0.55))` }}
+    >
+      <defs>
+        <linearGradient id="lnd-wing-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.65" />
+          <stop offset="35%" stopColor={color} stopOpacity="0.58" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.18" />
+        </linearGradient>
+        <linearGradient id="lnd-inner-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor={color} stopOpacity="0.72" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.35" />
+        </linearGradient>
+      </defs>
+      {/* Upper wings */}
+      <path
+        d="M60 48 C48 18 16 6 10 26 C5 42 22 54 44 55 C51 55 56 52 60 48 Z"
+        fill="url(#lnd-wing-grad)"
+        stroke={color}
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M60 48 C72 18 104 6 110 26 C115 42 98 54 76 55 C69 55 64 52 60 48 Z"
+        fill="url(#lnd-wing-grad)"
+        stroke={color}
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+      {/* Lower wings */}
+      <path
+        d="M58 53 C38 56 18 68 24 84 C30 96 48 90 56 72 C58 66 59 59 58 53 Z"
+        fill="url(#lnd-inner-grad)"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M62 53 C82 56 102 68 96 84 C90 96 72 90 64 72 C62 66 61 59 62 53 Z"
+        fill="url(#lnd-inner-grad)"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      {/* Delicate wing accent cells */}
+      <ellipse cx="30" cy="31" rx="9" ry="5.5" transform="rotate(-24 30 31)" fill="#ffffff" fillOpacity="0.28" />
+      <ellipse cx="90" cy="31" rx="9" ry="5.5" transform="rotate(24 90 31)" fill="#ffffff" fillOpacity="0.28" />
+      <circle cx="38" cy="74" r="4" fill="#ffffff" fillOpacity="0.3" />
+      <circle cx="82" cy="74" r="4" fill="#ffffff" fillOpacity="0.3" />
+      {/* Body & subtle antennae */}
+      <path d="M60 32 L60 76" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeOpacity="0.92" />
+      <path d="M60 35 C55 24 49 18 44 16" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M60 35 C65 24 71 18 76 16" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="44" cy="16" r="2" fill="#ffffff" fillOpacity="0.85" />
+      <circle cx="76" cy="16" r="2" fill="#ffffff" fillOpacity="0.85" />
+    </svg>
+  )
+}
+
+/** Kinetic 60-120fps Album Covers, Playing Cover & LND Butterfly bouncer with wall ripples and corner theme shifts. */
 export default function FootageDvdBouncer({
   enabled,
   logo,
   reducedMotion,
+  playingCoverUrl,
   onCornerHit,
+  onCornerAlbumHit,
+  className = 'fixed inset-0 z-0 pointer-events-none overflow-hidden select-none',
 }: {
   enabled: boolean
   logo: DvdLogoId
   reducedMotion: boolean
-  onCornerHit: () => void
+  /** Current track cover art, used in 'cover' mode (falls back to album covers if absent). */
+  playingCoverUrl?: string | null
+  onCornerHit?: () => void
+  /** Fires on a corner hit in Album Covers mode so WRLD can smoothly switch the active album theme. */
+  onCornerAlbumHit?: (albumId: SkinId, albumName: string) => void
+  className?: string
 }): JSX.Element | null {
   const hostRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const onCornerHitRef = useRef(onCornerHit)
   onCornerHitRef.current = onCornerHit
+  const onCornerAlbumHitRef = useRef(onCornerAlbumHit)
+  onCornerAlbumHitRef.current = onCornerAlbumHit
+  const safeLogo = normalizeDvdLogo(logo)
+  const logoRef = useRef<DvdLogoId>(safeLogo)
+  logoRef.current = safeLogo
 
-  const [colorIdx, setColorIdx] = useState(0)
-  const [mixIdx, setMixIdx] = useState(0)
-  const [cornerFlash, setCornerFlash] = useState(false)
+  const [albumIdx, setAlbumIdx] = useState(0)
+  const [swapCount, setSwapCount] = useState(0)
+  const [edgeWash, setEdgeWash] = useState<{ color: string; xPct: number; yPct: number; active: boolean }>({
+    color: ALBUM_ITEMS[0].color,
+    xPct: 50,
+    yPct: 50,
+    active: false,
+  })
+  const [waves, setWaves] = useState<ImpactWave[]>([])
+  const [cornerTint, setCornerTint] = useState<string | null>(null)
+  const [cornerToast, setCornerToast] = useState<{ label: string; color: string; art?: string } | null>(null)
+  const albumIdxRef = useRef(0)
+  albumIdxRef.current = albumIdx
+
+  const boxSize = safeLogo === 'butterfly' ? BUTTERFLY_BOX : ALBUM_BOX
+  const boxSizeRef = useRef(boxSize)
+  boxSizeRef.current = boxSize
 
   useEffect(() => {
     if (!enabled || reducedMotion) return
@@ -133,14 +221,28 @@ export default function FootageDvdBouncer({
     const item = itemRef.current
     if (!host || !item) return
 
-    let x = 28 + Math.random() * Math.max(40, host.clientWidth * 0.25)
-    let y = 28 + Math.random() * Math.max(40, host.clientHeight * 0.25)
-    // Crisp DVD speed (~125 px/sec at 45deg)
-    let vx = 112
-    let vy = 96
+    let x = 36 + Math.random() * Math.max(40, host.clientWidth * 0.35)
+    let y = 36 + Math.random() * Math.max(40, host.clientHeight * 0.3)
+    // Smooth 60-120fps kinetic glide speed (~148 px/s diagonal)
+    let vx = 132
+    let vy = 106
+    let angle = 0
+    let angularVel = 6
+    let squashX = 1
+    let squashY = 1
     let last = performance.now()
     let raf = 0
-    let flashTimer: ReturnType<typeof setTimeout> | null = null
+    let waveSeq = 1
+    let toastTimer: ReturnType<typeof setTimeout> | null = null
+    let washTimer: ReturnType<typeof setTimeout> | null = null
+
+    const spawnWave = (wx: number, wy: number, color: string, corner: boolean): void => {
+      const id = waveSeq++
+      setWaves((prev) => [...prev.slice(-3), { id, x: wx, y: wy, color, corner }])
+      window.setTimeout(() => {
+        setWaves((prev) => prev.filter((w) => w.id !== id))
+      }, corner ? 900 : 560)
+    }
 
     const step = (now: number): void => {
       raf = requestAnimationFrame(step)
@@ -148,69 +250,167 @@ export default function FootageDvdBouncer({
         last = now
         return
       }
-      const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000))
+      const dt = Math.min(0.04, Math.max(0.001, (now - last) / 1000))
       last = now
 
-      const maxX = Math.max(0, host.clientWidth - BOX_W)
-      const maxY = Math.max(0, host.clientHeight - BOX_H)
+      const size = boxSizeRef.current
+      const maxX = Math.max(0, host.clientWidth - size)
+      const maxY = Math.max(0, host.clientHeight - size)
       x += vx * dt
       y += vy * dt
 
       let hitX = false
       let hitY = false
-      if (x <= 0) { x = 0; vx = Math.abs(vx); hitX = true }
+      let hitLeft = false
+      let hitTop = false
+      if (x <= 0) { x = 0; vx = Math.abs(vx); hitX = true; hitLeft = true }
       else if (x >= maxX) { x = maxX; vx = -Math.abs(vx); hitX = true }
 
-      if (y <= 0) { y = 0; vy = Math.abs(vy); hitY = true }
+      if (y <= 0) { y = 0; vy = Math.abs(vy); hitY = true; hitTop = true }
       else if (y >= maxY) { y = maxY; vy = -Math.abs(vy); hitY = true }
 
+      // Spring-damp elastic squash-stretch back to 1.0 cleanly at 60-120+ fps
+      const spring = 1 - Math.exp(-15 * dt)
+      squashX += (1 - squashX) * spring
+      squashY += (1 - squashY) * spring
+
+      // Gentle buoyant tilt with soft angular damping
+      angle += angularVel * dt
+      if (angle > 9) { angle = 9; angularVel = -Math.abs(angularVel) * 0.45 }
+      else if (angle < -9) { angle = -9; angularVel = Math.abs(angularVel) * 0.45 }
+      angularVel *= Math.exp(-1.7 * dt)
+
       if (hitX || hitY) {
-        setColorIdx((i) => (i + 1) % ALBUM_COLORS.length)
-        setMixIdx((i) => (i + 1) % CYCLE_LOGOS.length)
+        if (hitX) {
+          squashX = 0.83
+          squashY = 1.15
+          angularVel = (vy > 0 ? 1 : -1) * (hitLeft ? 28 : -28)
+        }
+        if (hitY) {
+          squashX = 1.15
+          squashY = 0.83
+          angularVel = (vx > 0 ? 1 : -1) * (hitTop ? -28 : 28)
+        }
+
         const nearCorner =
           (hitX && (y <= CORNER_TOLERANCE || y >= maxY - CORNER_TOLERANCE)) ||
           (hitY && (x <= CORNER_TOLERANCE || x >= maxX - CORNER_TOLERANCE))
+
+        const mode = logoRef.current
+        const nextAlbumIdx = (albumIdxRef.current + 1) % ALBUM_ITEMS.length
+        albumIdxRef.current = nextAlbumIdx
+        const nextAlbum = ALBUM_ITEMS[nextAlbumIdx]
+
+        setAlbumIdx(nextAlbumIdx)
+        if (mode === 'albums') setSwapCount((c) => c + 1)
+
+        const cx = hitX ? (hitLeft ? 4 : host.clientWidth - 4) : x + size * 0.5
+        const cy = hitY ? (hitTop ? 4 : host.clientHeight - 4) : y + size * 0.5
+        spawnWave(cx, cy, nextAlbum.color, nearCorner)
+
+        const xPct = host.clientWidth > 0 ? Math.round((cx / host.clientWidth) * 100) : 50
+        const yPct = host.clientHeight > 0 ? Math.round((cy / host.clientHeight) * 100) : 50
+        setEdgeWash({ color: nextAlbum.color, xPct, yPct, active: true })
+        if (washTimer) clearTimeout(washTimer)
+        washTimer = setTimeout(() => {
+          setEdgeWash((w) => ({ ...w, active: false }))
+        }, nearCorner ? 2000 : 1400)
+
         if (nearCorner) {
-          onCornerHitRef.current()
-          setCornerFlash(true)
-          if (flashTimer) clearTimeout(flashTimer)
-          flashTimer = setTimeout(() => setCornerFlash(false), 900)
+          onCornerHitRef.current?.()
+          if (mode === 'albums') {
+            setCornerTint(nextAlbum.color)
+            onCornerAlbumHitRef.current?.(nextAlbum.id, nextAlbum.name)
+            setCornerToast({ label: `CORNER HIT · ${nextAlbum.name.toUpperCase()}`, color: nextAlbum.color, art: nextAlbum.art })
+          } else {
+            setCornerToast({ label: 'CORNER HIT · 999', color: nextAlbum.color })
+          }
+          if (toastTimer) clearTimeout(toastTimer)
+          toastTimer = setTimeout(() => setCornerToast(null), 1700)
         }
       }
 
-      item.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`
+      item.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) rotate(${angle.toFixed(2)}deg) scale3d(${squashX.toFixed(3)}, ${squashY.toFixed(3)}, 1)`
     }
 
     item.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`
     raf = requestAnimationFrame(step)
     return () => {
       cancelAnimationFrame(raf)
-      if (flashTimer) clearTimeout(flashTimer)
+      if (toastTimer) clearTimeout(toastTimer)
+      if (washTimer) clearTimeout(washTimer)
     }
   }, [enabled, reducedMotion])
 
   if (!enabled || reducedMotion) return null
 
-  const activeKind: Exclude<DvdLogoId, 'mix'> = logo === 'mix' ? CYCLE_LOGOS[mixIdx] : logo
-  const activeColor = ALBUM_COLORS[colorIdx]
+  const activeAlbum = ALBUM_ITEMS[albumIdx % ALBUM_ITEMS.length]
+  const sleeveArt = safeLogo === 'cover' && playingCoverUrl ? playingCoverUrl : activeAlbum.art
 
   return (
-    <div ref={hostRef} className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none" aria-hidden="true">
+    <div ref={hostRef} className={className} aria-hidden="true">
+      {/* Persistent soft album atmosphere wash after a corner hit in Album Covers mode */}
+      {safeLogo === 'albums' && cornerTint && (
+        <div
+          className="pointer-events-none absolute inset-0 transition-opacity duration-700 ease-out"
+          style={{
+            opacity: 0.28,
+            background: `radial-gradient(120% 90% at 20% 15%, ${cornerTint}88 0%, transparent 58%), radial-gradient(110% 85% at 85% 85%, ${cornerTint}66 0%, transparent 62%)`,
+          }}
+        />
+      )}
+
+      {/* Smooth directional ambient edge-impact color aura */}
+      <div
+        className="pointer-events-none absolute inset-0 transition-opacity duration-500 ease-out"
+        style={{
+          opacity: edgeWash.active ? (safeLogo === 'albums' ? 0.42 : 0.26) : 0,
+          background: `radial-gradient(circle 620px at ${edgeWash.xPct}% ${edgeWash.yPct}%, ${edgeWash.color}99 0%, ${edgeWash.color}28 46%, transparent 74%)`,
+        }}
+      />
+
+      {/* Wall impact ripples & full-screen corner theme expansion waves */}
+      {waves.map((w) => (
+        <div
+          key={w.id}
+          className={`pointer-events-none absolute rounded-full ${w.corner ? 'dvd-corner-wave' : 'dvd-edge-ripple'}`}
+          style={{
+            left: w.x,
+            top: w.y,
+            width: w.corner ? 300 : 128,
+            height: w.corner ? 300 : 128,
+            border: w.corner ? `2px solid ${w.color}` : `1.5px solid ${w.color}cc`,
+            background: w.corner
+              ? `radial-gradient(circle, ${w.color}70 0%, ${w.color}24 55%, transparent 76%)`
+              : `radial-gradient(circle, ${w.color}48 0%, transparent 70%)`,
+            boxShadow: `0 0 ${w.corner ? 56 : 24}px ${w.color}88`,
+          }}
+        />
+      ))}
+
+      {/* Kinetic 60-120fps bouncing album cover sleeve or LND butterfly */}
       <div
         ref={itemRef}
         className="absolute top-0 left-0 flex items-center justify-center will-change-transform"
-        style={{ width: BOX_W, height: BOX_H }}
+        style={{ width: boxSize, height: boxSize }}
       >
-        <div className={`transition-transform duration-200 ${cornerFlash ? 'scale-125' : 'scale-100'}`}>
-          <LogoGraphic kind={activeKind} color={activeColor} />
-        </div>
+        {safeLogo === 'butterfly' ? (
+          <LndButterflyGraphic color={activeAlbum.color} />
+        ) : (
+          <GlassCoverSleeve art={sleeveArt} color={activeAlbum.color} swapKey={safeLogo === 'albums' ? swapCount : 0} />
+        )}
       </div>
-      {cornerFlash && (
+
+      {/* Frosted Liquid Glass Corner Hit banner */}
+      {cornerToast && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full bg-black/75 border text-xs font-mono-ui font-bold tracking-[0.16em] uppercase backdrop-blur-md"
-          style={{ borderColor: activeColor, color: activeColor, boxShadow: `0 0 24px ${activeColor}66` }}
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-black/72 border text-xs font-mono-ui font-bold tracking-[0.14em] uppercase backdrop-blur-xl shadow-2xl"
+          style={{ borderColor: cornerToast.color, color: cornerToast.color, boxShadow: `0 12px 34px ${cornerToast.color}55` }}
         >
-          CORNER HIT · 999
+          {cornerToast.art && (
+            <img src={cornerToast.art} alt="" className="w-5 h-5 rounded-md object-cover border border-white/25" />
+          )}
+          <span>{cornerToast.label}</span>
         </div>
       )}
     </div>

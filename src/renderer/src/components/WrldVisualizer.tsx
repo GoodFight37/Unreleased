@@ -14,6 +14,7 @@ import { hasEscapeLayer, useEscapeToClose } from '../hooks/useEscapeToClose'
 import { useStore } from '../store/useStore'
 import { useVizStore, useWrldEdgeLook } from '../store/vizStore'
 import VizControls, { Toggle } from './VizControls'
+import { DVD_LOGO_OPTIONS } from './FootageDvdBouncer'
 import WrldEdgeLight from './WrldEdgeLight'
 import WrldMusicVideo from './WrldMusicVideo'
 import LyricsControls from './LyricsControls'
@@ -128,7 +129,9 @@ export default function WrldVisualizer({
   const {
     activeMode, vizQuality, vizUseArtwork, vizBoost, covered,
     wrldAtmosphere, wrldAnimations, wrldLyricLook, wrldCleanView, wrldCutAccent, wrldCoverLyricColors,
+    wrldDvdBouncer, wrldDvdLogo,
     setWrldAtmosphere, setWrldAnimations, setWrldLyricLook, setWrldCleanView, setWrldCutAccent, setWrldCoverLyricColors,
+    setWrldDvdBouncer, setWrldDvdLogo,
   } = useVizStore(useShallow((s) => ({
     activeMode: s.activeMode,
     vizQuality: s.vizQuality,
@@ -141,12 +144,16 @@ export default function WrldVisualizer({
     wrldCleanView: s.wrldCleanView,
     wrldCutAccent: s.wrldCutAccent,
     wrldCoverLyricColors: s.wrldCoverLyricColors,
+    wrldDvdBouncer: s.wrldDvdBouncer,
+    wrldDvdLogo: s.wrldDvdLogo,
     setWrldAtmosphere: s.setWrldAtmosphere,
     setWrldAnimations: s.setWrldAnimations,
     setWrldLyricLook: s.setWrldLyricLook,
     setWrldCleanView: s.setWrldCleanView,
     setWrldCutAccent: s.setWrldCutAccent,
     setWrldCoverLyricColors: s.setWrldCoverLyricColors,
+    setWrldDvdBouncer: s.setWrldDvdBouncer,
+    setWrldDvdLogo: s.setWrldDvdLogo,
   })))
   const [ambienceOpen, setAmbienceOpen] = useState(false)
 
@@ -584,21 +591,50 @@ export default function WrldVisualizer({
             )}
           </div>
           <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
-          {(['accent', 'yellow'] as const).map((c) => {
+          {(() => {
             const lockedInk = wrldLyricLook === 'fisheye' || wrldLyricLook === 'cut'
+            const yellowOn = ink === 'yellow'
             return (
               <button
-                key={c}
-                className={`h-9 px-3 shrink-0 rounded-[10px] text-xs font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none ${ink === c ? toolOn : toolIdle}`}
-                onClick={() => setWrldInk(ink === c ? 'white' : c)}
+                type="button"
+                className={`h-9 px-3 shrink-0 rounded-[10px] text-xs font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none ${yellowOn ? toolOn : toolIdle}`}
+                onClick={() => setWrldInk(yellowOn ? 'white' : 'yellow')}
                 disabled={lockedInk}
-                aria-pressed={ink === c}
-                title={lockedInk ? 'This style uses its own color palette' : c === 'accent' ? 'Words in cover color (off: white)' : 'Words in gold yellow (off: white)'}
+                aria-pressed={yellowOn}
+                title={lockedInk ? 'This style uses its own color palette' : yellowOn ? 'Gold yellow on (click for default color)' : 'Highlight words in gold yellow'}
               >
-                {c === 'accent' ? 'Accent' : 'Yellow'}
+                Yellow
               </button>
             )
-          })}
+          })()}
+          <button
+            type="button"
+            className={`h-9 px-3 shrink-0 rounded-[10px] text-xs font-semibold transition-colors ${wrldDvdBouncer ? toolOn : toolIdle}`}
+            onClick={() => {
+              const next = !wrldDvdBouncer
+              setWrldDvdBouncer(next)
+              announce(next ? 'DVD 999 on' : 'DVD 999 off')
+            }}
+            aria-pressed={wrldDvdBouncer}
+            title={wrldDvdBouncer ? 'Hide floating Album Covers / Juice WRLD DVD' : 'Show floating Album Covers / Juice WRLD DVD'}
+          >
+            DVD 999
+          </button>
+          {wrldDvdBouncer && (
+            <button
+              type="button"
+              className={`h-9 px-2.5 shrink-0 rounded-[10px] text-[11px] font-medium transition-colors ${toolIdle}`}
+              onClick={() => {
+                const idx = DVD_LOGO_OPTIONS.findIndex((o) => o.id === wrldDvdLogo)
+                const next = DVD_LOGO_OPTIONS[(idx + 1) % DVD_LOGO_OPTIONS.length]
+                setWrldDvdLogo(next.id)
+                announce(`DVD: ${next.label}`)
+              }}
+              title="Switch bouncing DVD style (Album Covers, Juice Pixel, 999…)"
+            >
+              {DVD_LOGO_OPTIONS.find((o) => o.id === wrldDvdLogo)?.label ?? 'Album Covers'}
+            </button>
+          )}
           <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
           <button className={`${tool} shrink-0 ${toolIdle}`} onClick={() => setWrldPost('off')} title="Show cover again (Esc)" aria-label="Show cover again">
             <X size={16} />
@@ -898,6 +934,42 @@ export default function WrldVisualizer({
                   )
                 })}
               </div>
+            </div>
+
+            <div className="pt-3 border-t border-[var(--border)]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-text-primary leading-tight">Album Bounce</div>
+                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Floating album covers (corner hit shifts theme) or LND Butterfly</div>
+                </div>
+                <Toggle
+                  on={wrldDvdBouncer}
+                  onClick={() => {
+                    const next = !wrldDvdBouncer
+                    setWrldDvdBouncer(next)
+                    announce(next ? 'DVD 999 on' : 'DVD 999 off')
+                  }}
+                />
+              </div>
+              {wrldDvdBouncer && (
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {DVD_LOGO_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setWrldDvdLogo(opt.id)}
+                      aria-pressed={wrldDvdLogo === opt.id}
+                      className={`px-2 py-1 rounded-lg border text-[10px] font-semibold transition-colors ${
+                        wrldDvdLogo === opt.id
+                          ? 'bg-accent/15 border-[var(--accent)] text-text-primary'
+                          : 'border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-[var(--surface-overlay)]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

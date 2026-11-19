@@ -4,6 +4,7 @@ import { getFont } from '../lib/fonts'
 import { useAlbumColors } from '../desktop/artColors'
 import { hsbToRgb } from '../desktop/light/engine'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
+import FootageDvdBouncer from './FootageDvdBouncer'
 import SongFootagePill from './SongFootagePill'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
@@ -531,10 +532,12 @@ export default function WrldView(): JSX.Element {
   )
   const playbackActive = radioFmActive ? !radioFmPaused : isPlaying
   const { reducedMotion, gameMode } = useEffectsState()
-  const { wrldAtmosphere, wrldAnimations, wrldCleanView } = useVizStore(useShallow(s => ({
+  const { wrldAtmosphere, wrldAnimations, wrldCleanView, wrldDvdBouncer, wrldDvdLogo } = useVizStore(useShallow(s => ({
     wrldAtmosphere: s.wrldAtmosphere,
     wrldAnimations: s.wrldAnimations,
     wrldCleanView: s.wrldCleanView,
+    wrldDvdBouncer: s.wrldDvdBouncer,
+    wrldDvdLogo: s.wrldDvdLogo,
   })))
   const stageAnimated = wrldAnimations && !reducedMotion && !gameMode && !videoShown && wrldAtmosphere !== 'off'
   const stageEra = useMemo(
@@ -855,6 +858,18 @@ export default function WrldView(): JSX.Element {
               </>
             )}
             {postOn && <div className="absolute inset-0 pointer-events-none bg-black/30" />}
+            {wrldDvdBouncer && (
+              <FootageDvdBouncer
+                enabled={wrldDvdBouncer && wrldAnimations}
+                logo={wrldDvdLogo}
+                reducedMotion={reducedMotion || gameMode}
+                playingCoverUrl={artSrc && !artError ? artSrc : null}
+                onCornerAlbumHit={(albumId) => {
+                  useStore.getState().setTheme(albumId)
+                }}
+                className="absolute inset-0 z-[5] pointer-events-none overflow-hidden select-none opacity-90"
+              />
+            )}
           </div>
 
           <WrldVisualizer
@@ -2344,12 +2359,14 @@ interface LyricsPanelProps {
   artUrl?: string | null
   /** True when the backdrop behind the lyrics is light, so all lyric styles invert to dark ink. */
   lightBg?: boolean
+  /** Explicit active-line color override (e.g. Yellow toggle in Lyrics only). */
+  overrideActiveColor?: string | null
 }
 
 const LyricsPanel = memo(function LyricsPanel({
   rawLyrics, isSynced, syncedLines, padded,
   radioFmActive, currentTrack, isEditor,
-  txtPri, txtSec, txtTer, artUrl, lightBg,
+  txtPri, txtSec, txtTer, artUrl, lightBg, overrideActiveColor,
 }: LyricsPanelProps) {
   // Settings > Desktop > Lyric style: 'classic' is this list, anything else an iJWA style.
   const savedLyricLook = useStore(s => s.desktop.lyrics.look)
@@ -2417,7 +2434,7 @@ const LyricsPanel = memo(function LyricsPanel({
     return { primary, secondary }
   }, [wrldCoverLyricColors, coverPalette, isLightLyrics])
   // null = auto, i.e. the art-derived text colors this tab already picks.
-  const activeColor   = developerMode ? (lyricsColorActive ?? coverTint?.primary.css ?? txtPri) : (coverTint?.primary.css ?? txtPri)
+  const activeColor   = overrideActiveColor ?? (developerMode ? (lyricsColorActive ?? coverTint?.primary.css ?? txtPri) : (coverTint?.primary.css ?? txtPri))
   const inactiveColor = developerMode ? lyricsColorInactive ?? txtSec : txtSec
   const coverAccentStyle = coverTint
     ? ({ '--accent': coverTint.primary.css, '--accent-rgb': coverTint.primary.rgb } as React.CSSProperties)
@@ -2858,22 +2875,17 @@ const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedL
     wrldLyricLook: s.wrldLyricLook, ink: s.wrldInk, postFont: s.wrldPostFont,
   })))
   const radioFmActive = useStore(s => s.radioFmActive)
-  const colors = useAlbumColors(ink === 'accent' ? artUrl : null)
 
   const stack = postFont ? getFont(postFont).stack : undefined
 
-  let inkRgb: string | null = INK_WHITE
-  if (ink === 'yellow') inkRgb = INK_YELLOW
-  else if (ink === 'accent') {
-    inkRgb = colors
-      ? hsbToRgb({ ...colors.primary, saturation: Math.min(colors.primary.saturation, 0.8), brightness: Math.max(colors.primary.brightness, 0.92) })
-          .map(v => Math.round(v * 255)).join(' ')
-      : null
-  }
-  const inkColor = inkRgb ? `rgb(${inkRgb})` : 'var(--accent)'
-  const inkStyle = (inkRgb
-    ? { color: inkColor, '--accent': inkColor, '--accent-rgb': inkRgb, ...(stack ? { '--font-lyrics': stack } : {}) }
-    : { color: 'var(--accent)', ...(stack ? { '--font-lyrics': stack } : {}) }) as React.CSSProperties
+  const yellowOn = ink === 'yellow'
+  const inkRgb = yellowOn ? INK_YELLOW : INK_WHITE
+  const inkColor = `rgb(${inkRgb})`
+  const inkStyle = {
+    color: inkColor,
+    ...(yellowOn ? { '--accent': inkColor, '--accent-rgb': inkRgb } : {}),
+    ...(stack ? { '--font-lyrics': stack } : {}),
+  } as React.CSSProperties
 
   const stageLook = wrldLyricLook === 'fisheye' || wrldLyricLook === 'cut' || wrldLyricLook === 'cinema'
     ? wrldLyricLook
@@ -2913,6 +2925,7 @@ const WrldPostFrame = memo(function WrldPostFrame({ rawLyrics, isSynced, syncedL
             txtFaint="rgba(255,255,255,0.22)"
             artUrl={artUrl}
             lightBg={false}
+            overrideActiveColor={yellowOn ? inkColor : null}
           />
         </div>
       )}

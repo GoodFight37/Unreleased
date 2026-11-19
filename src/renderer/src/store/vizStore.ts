@@ -141,6 +141,9 @@ interface VizState {
   wrldCutAccent: 'juice' | 'cover'
   /** Applies cover-derived primary/secondary colors to lyrics across all WRLD lyric styles. */
   wrldCoverLyricColors: boolean
+  /** Optional kinetic Album Covers / Playing Cover / LND Butterfly bouncer behind WRLD lyrics. */
+  wrldDvdBouncer: boolean
+  wrldDvdLogo: 'albums' | 'cover' | 'butterfly'
   /** Hides chrome and playback controls in WRLD for clean screen-recording/captures. */
   wrldCleanView: boolean
   /** Post frame, saved. */
@@ -161,6 +164,8 @@ interface VizState {
   setWrldLyricLook: (look: WrldCuratedLyricId) => void
   setWrldCutAccent: (accent: 'juice' | 'cover') => void
   setWrldCoverLyricColors: (on: boolean) => void
+  setWrldDvdBouncer: (on: boolean) => void
+  setWrldDvdLogo: (logo: 'albums' | 'cover' | 'butterfly') => void
   setWrldCleanView: (on: boolean) => void
   setWrldVideos: (choice: MusicVideoChoice) => void
   setWrldVideoShown: (on: boolean) => void
@@ -196,6 +201,8 @@ export const useVizStore = create<VizState>((set) => ({
   wrldCleanView: false,
   wrldCutAccent: ls.get('wrldCutAccent') === 'cover' ? 'cover' : 'juice',
   wrldCoverLyricColors: ls.get<boolean>('wrldCoverLyricColors') ?? true,
+  wrldDvdBouncer: ls.get<boolean>('wrldDvdBouncer') === true,
+  wrldDvdLogo: pick(ls.get('wrldDvdLogo'), ['albums', 'cover', 'butterfly'] as const, 'albums'),
   wrldFrame: normalizeWrldFrame(ls.get<unknown>('wrldFrame')),
   wrldInk: normalizeWrldInk(ls.get<unknown>('wrldInk')),
   wrldPostFont: ls.get<string>('wrldPostFont') ?? null,
@@ -258,6 +265,14 @@ export const useVizStore = create<VizState>((set) => ({
   setWrldCoverLyricColors: (wrldCoverLyricColors) => {
     set({ wrldCoverLyricColors })
     ls.set('wrldCoverLyricColors', wrldCoverLyricColors)
+  },
+  setWrldDvdBouncer: (wrldDvdBouncer) => {
+    set({ wrldDvdBouncer })
+    ls.set('wrldDvdBouncer', wrldDvdBouncer)
+  },
+  setWrldDvdLogo: (wrldDvdLogo) => {
+    set({ wrldDvdLogo })
+    ls.set('wrldDvdLogo', wrldDvdLogo)
   },
   setWrldFrame: (wrldFrame) => { set({ wrldFrame }); ls.set('wrldFrame', wrldFrame) },
   setWrldInk: (wrldInk) => { set({ wrldInk }); ls.set('wrldInk', wrldInk) },

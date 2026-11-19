@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Film, Maximize2, Minimize2, Music2, Pause, Play, RotateCcw, RotateCw, Sparkles, Volume2, VolumeX, X } from 'lucide-react'
-import FootageDvdBouncer, { DVD_LOGO_OPTIONS, type DvdLogoId } from './FootageDvdBouncer'
+import FootageDvdBouncer, { DVD_LOGO_OPTIONS, normalizeDvdLogo, type DvdLogoId } from './FootageDvdBouncer'
 import { ls } from '../lib/persist'
 import { saveTrackerSearch } from '../lib/apiTrackerShared'
 import { buildStreamUrl } from '../lib/juicewrldApi'
@@ -536,7 +536,7 @@ export function FootagePlayerModal({
   const [chromeVisible, setChromeVisible] = useState(true)
 
   const [dvdEnabled, setDvdEnabled] = useState<boolean>(() => ls.get<boolean>('footageDvdEnabled') ?? true)
-  const [dvdLogo, setDvdLogo] = useState<DvdLogoId>(() => ls.get<DvdLogoId>('footageDvdLogo') ?? 'mix')
+  const [dvdLogo, setDvdLogo] = useState<DvdLogoId>(() => normalizeDvdLogo(ls.get<unknown>('footageDvdLogo')))
   const [cornerHits, setCornerHits] = useState(0)
 
   const wakeChrome = useCallback(() => {
@@ -656,7 +656,7 @@ export function FootagePlayerModal({
 
   const pct = dur > 0 ? Math.min(100, (curTime / dur) * 100) : 0
   const bufPct = dur > 0 ? Math.min(100, (bufEnd / dur) * 100) : 0
-  const currentLogoLabel = DVD_LOGO_OPTIONS.find((o) => o.id === dvdLogo)?.label ?? 'Mix 999'
+  const currentLogoLabel = DVD_LOGO_OPTIONS.find((o) => o.id === dvdLogo)?.label ?? 'Album Covers'
   const isOneTakeSession = item.family === 'studio' && dur >= 600
   const showChrome = chromeVisible || !vPlaying
 

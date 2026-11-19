@@ -1969,3 +1969,25 @@ html:not(.glass-gpu-active) .glass-backdrop[data-lens]::before {
   backdrop-filter: var(--lens-filter) saturate(1.8);
 }
 .liquid-lens-defs { position: fixed; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+
+/* Kinetic DVD 999 & Album Covers bouncer effects (100% GPU transform + opacity) */
+@keyframes dvd-edge-ripple {
+  0%   { transform: translate3d(-50%, -50%, 0) scale(0.24); opacity: 0.78; }
+  100% { transform: translate3d(-50%, -50%, 0) scale(3.4); opacity: 0; }
+}
+@keyframes dvd-corner-wave {
+  0%   { transform: translate3d(-50%, -50%, 0) scale(0.12); opacity: 0.72; }
+  45%  { opacity: 0.38; }
+  100% { transform: translate3d(-50%, -50%, 0) scale(10.5); opacity: 0; }
+}
+@keyframes dvd-cover-swap {
+  0%   { transform: scale(0.86); opacity: 0.55; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.dvd-edge-ripple { animation: dvd-edge-ripple 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.dvd-corner-wave { animation: dvd-corner-wave 860ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.dvd-cover-swap  { animation: dvd-cover-swap 240ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+:where(html[data-effects-motion="reduce"], html[data-effects-quality="game"]) :is(.dvd-edge-ripple, .dvd-corner-wave, .dvd-cover-swap) {
+  animation: none;
+  opacity: 0;
+}

@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState, CSSProperties, ReactNode } from '
 import { ModalOverlay, LockToggle } from './Modal'
 import {
   X, Music2, Pencil, Flag,
-  Clock, Hash, MicVocal, Music, Wrench, FileText, Piano, MapPin,
+  Clock, MicVocal, Music, Wrench, FileText, Piano, MapPin,
   Calendar, CalendarClock, CalendarDays, Droplets, Gauge, Layers,
   GitBranch, Info, StickyNote, Quote, Copy, Download, Loader2, LucideIcon, PictureInPicture2, Minimize2,
-  Activity, Music4, ImagePlus, Clapperboard, ExternalLink, Play, FolderOpen, Star
+  Activity, Music4, ImagePlus, Clapperboard, ExternalLink, Play, FolderOpen, Star, SlidersHorizontal,
 } from 'lucide-react'
 import { useStore, useStorePick, IS_FLOAT_WINDOW } from '../store/useStore'
 import { useDragToDismiss } from '../hooks/useDragToDismiss'
@@ -33,18 +33,37 @@ import { showAppToast } from '../lib/appToast'
 
 // Shared with the Tracker: -700 shades on light themes, -400 on dark (lib/juicewrldApi).
 
-// One info block styled like the reference design: a squircle icon chip on
-// the left, an uppercase tracked label, and the value(s) underneath. The row
-// highlights on hover and its values are text-selectable for copying.
 function Section({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: ReactNode }): JSX.Element {
   return (
-    <div className="group flex gap-3.5 px-3 py-3 -mx-3 rounded-xl border border-transparent hover:border-[var(--border)] hover:bg-surface-raised transition-colors">
-      <div className="shrink-0 w-9 h-9 rounded-xl bg-surface-overlay border border-[var(--border)] flex items-center justify-center text-text-muted group-hover:text-text-primary transition-colors">
-        <Icon size={15} strokeWidth={1.75} />
+    <div className="group flex gap-3 p-3 rounded-2xl border border-[var(--border)] bg-[var(--fill)]/70 hover:bg-[var(--fill)] transition-colors">
+      <div className="shrink-0 w-8 h-8 rounded-xl bg-[var(--fill-strong)]/70 border border-[var(--border)] flex items-center justify-center text-text-muted group-hover:text-text-primary transition-colors">
+        <Icon size={14} strokeWidth={1.75} />
       </div>
-      <div className="flex-1 min-w-0 pt-0.5">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted mb-1.5 select-none">{label}</p>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted mb-1 select-none">{label}</p>
         <div className="select-text cursor-text">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function GlassFactCard({ icon: Icon, label, primary, secondary }: {
+  icon: LucideIcon
+  label: string
+  primary: string
+  secondary?: string | null
+}): JSX.Element {
+  return (
+    <div className="flex items-start gap-2.5 p-3 rounded-2xl border border-[var(--border)] bg-[var(--fill)]/65">
+      <div className="shrink-0 w-7 h-7 rounded-xl bg-[var(--fill-strong)]/65 border border-[var(--border)] flex items-center justify-center text-accent">
+        <Icon size={13} strokeWidth={1.85} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted select-none">{label}</p>
+        <p className="text-text-primary text-xs font-medium leading-snug mt-0.5 break-words select-text">{primary}</p>
+        {secondary && (
+          <p className="text-text-secondary text-[11px] leading-snug mt-0.5 break-words select-text">{secondary}</p>
+        )}
       </div>
     </div>
   )
@@ -421,6 +440,8 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
   // changes anything visible on its own.
   const [coverBusy, setCoverBusy] = useState<'copy' | 'save' | null>(null)
   const [coverMsg, setCoverMsg] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'overview' | 'lyrics' | 'footage' | 'details'>('overview')
+  useEffect(() => { setActiveTab('overview') }, [song?.id])
 
   const handleViewVersion = async (id: number): Promise<void> => {
     try {
@@ -502,72 +523,73 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
     }
   }
 
-  // ModalOverlay portals to <body> so the overlay is never trapped inside a
-  // caller with a CSS transform/animation/overflow (e.g. NowPlaying's
-  // slide-in panel) - a transformed ancestor becomes the containing block for
-  // position: fixed, which would otherwise render this "modal" clipped
-  // inside that panel.
+  const recordedDate = displaySong.record_dates?.trim() || null
+  const recordedStudio = displaySong.recording_locations?.trim() || null
+  const releaseOrLeakPrimary = displayDate(displaySong.release_date) || displayDate(displaySong.date_leaked) || null
+  const releaseOrLeakLabel = displaySong.release_date ? 'Released' : 'Leaked'
+  const releaseOrLeakSub = displaySong.release_date && displaySong.date_leaked
+    ? `Leaked ${displayDate(displaySong.date_leaked)}`
+    : displaySong.leak_type || null
+  const hasLyrics = Boolean(displaySong.lyrics?.trim())
+
   return (
     <ModalOverlay
       onClose={onClose}
       floating={floating}
       zIndexClassName="z-[160]"
-      panelClassName="bg-surface border border-[var(--border)] rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-lg max-h-[92svh] md:max-h-[86vh]"
-      minWidth={420} minHeight={480}
+      panelClassName="modal-glass rounded-t-3xl md:rounded-3xl border border-[var(--border)] shadow-[0_32px_90px_rgba(0,0,0,0.6)] w-full md:max-w-2xl max-h-[88svh] md:max-h-[82vh]"
+      minWidth={460} minHeight={440}
       dragY={dragY} dragging={dragging}
     >
       {({ onHandleMouseDown, locked, toggleLock, canLock }) => (
       <div
-        className="select-text bg-surface w-full flex-1 min-h-0 flex flex-col overflow-hidden"
+        className="select-text bg-[color-mix(in_srgb,var(--surface)_62%,transparent)] backdrop-blur-2xl ring-1 ring-inset ring-white/10 w-full flex-1 min-h-0 flex flex-col overflow-hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {/* Hero — in a pop-out it doubles as the frameless window's native OS
-            drag handle; in-app it's a JS drag handle instead (see
-            ModalOverlay) so the modal can be moved around the page. The
-            buttons opt back out below or they'd be undraggable/unclickable. */}
+        {/* Translucent Liquid Glass Hero Header */}
         <div
-          className={`relative shrink-0 overflow-hidden `}
+          className="relative shrink-0 overflow-hidden border-b border-[var(--border)]"
           style={floating ? ({ WebkitAppRegion: 'drag' } as CSSProperties) : undefined}
           onMouseDown={onHandleMouseDown}
           {...dragHandlers}
         >
           {coverUrl && (
             <div
-              className="absolute inset-0 bg-cover bg-center scale-110"
-              style={{ backgroundImage: `url(${coverUrl})`, filter: 'blur(24px) brightness(0.35)' }}
+              className="pointer-events-none absolute inset-0 bg-cover bg-center scale-110 opacity-45"
+              style={{
+                backgroundImage: `url(${coverUrl})`,
+                filter: 'blur(34px) saturate(1.4)',
+                maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.35) 75%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.35) 75%, transparent 100%)',
+              }}
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-surface" />
           <div
-            className="absolute top-3 right-3 z-10 flex items-center gap-1.5"
+            className="absolute top-3.5 right-3.5 z-10 flex items-center gap-1.5"
             style={floating ? ({ WebkitAppRegion: 'no-drag' } as CSSProperties) : undefined}
           >
             {!floating && canLock && (
               <LockToggle
                 locked={locked}
                 onClick={toggleLock}
-                className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
-                  locked ? 'bg-accent/80 text-white' : 'bg-black/40 text-white/70 hover:text-white'
+                className={`w-7 h-7 flex items-center justify-center rounded-full backdrop-blur-md transition-colors ${
+                  locked ? 'bg-accent/85 text-white' : 'bg-black/35 text-white/80 hover:text-white hover:bg-black/55'
                 }`}
               />
             )}
-            {/* Manual pop-out — only when shown in-app on desktop (i.e. the
-                Song-info pop-out was turned off); detaches into its own window. */}
             {!floating && el?.openFloatWindow && (
               <button
                 onClick={() => { el.openFloatWindow('song-info', { songId: displaySong.id }); onClose() }}
-                className="w-7 h-7 flex items-center justify-center rounded-full bg-black/40 text-white/70 hover:text-white transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-black/35 text-white/80 hover:text-white hover:bg-black/55 backdrop-blur-md transition-colors"
                 title="Open in a separate window"
               >
                 <PictureInPicture2 size={13} />
               </button>
             )}
-            {/* Manual attach — from the pop-out window, dock back into the main
-                window (the main window opens its in-app song info). */}
             {floating && (
               <button
                 onClick={() => { attachToMainWindow({ view: 'song-info', songId: displaySong.id }); onClose() }}
-                className="w-7 h-7 flex items-center justify-center rounded-full bg-black/40 text-white/70 hover:text-white transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-black/35 text-white/80 hover:text-white hover:bg-black/55 backdrop-blur-md transition-colors"
                 title="Dock into main window"
               >
                 <Minimize2 size={13} />
@@ -576,7 +598,7 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
             {onEdit && (
               <button
                 onClick={() => { onEdit(displaySong.id); onClose() }}
-                className="w-7 h-7 flex items-center justify-center rounded-full bg-black/40 text-white/70 hover:text-white transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-black/35 text-white/80 hover:text-white hover:bg-black/55 backdrop-blur-md transition-colors"
                 title="Edit song info"
               >
                 <Pencil size={13} />
@@ -585,18 +607,19 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
             <button
               onClick={onClose}
               title="Close"
-              className="w-7 h-7 flex items-center justify-center rounded-full bg-black/40 text-white/70 hover:text-white transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-full bg-black/35 text-white/80 hover:text-white hover:bg-black/55 backdrop-blur-md transition-colors"
             >
               <X size={15} />
             </button>
           </div>
-          <div className="relative flex items-end gap-4 px-5 pt-8 pb-5">
-            <div className="relative shrink-0 w-24 h-24 rounded-xl overflow-hidden shadow-2xl bg-surface-overlay">
+
+          <div className="relative flex items-center gap-4 px-5 pt-6 pb-4">
+            <div className="relative shrink-0 w-[84px] h-[84px] rounded-2xl overflow-hidden shadow-[0_14px_34px_rgba(0,0,0,0.45)] border border-white/15 bg-[var(--fill)]">
               {coverUrl ? (
                 <ProgressiveCover src={coverUrl} alt={primaryTitle} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <Music2 size={32} className="text-text-muted opacity-30" />
+                  <Music2 size={28} className="text-text-muted opacity-35" />
                 </div>
               )}
               {coverUrl && (coverMsg ? (
@@ -604,14 +627,14 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
                   <span className="text-white text-[10px] font-semibold">{coverMsg}</span>
                 </div>
               ) : (
-                // Copy/save actions - always visible (no hover on touch),
-                // tucked in the bottom-right corner so they don't compete with
-                // the cover itself.
-                <div className="absolute bottom-1 right-1 flex items-center gap-1">
+                <div
+                  className="absolute bottom-1 right-1 flex items-center gap-1"
+                  style={floating ? ({ WebkitAppRegion: 'no-drag' } as CSSProperties) : undefined}
+                >
                   <button
                     onClick={() => runCoverAction('copy')}
                     disabled={!!coverBusy}
-                    className="w-6 h-6 flex items-center justify-center rounded-lg bg-black/50 text-white active:bg-black/70 disabled:opacity-50 transition-colors"
+                    className="w-6 h-6 flex items-center justify-center rounded-lg bg-black/55 text-white hover:bg-black/75 disabled:opacity-50 transition-colors"
                     title="Copy cover image"
                   >
                     {coverBusy === 'copy' ? <Loader2 size={11} className="animate-spin" /> : <Copy size={11} />}
@@ -619,7 +642,7 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
                   <button
                     onClick={() => runCoverAction('save')}
                     disabled={!!coverBusy}
-                    className="w-6 h-6 flex items-center justify-center rounded-lg bg-black/50 text-white active:bg-black/70 disabled:opacity-50 transition-colors"
+                    className="w-6 h-6 flex items-center justify-center rounded-lg bg-black/55 text-white hover:bg-black/75 disabled:opacity-50 transition-colors"
                     title="Save cover image"
                   >
                     {coverBusy === 'save' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
@@ -627,188 +650,262 @@ export default function SongInfoModal({ song, onClose, onEdit, floating = false,
                 </div>
               ))}
             </div>
-            <div className="flex-1 min-w-0 pb-0.5">
-              <h2 className="text-white font-bold text-xl leading-tight">{primaryTitle}</h2>
-              <SongTruthLineLive song={displaySong} className="mt-1.5" />
-              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <div className="flex-1 min-w-0 pr-20">
+              <h2 className="text-text-primary font-extrabold text-xl leading-tight truncate">{primaryTitle}</h2>
+              <SongTruthLineLive song={displaySong} className="mt-1" />
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                 {displaySong.era?.name && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/60 border border-white/15">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--fill-strong)]/70 text-text-primary border border-[var(--border)]">
                     {displaySong.era.name}
                   </span>
                 )}
                 {!!parseDuration(displaySong.length) && (
-                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-black/30 text-white/70 border border-white/15">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--fill)] text-text-secondary border border-[var(--border)]">
                     <Clock size={9} /> {duration}
+                  </span>
+                )}
+                {!!String(displaySong.bpm ?? '').trim() && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--fill)] text-text-secondary border border-[var(--border)]">
+                    <Activity size={9} /> {String(displaySong.bpm).trim()} BPM
+                  </span>
+                )}
+                {!!String(displaySong.key ?? '').trim() && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--fill)] text-text-secondary border border-[var(--border)]">
+                    <Music4 size={9} /> {String(displaySong.key).trim()}
                   </span>
                 )}
               </div>
             </div>
           </div>
+
+          {/* Clean segmented glass tabs so every view fits without endless scrolling */}
+          <div
+            className="relative flex items-center gap-1.5 px-5 pb-3.5"
+            role="tablist"
+            aria-label="Song details sections"
+            style={floating ? ({ WebkitAppRegion: 'no-drag' } as CSSProperties) : undefined}
+          >
+            {([
+              { id: 'overview', label: 'Overview', show: true },
+              { id: 'lyrics', label: 'Lyrics', show: hasLyrics },
+              { id: 'footage', label: 'Footage', show: true },
+              { id: 'details', label: 'Details & Edit', show: true },
+            ] as const).filter((t) => t.show).map((tab) => {
+              const selected = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                    selected
+                      ? 'bg-[var(--fill-strong)] text-text-primary border border-[var(--border)] shadow-sm'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-[var(--fill)] border border-transparent'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Scrollable info */}
-        <div className="overflow-y-auto flex-1 min-h-0 px-5 py-4">
-
-          <SongPrefsSection
-            songId={displaySong.id}
-            apiTitle={apiPrimaryTitle}
-            apiImageUrl={apiCoverUrl}
-            ownImageRaw={displaySong.image_url}
-            ownHasFile={!!displaySong.path}
-            versions={versions}
-            altTitles={altTitles}
-          />
-
-          {/* Alt names as chips right under the hero, like the reference -
-              they're also what widens the cover picker's search (see
-              SongPrefsSection's altTitles prop). */}
-          {altTitles.length > 0 && (
-            <div className="px-3 py-3 -mx-3 rounded-xl border border-transparent hover:border-[var(--border)] hover:bg-surface-raised transition-colors">
-              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-text-muted mb-2 select-none">
-                <Hash size={11} /> Also Known As
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {altTitles.map((t) => (
-                  <span key={t} className="select-text cursor-text text-xs px-2.5 py-1 rounded-full bg-surface-overlay border border-[var(--border)] text-text-primary">
-                    {t}
-                  </span>
-                ))}
+        {/* Tab body */}
+        <div className="overflow-y-auto flex-1 min-h-0 px-5 py-4 space-y-3">
+          {activeTab === 'overview' && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <GlassFactCard
+                  icon={MicVocal}
+                  label="Artist"
+                  primary={displaySong.credited_artists || 'Juice WRLD'}
+                />
+                {displaySong.producers && (
+                  <GlassFactCard icon={Music} label="Produced by" primary={displaySong.producers} />
+                )}
+                {(recordedDate || recordedStudio) && (
+                  <GlassFactCard
+                    icon={recordedDate ? Calendar : MapPin}
+                    label="Recorded"
+                    primary={recordedDate || recordedStudio || ''}
+                    secondary={recordedDate && recordedStudio ? recordedStudio : null}
+                  />
+                )}
+                {releaseOrLeakPrimary && (
+                  <GlassFactCard
+                    icon={displaySong.release_date ? CalendarDays : Droplets}
+                    label={releaseOrLeakLabel}
+                    primary={releaseOrLeakPrimary}
+                    secondary={releaseOrLeakSub}
+                  />
+                )}
               </div>
+
+              {(displaySong.additional_information || notesDisplay) && (
+                <div className="p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--fill)]/65 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted flex items-center gap-1.5 select-none">
+                    <Info size={11} className="text-accent" /> Behind the track
+                  </p>
+                  {displaySong.additional_information && (
+                    <p className="text-text-primary text-xs leading-relaxed whitespace-pre-wrap">
+                      {displaySong.additional_information}
+                    </p>
+                  )}
+                  {notesDisplay && (
+                    <p className="text-text-secondary text-xs leading-relaxed whitespace-pre-wrap">
+                      {notesDisplay}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {versionsEnabled && !loadingVersions && versions.length > 0 && (
+                <div className="p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--fill)]/65">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted flex items-center gap-1.5 mb-2 select-none">
+                    <GitBranch size={11} className="text-accent" /> Other versions ({versions.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {versions.map(({ song: v, meta }) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => handleViewVersion(v.id)}
+                        className="px-2.5 py-1.5 rounded-xl bg-[var(--fill)] hover:bg-[var(--fill-strong)] border border-[var(--border)] text-left text-xs text-text-primary transition-colors"
+                      >
+                        <span className="font-medium">{v.name}</span>
+                        {(meta.version || meta.versionTitle) && (
+                          <span className="text-text-muted ml-1">
+                            ({meta.version}{meta.version && meta.versionTitle ? ' · ' : ''}{meta.versionTitle})
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {sameDateStudioSongs.length > 0 && (
+                <div className="p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--fill)]/65">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted flex items-center gap-1.5 mb-2 select-none">
+                    <MapPin size={11} className="text-accent" /> Same studio & date
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {sameDateStudioSongs.slice(0, 8).map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => handleViewVersion(s.id)}
+                        className="px-2.5 py-1 rounded-full bg-[var(--fill)] hover:bg-[var(--fill-strong)] border border-[var(--border)] text-xs text-text-primary transition-colors"
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('details')}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  <SlidersHorizontal size={12} /> Personalize & archive details →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openReport({ kind: 'song', songId: displaySong.id, songName: apiPrimaryTitle })}
+                  className="inline-flex items-center gap-1.5 text-[11px] text-text-muted hover:text-text-primary transition-colors"
+                >
+                  <Flag size={11} /> Report info
+                </button>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'lyrics' && hasLyrics && (
+            <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--fill)]/60">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted mb-3 select-none">
+                <Quote size={11} className="text-accent" /> Lyrics
+              </div>
+              <pre className="text-text-primary text-[13px] leading-[1.75] whitespace-pre-wrap font-sans select-text">
+                {displaySong.lyrics}
+              </pre>
             </div>
           )}
 
-          <TextSection icon={MicVocal} label="Credited Artist(s)" value={displaySong.credited_artists || 'Juice WRLD'} />
-          <TextSection icon={Music} label="Producer(s)" value={displaySong.producers} />
-          <TextSection icon={Wrench} label="Engineer(s)" value={displaySong.engineers} />
-
-          {displaySong.file_names && (
-            <Section icon={FileText} label="File Name(s)">
-              <p className="text-text-primary text-[11px] font-mono leading-relaxed whitespace-pre-wrap">
-                {displaySong.file_names}
-              </p>
-            </Section>
+          {activeTab === 'footage' && (
+            <div className="space-y-3">
+              <FootageSection key={displaySong.id} song={displaySong} />
+              <MusicVideoSection song={displaySong} onLeave={onClose} />
+            </div>
           )}
 
-          {hasInstrumentals && (
-            <Section icon={Piano} label="Instrumental Name(s)">
-              <div className="space-y-0.5">
-                {displaySong.instrumentals && (
-                  <p className="text-text-primary text-xs leading-relaxed whitespace-pre-wrap">{displaySong.instrumentals}</p>
-                )}
-                {displaySong.instrumental_names && displaySong.instrumental_names !== displaySong.instrumentals && (
-                  <p className="text-text-primary text-xs leading-relaxed whitespace-pre-wrap">{displaySong.instrumental_names}</p>
-                )}
-              </div>
-            </Section>
-          )}
+          {activeTab === 'details' && (
+            <div className="space-y-2.5">
+              <SongPrefsSection
+                songId={displaySong.id}
+                apiTitle={apiPrimaryTitle}
+                apiImageUrl={apiCoverUrl}
+                ownImageRaw={displaySong.image_url}
+                ownHasFile={!!displaySong.path}
+                versions={versions}
+                altTitles={altTitles}
+              />
 
-          <TextSection icon={MapPin} label="Recording Location" value={displaySong.recording_locations} />
-          <TextSection icon={Calendar} label="Record Date(s)" value={displaySong.record_dates} />
-          {sameDateStudioSongs.length > 0 && (
-            <Section icon={MapPin} label="Same date, same studio">
-              <p className="text-[11px] text-text-muted mb-2">
-                Catalogue entries sharing this recording date and studio. That does not make them the same session.
-              </p>
-              <div className="space-y-1">
-                {sameDateStudioSongs.slice(0, 10).map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => handleViewVersion(s.id)}
-                    className="w-full text-left flex items-center justify-between gap-2 hover:bg-surface-overlay rounded-lg px-1.5 py-1 -mx-1.5 transition-colors"
-                  >
-                    <span className="text-text-primary text-xs truncate">{s.name}</span>
-                    {s.era?.name && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-overlay text-text-muted shrink-0">
-                        {s.era.name}
-                      </span>
+              <TextSection icon={Wrench} label="Engineer(s)" value={displaySong.engineers} />
+              {hasInstrumentals && (
+                <Section icon={Piano} label="Instrumental Name(s)">
+                  <div className="space-y-0.5">
+                    {displaySong.instrumentals && (
+                      <p className="text-text-primary text-xs leading-relaxed whitespace-pre-wrap">{displaySong.instrumentals}</p>
                     )}
-                  </button>
-                ))}
-              </div>
-            </Section>
-          )}
-          <TextSection icon={CalendarClock} label="Preview Date" value={displayDate(displaySong.preview_date)} />
-          <TextSection icon={CalendarDays} label="Release Date" value={displayDate(displaySong.release_date)} />
-          <TextSection icon={CalendarDays} label="Other Date(s)" value={displaySong.dates} />
-
-          {(displaySong.leak_type || displaySong.date_leaked) && (
-            <Section icon={Droplets} label="Leak Info">
-              <div className="space-y-0.5">
-                <SubVal label="Type" value={displaySong.leak_type} />
-                <SubVal label="Date leaked" value={displayDate(displaySong.date_leaked)} />
-              </div>
-            </Section>
-          )}
-
-          <TextSection icon={Gauge} label="Bitrate" value={displaySong.bitrate} />
-          <TextSection icon={Activity} label="BPM" value={displaySong.bpm != null ? String(displaySong.bpm) : null} />
-          <TextSection icon={Music4} label="Key" value={displaySong.key} />
-
-          {hasSession && (
-            <Section icon={Layers} label="Session">
-              <div className="space-y-0.5">
-                <SubVal label="Titles" value={displaySong.session_titles} />
-                <SubVal label="Tracking" value={displaySong.session_tracking} />
-              </div>
-            </Section>
-          )}
-
-          {versionsEnabled && (
-            <Section icon={GitBranch} label="Other Versions">
-              {loadingVersions ? (
-                <p className="text-text-muted text-xs py-0.5">Loading…</p>
-              ) : versions.length === 0 ? (
-                <p className="text-text-muted text-xs py-0.5">No other versions linked.</p>
-              ) : (
-                <div className="space-y-1">
-                  {versions.map(({ song: v, meta }) => (
-                    <button
-                      key={v.id}
-                      onClick={() => handleViewVersion(v.id)}
-                      className="w-full text-left cursor-pointer hover:bg-surface-overlay rounded-lg px-1.5 py-1 -mx-1.5 transition-colors"
-                    >
-                      <span className="text-text-primary text-xs truncate block">
-                        {v.name}
-                        {meta.version && <span className="text-text-muted"> ({meta.version}{meta.versionTitle ? ` - ${meta.versionTitle}` : ''})</span>}
-                        {!meta.version && meta.versionTitle && <span className="text-text-muted"> ({meta.versionTitle})</span>}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                    {displaySong.instrumental_names && displaySong.instrumental_names !== displaySong.instrumentals && (
+                      <p className="text-text-primary text-xs leading-relaxed whitespace-pre-wrap">{displaySong.instrumental_names}</p>
+                    )}
+                  </div>
+                </Section>
               )}
-            </Section>
+              <TextSection icon={CalendarClock} label="Preview Date" value={displayDate(displaySong.preview_date)} />
+              <TextSection icon={CalendarDays} label="Other Date(s)" value={displaySong.dates} />
+              <TextSection icon={Gauge} label="Bitrate" value={displaySong.bitrate} />
+              {hasSession && (
+                <Section icon={Layers} label="Session">
+                  <div className="space-y-0.5">
+                    <SubVal label="Titles" value={displaySong.session_titles} />
+                    <SubVal label="Tracking" value={displaySong.session_tracking} />
+                  </div>
+                </Section>
+              )}
+              {displaySong.file_names && (
+                <Section icon={FileText} label="File Name(s)">
+                  <p className="text-text-primary text-[11px] font-mono leading-relaxed whitespace-pre-wrap">
+                    {displaySong.file_names}
+                  </p>
+                </Section>
+              )}
+              <TextSection icon={StickyNote} label="Raw Notes" value={notesDisplay} />
+
+              <div className="pt-2 flex flex-wrap gap-2">
+                <button
+                  onClick={() => openReport({ kind: 'song', songId: displaySong.id, songName: apiPrimaryTitle })}
+                  className="flex-1 min-w-[180px] flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-[var(--border)] bg-[var(--fill)] text-text-secondary hover:text-text-primary hover:bg-[var(--fill-strong)] transition-colors text-xs font-medium"
+                >
+                  <Flag size={13} /> Report info / lyrics
+                </button>
+                {signedIn && (
+                  <button
+                    onClick={() => openCoverArtSubmit({ songId: displaySong.id, songName: apiPrimaryTitle, currentCover: displaySong.image_url })}
+                    className="flex-1 min-w-[160px] flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-[var(--border)] bg-[var(--fill)] text-text-secondary hover:text-text-primary hover:bg-[var(--fill-strong)] transition-colors text-xs font-medium"
+                  >
+                    <ImagePlus size={13} /> Submit cover art
+                  </button>
+                )}
+              </div>
+            </div>
           )}
-
-          <FootageSection key={displaySong.id} song={displaySong} />
-          <MusicVideoSection song={displaySong} onLeave={onClose} />
-
-          <TextSection icon={Info} label="Additional Info" value={displaySong.additional_information} />
-          <TextSection icon={StickyNote} label="Notes" value={notesDisplay} />
-
-          {displaySong.lyrics && (
-            <Section icon={Quote} label="Lyrics">
-              <pre className="text-text-secondary text-xs leading-relaxed whitespace-pre-wrap font-sans">
-                {displaySong.lyrics}
-              </pre>
-            </Section>
-          )}
-
-          <button
-            onClick={() => openReport({ kind: 'song', songId: displaySong.id, songName: apiPrimaryTitle })}
-            className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors text-xs"
-          >
-            <Flag size={13} /> Report wrong or missing info / lyrics
-          </button>
-          {signedIn && (
-            <button
-              onClick={() => openCoverArtSubmit({ songId: displaySong.id, songName: apiPrimaryTitle, currentCover: displaySong.image_url })}
-              className="mt-2 w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors text-xs"
-            >
-              <ImagePlus size={13} /> Submit cover art
-            </button>
-          )}
-
         </div>
       </div>
       )}
