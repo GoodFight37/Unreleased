@@ -243,7 +243,7 @@ const ALL_SETTINGS_SEARCH_INDEX: { tab: Tab; label: string; sub?: string; electr
   { tab: 'about', label: 'Become a Contributor' },
 ]
 const FAN_SETTINGS_LABELS = new Set([
-  'Theme', 'Liquid Glass & animations', 'App text size', 'Audio output', 'Equalizer', 'Audio quality',
+  'Theme', 'Liquid Glass & animations', 'App text size', 'Audio output', 'Equalizer',
   'Pause when headphones disconnect', 'Lyrics sync', 'Lyrics text size', 'Lyrics alignment',
   'Library folders', 'Download folder', 'Offline songs folder', 'Offline downloads',
   'Display name', 'Profile photo', 'Bio', 'Show listening history', 'Show public playlists',
@@ -783,7 +783,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
   const tabs: { id: Tab; label: string; icon: ElementType; color: string; gap?: boolean }[] = [
     { id: 'appearance', label: 'Appearance', icon: Palette, color: '#ec4899' },
     { id: 'playback', label: 'Playback & sound', icon: Volume2, color: '#ef4444' },
-    { id: 'lyrics', label: 'Lyrics & WRLD', icon: AlignLeft, color: '#8b5cf6' },
+    { id: 'lyrics', label: developerMode ? 'Lyrics & WRLD' : 'Lyrics', icon: AlignLeft, color: '#8b5cf6' },
     ...(isElectron ? [{ id: 'library' as Tab, label: 'Library & downloads', icon: FolderOpen, color: '#0891b2' }] : []),
     { id: 'account', label: 'Accounts', icon: User, color: '#64748b', gap: true },
     { id: 'app', label: 'Advanced', icon: SlidersHorizontal, color: '#6b7280' },
@@ -1387,7 +1387,7 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   >
                     <Toggle on={surfaceGradientsEnabled} onClick={() => setSurfaceGradientsEnabled(!surfaceGradientsEnabled)} />
                   </Row>)}
-                  {LENS_SUPPORTED && <Row icon={Waves} iconColor="#8b5cf6" label="Glass fallback refraction" sub="Used when GPU glass is unavailable">
+                  {developerMode && LENS_SUPPORTED && <Row icon={Waves} iconColor="#8b5cf6" label="Glass fallback refraction" sub="Used when GPU glass is unavailable">
                     <Toggle on={glassRefraction} onClick={() => setGlassRefraction(!glassRefraction)} />
                   </Row>}
                   {developerMode && (<Row
@@ -1855,14 +1855,14 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
               <div>
                 <SettingsTitle>Playback</SettingsTitle>
                 <SettingsGroup title="Playback">
-                  <Row
+                  {developerMode && (<Row
                     icon={ListOrdered}
                     iconColor="#7c3aed"
                     label="Remember queue and now playing"
                     sub="Restore your queue, current track and position on this device when you reopen. Playback stays paused."
                   >
                     <Toggle on={rememberQueue} onClick={() => setRememberQueue(!rememberQueue)} />
-                  </Row>
+                  </Row>)}
                   {(
 
                     <Row icon={Volume2} iconColor="#2563eb" label="Audio output">
@@ -1918,9 +1918,9 @@ export default function Settings({ floating = false }: { floating?: boolean }): 
                   <Row icon={SlidersHorizontal} iconColor="#2563eb" label="Equalizer" sub="Presets, balance, playback speed and sleep timer">
                     <button className="text-text-primary text-xs font-semibold underline underline-offset-4" onClick={() => { closeSettings(); useStore.getState().toggleEqPanel() }}>Open sound panel</button>
                   </Row>
-                  <Row icon={Disc} iconColor="#2563eb" label="Audio quality" sub="Format and bitrate reported for the current track">
+                  {developerMode && (<Row icon={Disc} iconColor="#2563eb" label="Audio quality" sub="Format and bitrate reported for the current track">
                     <span className="text-text-secondary text-xs">{audioQualityLabel(playingInfo) ?? 'No format information'}</span>
-                  </Row>
+                  </Row>)}
                 </SettingsGroup>
                 {developerMode && (<SettingsGroup title="Songs">
                   <Row

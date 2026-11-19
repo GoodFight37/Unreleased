@@ -1143,50 +1143,54 @@ export default function WrldView(): JSX.Element {
               <div className={`flex items-center gap-3 px-4 pb-3 shrink-0 ${showLyricsColumn ? 'pt-12' : 'w-full max-w-md mx-auto'}`}>
                 {showLyricsColumn && ArtBox({ mobile: true })}
                 <div className="flex-1 min-w-0">
-                  {displayTitle  && <p className="font-bold text-sm leading-tight truncate" style={{ color: txtPri }} title={displayTitle}>{displayTitle}</p>}
+                  {displayTitle  && <p className="font-bold text-sm leading-tight line-clamp-2" style={{ color: txtPri }} title={displayTitle}>{displayTitle}</p>}
                   {displayArtist && <p className="text-xs mt-0.5 truncate" style={{ color: txtSec }}>{displayArtist}</p>}
                   {displayAlbum  && <p className="text-xs mt-0.5 truncate" style={{ color: txtTer }}>{displayAlbum}</p>}
                   {radioFmActive && !radioFmNowPlaying && <p className="text-xs mt-0.5" style={{ color: txtTer }}>Tuning in…</p>}
                 </div>
-                {!radioFmActive && rawLyrics && (
-                  <button
-                    onClick={toggleLyricsPanel}
-                    title="Lyrics"
-                    aria-pressed={lyricsShown}
-                    className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                    style={{ color: lyricsShown ? actionOnColor : actionIdleColor, backgroundColor: lyricsShown ? actionOnBg : undefined }}
-                  >
-                    <TextQuote size={18} />
-                  </button>
+                {!wrldCleanView && (
+                  <>
+                    {!radioFmActive && rawLyrics && (
+                      <button
+                        onClick={toggleLyricsPanel}
+                        title="Lyrics"
+                        aria-pressed={lyricsShown}
+                        className="p-1.5 rounded-full transition-colors hover:bg-white/10"
+                        style={{ color: lyricsShown ? actionOnColor : actionIdleColor, backgroundColor: lyricsShown ? actionOnBg : undefined }}
+                      >
+                        <TextQuote size={18} />
+                      </button>
+                    )}
+                    {!radioFmActive && (
+                      <button
+                        onClick={() => setShowQueue(!showQueue)}
+                        title="Playing Next"
+                        className="p-1.5 rounded-full transition-colors hover:bg-white/10"
+                        style={{ color: showQueue ? actionOnColor : actionIdleColor, backgroundColor: showQueue ? actionOnBg : undefined }}
+                      >
+                        <ListMusic size={18} />
+                      </button>
+                    )}
+                    {developerMode && rawLyrics && (
+                      <button
+                        onClick={() => setShowLyricsSettings(true)}
+                        title="Customize lyrics"
+                        className="p-1.5 rounded-full transition-colors hover:bg-white/10"
+                        style={{ color: actionIdleColor }}
+                      >
+                        <Settings2 size={16} />
+                      </button>
+                    )}
+                    <SongFootagePill
+                      songTitle={displayTitle}
+                      songId={radioFmActive ? (radioFmNowPlaying?.song_id ?? radioFmMatchedSong?.songId ?? null) : (currentTrack ? userApi.trackIdToSongId(currentTrack.id) : null)}
+                      light={textIsDark}
+                      placement="wrld"
+                    />
+                    <FmLikeButton light={textIsDark} />
+                    <SongMenu light={textIsDark} onShareLyrics={rawLyrics ? openShareLyrics : undefined} />
+                  </>
                 )}
-                {!radioFmActive && (
-                  <button
-                    onClick={() => setShowQueue(!showQueue)}
-                    title="Playing Next"
-                    className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                    style={{ color: showQueue ? actionOnColor : actionIdleColor, backgroundColor: showQueue ? actionOnBg : undefined }}
-                  >
-                    <ListMusic size={18} />
-                  </button>
-                )}
-                {rawLyrics && (
-                  <button
-                    onClick={() => developerMode ? setShowLyricsSettings(true) : useStore.getState().openSettings('lyrics')}
-                    title="Customize lyrics"
-                    className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                    style={{ color: actionIdleColor }}
-                  >
-                    <Settings2 size={16} />
-                  </button>
-                )}
-                <SongFootagePill
-                  songTitle={displayTitle}
-                  songId={radioFmActive ? (radioFmNowPlaying?.song_id ?? radioFmMatchedSong?.songId ?? null) : (currentTrack ? userApi.trackIdToSongId(currentTrack.id) : null)}
-                  light={textIsDark}
-                  placement="wrld"
-                />
-                <FmLikeButton light={textIsDark} />
-                <SongMenu light={textIsDark} onShareLyrics={rawLyrics ? openShareLyrics : undefined} />
               </div>
             </div>
 
@@ -1377,7 +1381,7 @@ export default function WrldView(): JSX.Element {
                     {displayTitle  && (
                       <p
                         ref={titleBeatRef}
-                        className="font-semibold text-xl xl:text-2xl leading-tight truncate will-change-transform"
+                        className="font-semibold text-xl xl:text-2xl leading-tight line-clamp-2 will-change-transform"
                         style={{
                           color: txtPri,
                           transformOrigin: 'left center',
@@ -1391,49 +1395,53 @@ export default function WrldView(): JSX.Element {
                     {displayArtist && <p className="text-sm mt-0.5 truncate" style={{ color: txtSec }}>{displayArtist}</p>}
                     {radioFmActive && !radioFmNowPlaying && <p className="text-sm mt-0.5" style={{ color: txtTer }}>Tuning in…</p>}
                   </div>
-                  {!radioFmActive && rawLyrics && (
-                    <button
-                      onClick={toggleLyricsPanel}
-                      title="Lyrics"
-                      aria-pressed={lyricsShown}
-                      className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                      style={{ color: lyricsShown ? actionOnColor : actionIdleColor, backgroundColor: lyricsShown ? actionOnBg : undefined }}
-                    >
-                      <TextQuote size={16} />
-                    </button>
+                  {!wrldCleanView && (
+                    <>
+                      {!radioFmActive && rawLyrics && (
+                        <button
+                          onClick={toggleLyricsPanel}
+                          title="Lyrics"
+                          aria-pressed={lyricsShown}
+                          className="p-1.5 rounded-full transition-colors hover:bg-white/10"
+                          style={{ color: lyricsShown ? actionOnColor : actionIdleColor, backgroundColor: lyricsShown ? actionOnBg : undefined }}
+                        >
+                          <TextQuote size={16} />
+                        </button>
+                      )}
+                      {!radioFmActive && (
+                        <button
+                          onClick={() => setShowQueue(!showQueue)}
+                          title="Playing Next"
+                          aria-pressed={showQueue}
+                          className="p-1.5 rounded-full transition-colors hover:bg-white/10"
+                          style={{ color: showQueue ? actionOnColor : actionIdleColor, backgroundColor: showQueue ? actionOnBg : undefined }}
+                        >
+                          <ListMusic size={16} />
+                        </button>
+                      )}
+                      {!radioFmActive && songVersions.length > 0 && (
+                        <button
+                          ref={songVersionBtnRef}
+                          onClick={() => setSongVersionMenuOpen(o => !o)}
+                          title="Other versions"
+                          aria-label="Other versions"
+                          aria-pressed={songVersionMenuOpen}
+                          className="p-1.5 rounded-full transition-colors hover:bg-white/10"
+                          style={{ color: songVersionMenuOpen ? actionOnColor : actionIdleColor, backgroundColor: songVersionMenuOpen ? actionOnBg : undefined }}
+                        >
+                          <Layers size={16} />
+                        </button>
+                      )}
+                      <SongFootagePill
+                        songTitle={displayTitle}
+                        songId={radioFmActive ? (radioFmNowPlaying?.song_id ?? radioFmMatchedSong?.songId ?? null) : (currentTrack ? userApi.trackIdToSongId(currentTrack.id) : null)}
+                        light={textIsDark}
+                        placement="wrld"
+                      />
+                      <FmLikeButton light={textIsDark} />
+                      <SongMenu light={textIsDark} onShareLyrics={rawLyrics ? openShareLyrics : undefined} />
+                    </>
                   )}
-                  {!radioFmActive && (
-                    <button
-                      onClick={() => setShowQueue(!showQueue)}
-                      title="Playing Next"
-                      aria-pressed={showQueue}
-                      className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                      style={{ color: showQueue ? actionOnColor : actionIdleColor, backgroundColor: showQueue ? actionOnBg : undefined }}
-                    >
-                      <ListMusic size={16} />
-                    </button>
-                  )}
-                  {!radioFmActive && songVersions.length > 0 && (
-                    <button
-                      ref={songVersionBtnRef}
-                      onClick={() => setSongVersionMenuOpen(o => !o)}
-                      title="Other versions"
-                      aria-label="Other versions"
-                      aria-pressed={songVersionMenuOpen}
-                      className="p-1.5 rounded-full transition-colors hover:bg-white/10"
-                      style={{ color: songVersionMenuOpen ? actionOnColor : actionIdleColor, backgroundColor: songVersionMenuOpen ? actionOnBg : undefined }}
-                    >
-                      <Layers size={16} />
-                    </button>
-                  )}
-                  <SongFootagePill
-                    songTitle={displayTitle}
-                    songId={radioFmActive ? (radioFmNowPlaying?.song_id ?? radioFmMatchedSong?.songId ?? null) : (currentTrack ? userApi.trackIdToSongId(currentTrack.id) : null)}
-                    light={textIsDark}
-                    placement="wrld"
-                  />
-                  <FmLikeButton light={textIsDark} />
-                  <SongMenu light={textIsDark} onShareLyrics={rawLyrics ? openShareLyrics : undefined} />
                 </div>
               </div>
 

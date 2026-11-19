@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { Check, ChevronDown, Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft, Sparkles, Eye, EyeOff, Palette, Clapperboard, Type, X } from 'lucide-react'
+import { Monitor, Minimize2, Maximize2, Radio, Settings2, PictureInPicture2, Dices, MessagesSquare, Music2, LayoutGrid, ChevronLeft, Sparkles, Eye, EyeOff, Clapperboard } from 'lucide-react'
 import { Visualizer, VISUALIZERS, needsWebGL, type VizLayout } from '../lib/viz'
 import { WRLD_BACKDROPS, WRLD_CURATED_LYRICS, WRLD_FAN_LYRICS, resolveWrldEra } from '../lib/wrldAtmospheres'
-import { allFonts, listCustomFonts, subscribeCustomFonts } from '../lib/fonts'
 import { useEffectsState } from '../lib/effectsPreference'
 import { getAnalysisTap, resumeEffectsContext } from '../lib/audioEffects'
 import { smallCoverUrl } from '../lib/juicewrldApi'
@@ -128,7 +127,7 @@ export default function WrldVisualizer({
   const { reducedMotion, gameMode } = useEffectsState()
   const {
     activeMode, vizQuality, vizUseArtwork, vizBoost, covered,
-    wrldAtmosphere, wrldAnimations, wrldLyricLook, wrldCleanView, wrldCutAccent, wrldCoverLyricColors, wrldLyricKeywords,
+    wrldAtmosphere, wrldAnimations, wrldLyricLook, wrldCleanView, wrldCoverLyricColors, wrldLyricKeywords,
     wrldDvdBouncer, wrldDvdLogo, wrldDvdCatalog, wrldDvdThemeSync,
     setWrldAtmosphere, setWrldAnimations, setWrldLyricLook, setWrldCleanView, setWrldCutAccent, setWrldCoverLyricColors, setWrldLyricKeywords,
     setWrldDvdBouncer, setWrldDvdLogo, setWrldDvdCatalog, setWrldDvdThemeSync,
@@ -142,7 +141,6 @@ export default function WrldVisualizer({
     wrldAnimations: s.wrldAnimations,
     wrldLyricLook: s.wrldLyricLook,
     wrldCleanView: s.wrldCleanView,
-    wrldCutAccent: s.wrldCutAccent,
     wrldCoverLyricColors: s.wrldCoverLyricColors,
     wrldLyricKeywords: s.wrldLyricKeywords,
     wrldDvdBouncer: s.wrldDvdBouncer,
@@ -313,7 +311,6 @@ export default function WrldVisualizer({
       if (
         !overToolbar.current
         && !toolbarRef.current?.contains(document.activeElement)
-        && !postBarRef.current?.contains(document.activeElement)
         && !document.querySelector('.coffre-amb-pop')
       ) setIdle(true)
     }, IDLE_MS)
@@ -422,16 +419,10 @@ export default function WrldVisualizer({
   // Reset clean capture overlay and Post when leaving WRLD so controls are never stuck hidden on next visit.
   useEffect(() => () => { setWrldCleanView(false); useVizStore.getState().setWrldPost('off') }, [setWrldCleanView])
 
-  // Lyrics-only (Hide cover) stage mode: unified with WRLD lyric presentation, font popover & ink; Esc returns.
-  const { post, ink, postFont, setWrldPost, setWrldInk, setWrldPostFont } = useVizStore(useShallow((s) => ({
-    post: s.wrldPost, ink: s.wrldInk, postFont: s.wrldPostFont,
-    setWrldPost: s.setWrldPost, setWrldInk: s.setWrldInk, setWrldPostFont: s.setWrldPostFont,
+  // Full-stage lyrics (Hide cover) mode: toggled inside 999 Stage; Esc returns.
+  const { post, setWrldPost } = useVizStore(useShallow((s) => ({
+    post: s.wrldPost, setWrldPost: s.setWrldPost,
   })))
-  // Re-render when a font is added or removed elsewhere.
-  useSyncExternalStore(subscribeCustomFonts, listCustomFonts)
-  const postBarRef = useRef<HTMLDivElement>(null)
-  const [showFontMenu, setShowFontMenu] = useState(false)
-  useEffect(() => { if (post === 'off') setShowFontMenu(false) }, [post])
 
   // ←/→ in fullscreen and C for Clean stage. Capture phase so these run before
   // the Player's document-level hotkeys; anything else (Space, L, Escape) falls through.
@@ -456,7 +447,6 @@ export default function WrldVisualizer({
         setCleanPeek(false)
         setShowAmbiance(false)
         setShowSettings(false)
-        setShowFontMenu(false)
         if (next) {
           cleanArmedAt.current = performance.now() + 700
           overToolbar.current = false
@@ -523,156 +513,6 @@ export default function WrldVisualizer({
             held={covered}
             onUnsupported={() => setOverlayFailed(true)}
           />
-        </div>
-      )}
-
-      {/* Lyrics-only (Hide cover) floating bar: unified with WRLD lyric presentation, Liquid Glass font popover & ink. */}
-      {post !== 'off' && (
-        <div className="absolute bottom-6 inset-x-4 z-40 flex justify-center pointer-events-none">
-        <div
-          ref={postBarRef}
-          role="toolbar"
-          aria-label="Lyrics stage controls"
-          className={`glass-bar relative flex items-center gap-0.5 p-[5px] max-w-full rounded-[16px] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl border border-[var(--border)] transition-[opacity,transform] duration-200 ${
-            ((idle || wrldCleanView) && !showFontMenu) ? 'opacity-0 translate-y-1.5 pointer-events-none' : 'pointer-events-auto'
-          }`}
-          onMouseEnter={() => { overToolbar.current = true }}
-          onMouseLeave={() => { overToolbar.current = false; wake() }}
-        >
-          {(developerMode ? WRLD_CURATED_LYRICS : WRLD_FAN_LYRICS).map((style) => (
-            <button
-              key={style.id}
-              className={`h-9 px-3 shrink-0 rounded-[10px] text-xs font-semibold transition-colors ${wrldLyricLook === style.id ? toolOn : toolIdle}`}
-              onClick={() => {
-                setWrldLyricLook(style.id)
-                announce(`${style.label} lyrics`)
-              }}
-              aria-pressed={wrldLyricLook === style.id}
-            >
-              {style.label}
-            </button>
-          ))}
-          <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowFontMenu((v) => !v)}
-              aria-haspopup="listbox"
-              aria-expanded={showFontMenu}
-              title="Choose lyric font"
-              className={`h-9 px-3 inline-flex items-center gap-1.5 rounded-[10px] text-xs font-medium transition-colors ${showFontMenu ? toolOn : toolIdle}`}
-            >
-              <Type size={13} />
-              <span className="max-w-[7.5rem] truncate">
-                {postFont ? (allFonts().find((f) => f.id === postFont)?.name ?? 'Font') : 'Default font'}
-              </span>
-              <ChevronDown size={12} className={`transition-transform duration-150 ${showFontMenu ? 'rotate-180' : ''}`} />
-            </button>
-            {showFontMenu && (
-              <div
-                role="listbox"
-                aria-label="Lyric fonts"
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 w-56 max-h-72 overflow-y-auto p-1.5 rounded-2xl border border-white/20 bg-[#111118]/92 backdrop-blur-2xl shadow-[0_24px_60px_rgba(0,0,0,0.72)]"
-              >
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={!postFont}
-                  onClick={() => { setWrldPostFont(null); setShowFontMenu(false) }}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs text-left transition-colors ${
-                    !postFont ? 'bg-white/15 text-white font-semibold' : 'text-white/80 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <span>Default font</span>
-                  {!postFont && <Check size={13} className="text-accent shrink-0" />}
-                </button>
-                {allFonts().map((f) => {
-                  const selected = postFont === f.id
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      onClick={() => { setWrldPostFont(f.id); setShowFontMenu(false) }}
-                      style={{ fontFamily: f.stack }}
-                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs text-left transition-colors ${
-                        selected ? 'bg-white/15 text-white font-semibold' : 'text-white/80 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="truncate">{f.name}</span>
-                      {selected && <Check size={13} className="text-accent shrink-0" />}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-          <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
-          {(() => {
-            const lockedInk = wrldLyricLook === 'fisheye' || wrldLyricLook === 'cut'
-            const yellowOn = ink === 'yellow'
-            return (
-              <button
-                type="button"
-                className={`h-9 px-3 shrink-0 rounded-[10px] text-xs font-semibold transition-colors disabled:opacity-30 disabled:pointer-events-none ${yellowOn ? toolOn : toolIdle}`}
-                onClick={() => setWrldInk(yellowOn ? 'white' : 'yellow')}
-                disabled={lockedInk}
-                aria-pressed={yellowOn}
-                title={lockedInk ? 'This style uses its own color palette' : yellowOn ? 'Gold yellow on (click for default color)' : 'Highlight words in gold yellow'}
-              >
-                Yellow
-              </button>
-            )
-          })()}
-          <button
-            type="button"
-            className={`h-9 px-3 shrink-0 rounded-[10px] text-xs font-semibold transition-colors ${wrldDvdBouncer ? toolOn : toolIdle}`}
-            onClick={() => {
-              const next = !wrldDvdBouncer
-              setWrldDvdBouncer(next)
-              announce(next ? 'Stage Bounce on' : 'Stage Bounce off')
-            }}
-            aria-pressed={wrldDvdBouncer}
-            title={wrldDvdBouncer ? 'Hide bouncing covers on the stage' : 'Show bouncing covers on the stage'}
-          >
-            Bounce
-          </button>
-          {wrldDvdBouncer && (
-            <button
-              type="button"
-              className={`h-9 px-2.5 shrink-0 rounded-[10px] text-[11px] font-medium transition-colors ${toolIdle}`}
-              onClick={() => {
-                const idx = BOUNCE_SPRITE_OPTIONS.findIndex((o) => o.id === wrldDvdLogo)
-                const next = BOUNCE_SPRITE_OPTIONS[(idx + 1) % BOUNCE_SPRITE_OPTIONS.length]
-                setWrldDvdLogo(next.id)
-                announce(`Bounce: ${next.label}`)
-              }}
-              title="Switch bouncing visual (Album Covers, Playing Cover, LND Butterfly)"
-            >
-              {BOUNCE_SPRITE_OPTIONS.find((o) => o.id === wrldDvdLogo)?.label ?? 'Album Covers'}
-            </button>
-          )}
-          {wrldDvdBouncer && wrldDvdLogo === 'albums' && (
-            <button
-              type="button"
-              className={`h-9 px-2.5 shrink-0 rounded-[10px] text-[11px] font-semibold transition-colors ${wrldDvdThemeSync ? toolOn : toolIdle}`}
-              onClick={() => {
-                const next = !wrldDvdThemeSync
-                setWrldDvdThemeSync(next)
-                announce(next ? 'Theme sync on bounce: ON' : 'Theme sync on bounce: OFF')
-              }}
-              aria-pressed={wrldDvdThemeSync}
-              title={wrldDvdThemeSync ? 'Every bounce switches the Ambience theme (click to bounce without changing theme)' : 'Bounce without changing theme (click to sync Ambience theme on every bounce)'}
-            >
-              {wrldDvdThemeSync ? 'Theme sync' : 'Bounce only'}
-            </button>
-          )}
-          <span className="w-px h-5 mx-1 shrink-0 bg-[var(--border)]" />
-          <button className={`${tool} shrink-0 ${toolIdle}`} onClick={() => setWrldPost('off')} title="Show cover again (Esc)" aria-label="Show cover again">
-            <X size={16} />
-          </button>
-        </div>
         </div>
       )}
 
@@ -788,23 +628,6 @@ export default function WrldVisualizer({
           <span className="hidden lg:inline">999 Stage</span>
         </button>
         <AmbiencePicker buttonClassName={tool} onOpenChange={setAmbienceOpen} />
-        {wrldLyricLook === 'cut' && (
-          <button
-            type="button"
-            className={`h-9 px-2.5 flex items-center justify-center rounded-[10px] gap-1.5 text-[11px] font-semibold transition-colors ${wrldCutAccent === 'cover' ? toolOn : toolIdle}`}
-            onClick={() => {
-              const next = wrldCutAccent === 'juice' ? 'cover' : 'juice'
-              setWrldCutAccent(next)
-              announce(next === 'cover' ? 'Cut accent: Cover colors' : 'Cut accent: Juice yellow')
-            }}
-            aria-label="Cut accent"
-            aria-pressed={wrldCutAccent === 'cover'}
-            title="Switch Cut accent between Juice yellow and cover colors"
-          >
-            <Palette size={14} />
-            <span>{wrldCutAccent === 'juice' ? 'Juice' : 'Cover'}</span>
-          </button>
-        )}
         <button
           className={`${tool} ${wrldCleanView ? toolOn : toolIdle}`}
           onClick={() => {
@@ -813,7 +636,6 @@ export default function WrldVisualizer({
             setCleanPeek(false)
             setShowAmbiance(false)
             setShowSettings(false)
-            setShowFontMenu(false)
             if (next) {
               cleanArmedAt.current = performance.now() + 700
               overToolbar.current = false
@@ -828,23 +650,6 @@ export default function WrldVisualizer({
           aria-pressed={wrldCleanView}
         >
           {wrldCleanView ? <EyeOff size={16} /> : <Eye size={16} />}
-        </button>
-        <button
-          className={`h-9 px-2.5 flex items-center rounded-[10px] text-[11px] font-semibold tracking-[0.04em] transition-colors disabled:opacity-30 disabled:pointer-events-none ${post !== 'off' ? toolOn : toolIdle}`}
-          onClick={() => {
-            const next = post === 'off' ? 'post' : 'off'
-            setWrldPost(next)
-            setShowAmbiance(false)
-            setShowSettings(false)
-            setShowFontMenu(false)
-            announce(next === 'post' ? 'Lyrics only' : 'Show cover')
-          }}
-          disabled={!hasLyrics && post === 'off'}
-          title={post !== 'off' ? 'Show album cover again (Esc)' : hasLyrics ? 'Hide cover — full-stage animated lyrics' : 'Needs lyrics'}
-          aria-label="Lyrics only"
-          aria-pressed={post !== 'off'}
-        >
-          Lyrics only
         </button>
         {developerMode && <>
         <span className="w-px h-5 mx-1 bg-[var(--border)]" />
@@ -890,24 +695,7 @@ export default function WrldVisualizer({
         )}
         {showAmbiance && (
           <div className="absolute top-full right-0 mt-2 w-[340px] max-w-[calc(100vw-2rem)] max-h-[75vh] overflow-y-auto p-4 rounded-[16px] bg-[var(--surface)] border border-[var(--border)] shadow-2xl flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-text-primary text-xs font-semibold">Stage animations</p>
-                <p className="text-text-muted text-[11px]">
-                  {!reducedMotion && wrldAnimations ? 'Active visuals & cover aura' : 'Calm mode (zero stage motion)'}
-                </p>
-              </div>
-              <Toggle
-                on={wrldAnimations}
-                onClick={() => {
-                  const next = !wrldAnimations
-                  setWrldAnimations(next)
-                  announce(next ? 'Stage animations on' : 'Calm mode')
-                }}
-              />
-            </div>
-
-            <div className="pt-3 border-t border-[var(--border)]">
+            <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-text-secondary text-xs font-semibold">Backdrop</p>
                 {resolvedEra.eraLabel && (
@@ -916,60 +704,35 @@ export default function WrldVisualizer({
                   </span>
                 )}
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {WRLD_BACKDROPS.map((preset) => {
-                  const selected = wrldAtmosphere === preset.id
+                  const selected = preset.id === 'off'
+                    ? (wrldAtmosphere === 'off' || !wrldAnimations)
+                    : (wrldAtmosphere === preset.id && wrldAnimations)
                   return (
                     <button
                       key={preset.id}
                       onClick={() => {
                         setWrldAtmosphere(preset.id)
-                        announce(preset.label)
+                        setWrldAnimations(preset.id !== 'off')
+                        announce(preset.id === 'off' ? 'Static backdrop' : preset.label)
                       }}
-                      className={`text-left px-3 py-2 rounded-xl border transition-colors ${
+                      className={`text-left px-2.5 py-2 rounded-xl border transition-colors ${
                         selected
                           ? 'bg-accent/15 border-[var(--accent)] text-text-primary'
                           : 'border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-[var(--surface-overlay)]'
                       }`}
                     >
-                      <div className="text-[11px] font-semibold leading-tight">{preset.label}</div>
-                      <div className="text-[10px] opacity-75 leading-tight mt-0.5">{preset.subtitle}</div>
+                      <div className="text-[11px] font-semibold leading-tight">{preset.id === 'off' ? 'Static' : preset.label}</div>
+                      <div className="text-[10px] opacity-75 leading-tight mt-0.5 truncate">{preset.subtitle}</div>
                     </button>
                   )
                 })}
               </div>
             </div>
 
-            <div className="pt-3 border-t border-[var(--border)]">
-              <div className="flex items-center justify-between gap-3 mb-2.5">
-                <div className="min-w-0">
-                  <div className="text-[11px] font-semibold text-text-primary leading-tight">Cover lyric colors</div>
-                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Tint active lyrics from the cover across all styles</div>
-                </div>
-                <Toggle
-                  on={wrldCoverLyricColors}
-                  onClick={() => {
-                    const next = !wrldCoverLyricColors
-                    setWrldCoverLyricColors(next)
-                    announce(next ? 'Cover lyric colors on' : 'Cover lyric colors off')
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-3 mb-2.5">
-                <div className="min-w-0">
-                  <div className="text-[11px] font-semibold text-text-primary leading-tight">Accent keywords</div>
-                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Highlight thematic Juice WRLD words in Focus & Classic</div>
-                </div>
-                <Toggle
-                  on={wrldLyricKeywords}
-                  onClick={() => {
-                    const next = !wrldLyricKeywords
-                    setWrldLyricKeywords(next)
-                    announce(next ? 'Accent keywords on' : 'Accent keywords off')
-                  }}
-                />
-              </div>
-              <p className="text-text-secondary text-xs font-semibold mb-2">Lyric presentation</p>
+            <div className="pt-3 border-t border-[var(--border)] flex flex-col gap-2.5">
+              <p className="text-text-secondary text-xs font-semibold">Lyrics</p>
               <div className="grid grid-cols-3 gap-1.5">
                 {(developerMode ? WRLD_CURATED_LYRICS : WRLD_FAN_LYRICS).map((style) => {
                   const selected = wrldLyricLook === style.id
@@ -992,13 +755,60 @@ export default function WrldVisualizer({
                   )
                 })}
               </div>
+              <div className={`flex items-center justify-between gap-3 pt-1 ${!hasLyrics && post === 'off' ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-text-primary leading-tight">Full-stage lyrics</div>
+                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Hide album cover for full-screen lyrics (Esc to return)</div>
+                </div>
+                <Toggle
+                  on={post !== 'off'}
+                  onClick={() => {
+                    if (!hasLyrics && post === 'off') return
+                    const next = post === 'off' ? 'post' : 'off'
+                    setWrldPost(next)
+                    setShowAmbiance(false)
+                    announce(next === 'post' ? 'Full-stage lyrics' : 'Show cover')
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-text-primary leading-tight">Cover lyric colors</div>
+                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Tint active lyrics and Cut accent from the cover</div>
+                </div>
+                <Toggle
+                  on={wrldCoverLyricColors}
+                  onClick={() => {
+                    const next = !wrldCoverLyricColors
+                    setWrldCoverLyricColors(next)
+                    setWrldCutAccent(next ? 'cover' : 'juice')
+                    announce(next ? 'Cover lyric colors on' : 'Cover lyric colors off')
+                  }}
+                />
+              </div>
+              {developerMode && (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-text-primary leading-tight">Accent keywords</div>
+                    <div className="text-[10px] text-text-muted leading-tight mt-0.5">Highlight thematic Juice WRLD words in Focus & Classic</div>
+                  </div>
+                  <Toggle
+                    on={wrldLyricKeywords}
+                    onClick={() => {
+                      const next = !wrldLyricKeywords
+                      setWrldLyricKeywords(next)
+                      announce(next ? 'Accent keywords on' : 'Accent keywords off')
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="pt-3 border-t border-[var(--border)]">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[11px] font-semibold text-text-primary leading-tight">Album Bounce</div>
-                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Floating album covers (corner hit shifts theme) or LND Butterfly</div>
+                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Floating album covers or LND Butterfly</div>
                 </div>
                 <Toggle
                   on={wrldDvdBouncer}
@@ -1028,7 +838,7 @@ export default function WrldVisualizer({
                       </button>
                     ))}
                   </div>
-                  {wrldDvdLogo === 'albums' && (
+                  {developerMode && wrldDvdLogo === 'albums' && (
                     <>
                       <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-[var(--border)]/60">
                         <span className="text-[11px] font-semibold text-text-primary">Cover set</span>
