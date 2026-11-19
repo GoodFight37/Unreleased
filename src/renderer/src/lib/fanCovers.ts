@@ -19,7 +19,7 @@ export interface FanCoversIndex {
 }
 
 const MODE_KEY = 'unreleasedCoverMode'
-const INDEX_KEY = 'fanCoversIndex:v1'
+const INDEX_KEY = 'fanCoversIndex:v2'
 const INDEX_TTL_MS = 24 * 60 * 60 * 1000
 
 const EMPTY_INDEX: FanCoversIndex = {

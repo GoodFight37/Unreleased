@@ -13,20 +13,29 @@ import {
   type FanCoversIndex,
 } from './fanCovers'
 
-const COVER_ART_ROOTS = [
+const ERA_COVER_ROOTS = [
+  'Compilation/4. Cover Art/2. Unreleased Discography',
   'Compilation/4. Cover Art',
-  'Compilation/Cover Art',
 ]
+const FAN_ARTISTS_ROOT = 'Cover Arts'
 
 let _inflight: Promise<FanCoversIndex> | null = null
 
-/** Build the era -> URLs and title -> URL index from the archive's Cover Art tree. */
+/** Build the era -> URLs and title -> URL index from the archive's Cover Art trees. */
 async function crawlArchiveFanCovers(): Promise<FanCoversIndex> {
   const byEra: Record<string, string[]> = {}
-  const byTitle: Record<string, string> = {}
+  const byTitleCandidates: Record<string, string[]> = {}
   const allSet = new Set<string>()
 
-  for (const root of COVER_ART_ROOTS) {
+  const registerTitle = (name: string, url: string) => {
+    const titleKey = normalizeCoverTitle(name)
+    if (!titleKey) return
+    if (!byTitleCandidates[titleKey]) byTitleCandidates[titleKey] = []
+    byTitleCandidates[titleKey].push(url)
+  }
+
+  // 1. Era-organized covers under Compilation/4. Cover Art/2. Unreleased Discography
+  for (const root of ERA_COVER_ROOTS) {
     let entries: Awaited<ReturnType<typeof listFilesRecursive>> = []
     try {
       entries = await listFilesRecursive(root)
@@ -41,7 +50,6 @@ async function crawlArchiveFanCovers(): Promise<FanCoversIndex> {
       if (!url || allSet.has(url)) continue
       allSet.add(url)
 
-      // Determine era from the subfolder under root (e.g. "Compilation/4. Cover Art/GB&GR/foo.png")
       const rel = entry.path.startsWith(root) ? entry.path.slice(root.length).replace(/^\/+/, '') : entry.path
       const segments = rel.split('/').filter(Boolean)
       const folder = segments.length >= 2 ? segments[0] : ''
@@ -50,13 +58,34 @@ async function crawlArchiveFanCovers(): Promise<FanCoversIndex> {
         if (!byEra[eraKey]) byEra[eraKey] = []
         byEra[eraKey].push(url)
       }
-
-      const titleKey = normalizeCoverTitle(entry.name)
-      if (titleKey && !byTitle[titleKey]) {
-        byTitle[titleKey] = url
-      }
+      registerTitle(entry.name, url)
     }
     if (allSet.size > 0) break
+  }
+
+  // 2. Community fan-artist covers under Cover Arts/<Artist>/<Song Title>.png
+  try {
+    const fanEntries = await listFilesRecursive(FAN_ARTISTS_ROOT)
+    for (const entry of fanEntries) {
+      if (entry.type !== 'file' || getMediaType(entry.name) !== 'image') continue
+      const url = buildCoverArtUrl(entry.path, false)
+      if (!url || allSet.has(url)) continue
+      allSet.add(url)
+      registerTitle(entry.name, url)
+    }
+  } catch {
+    // Non-fatal: keep era covers if Cover Arts tree is unavailable
+  }
+
+  // Pick a deterministic primary cover per title (preferring standard covers over "No Text" / "Alt")
+  const byTitle: Record<string, string> = {}
+  for (const [titleKey, urls] of Object.entries(byTitleCandidates)) {
+    urls.sort((a, b) => {
+      const aAlt = /no\s*text|alt|blank|clean/i.test(a) ? 1 : 0
+      const bAlt = /no\s*text|alt|blank|clean/i.test(b) ? 1 : 0
+      return aAlt - bAlt || a.localeCompare(b)
+    })
+    byTitle[titleKey] = urls[0]
   }
 
   // Sort every pool deterministically so stableHash(songId) % pool.length
