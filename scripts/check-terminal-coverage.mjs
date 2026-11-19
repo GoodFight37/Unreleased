@@ -97,6 +97,8 @@ const NOT_APPLICABLE = {
   'optimisticPlaylist.*':'optimistic UI wrappers over userApi.addSongsToPlaylist/addToPlaylist/addPlaylistEntry/updatePlaylist (playlist add, playlist public)',
   'compFileChanges.proposeFileChanges': 'batch wrapper over createCompProposal (comp new)',
   'coverSuggestions.advanceRotatedCover': 'cover search over third-party catalogs, client-side rotation',
+  'fanCoversLoader.*': 'background archive cover-art indexer for deterministic unreleased fan covers (files ls)',
+  'syncedLyricsPack.*': 'background GitHub Release .json.gz synced-lyrics pack cache for WRLD playback',
   'eras.loadEraFullNames': 'era name loader (era ls)',
   'fieldSuggestions.suggestFieldValues': 'autocomplete data derived from /songs (find)',
   'statsCatalog.*': 'catalog loaders behind stats',

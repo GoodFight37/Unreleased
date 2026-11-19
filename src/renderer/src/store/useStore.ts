@@ -24,6 +24,8 @@ import type { SongPreference, SongPrefMap, SongPrefPatch, WireSongPreference } f
 import { getVersionGroup } from '../lib/versionsApi'
 import type { AdminTab } from '../hooks/useAdminQueue'
 import { advanceRotatedCover, resetCoverRotation } from '../lib/coverSuggestions'
+import { peekUnreleasedCoverMode, setUnreleasedCoverModeValue, type UnreleasedCoverMode } from '../lib/fanCovers'
+import { ensureFanCoversLoaded } from '../lib/fanCoversLoader'
 import { setEraCoverRaw, replaceEraCovers, sanitizeEraCovers } from '../lib/eraCovers'
 import { setActiveChannelCache } from '../lib/activeChannelState'
 import {
@@ -386,6 +388,7 @@ interface AppState {
   // lib/coverRotation). Songs with a custom cover, and songs the storage has
   // no images for, are unaffected.
   rotateSuggestedCovers: boolean
+  unreleasedCoverMode: UnreleasedCoverMode
   // Per-era cover overrides (see lib/eraCovers): a cover the user picks for
   // an era replaces the API's shared placeholder on every unreleased song in
   // that era. Released songs, and songs with their own personal cover or a
@@ -769,6 +772,7 @@ interface AppActions {
   setAdaptiveColors: (enabled: boolean) => void
   setPreferOgVersion: (enabled: boolean) => void
   setRotateSuggestedCovers: (enabled: boolean) => void
+  setUnreleasedCoverMode: (mode: UnreleasedCoverMode) => void
   /** Sets (or, with raw = null, clears) the cover override for one era and
    *  redraws any visible tracks it affects. */
   setEraCoverOverride: (era: string, raw: string | null) => void
@@ -1944,6 +1948,7 @@ export const useStore = create<AppStore>((set, get, store) => ({
   adaptiveManualHold: false,
   preferOgVersion: ls.get<boolean>('preferOgVersion') ?? false,
   rotateSuggestedCovers: ls.get<boolean>('rotateSuggestedCovers') ?? false,
+  unreleasedCoverMode: peekUnreleasedCoverMode(),
   eraCovers: ls.get<Record<string, string>>('eraCovers') ?? {},
   mediaOverlayEnabled: ls.get<boolean>('mediaOverlayEnabled') ?? true,
   lastfmUser: getLastfmSession()?.name ?? null,
@@ -1997,6 +2002,34 @@ export const useStore = create<AppStore>((set, get, store) => ({
         ? { currentTrackFull: { ...currentTrackFull, albumArt: nextCurrent?.imageUrl ?? null } }
         : {}),
     })
+  },
+  setUnreleasedCoverMode: (mode) => {
+    setUnreleasedCoverModeValue(mode)
+    set({ unreleasedCoverMode: mode })
+    const redrawAll = () => {
+      const { queue, currentTrack, currentTrackFull, songPrefs } = get()
+      const redraw = (t: Track): Track => {
+        const id = userApi.trackIdToSongId(t.id)
+        return id == null ? t : applyPrefToTrack(t, songPrefs[id])
+      }
+      const nextQueue = queue.map(redraw)
+      const nextCurrent = currentTrack ? redraw(currentTrack) : currentTrack
+      set({
+        queue: nextQueue,
+        currentTrack: nextCurrent,
+        ...(currentTrackFull && nextCurrent !== currentTrack
+          ? { currentTrackFull: { ...currentTrackFull, albumArt: nextCurrent?.imageUrl ?? null } }
+          : {}),
+      })
+    }
+    if (mode === 'fan_era') {
+      redrawAll()
+      void ensureFanCoversLoaded().then((idx) => {
+        if (idx.all.length > 0 && get().unreleasedCoverMode === 'fan_era') redrawAll()
+      })
+    } else {
+      redrawAll()
+    }
   },
   setEraCoverOverride: (era, raw) => {
     const value = raw?.trim() || null
@@ -2402,6 +2435,10 @@ export const useStore = create<AppStore>((set, get, store) => ({
   openUrlImport: () => set({ urlImportModal: true }),
   closeUrlImport: () => set({ urlImportModal: false }),
   openLyricsGen: (target = {}) => {
+    // Exit DOM fullscreen (e.g. WRLD fullscreen) so #root modals render in the visible viewport.
+    if (typeof document !== 'undefined' && document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {})
+    }
     useSandboxStore.getState().expand()
     set({ lyricsGenModal: target })
   },

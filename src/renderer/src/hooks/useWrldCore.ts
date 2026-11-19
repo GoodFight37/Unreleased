@@ -15,6 +15,8 @@ import { getActiveRadioClient } from '../lib/radioSocketService'
 import { searchRadioLibrary } from '../lib/radioLibrary'
 import type { RadioLibraryTrack } from '../lib/radioLibrary'
 import { isLrcFormat, parseLrc } from '../lib/lyrics'
+import { useLocalSyncedLyrics } from '../lib/localSyncedLyrics'
+import { usePackSyncedLyrics } from '../lib/syncedLyricsPack'
 import { resumeEffectsContext } from '../lib/audioEffects'
 import { useStore } from '../store/useStore'
 import { showAppToast } from '../lib/appToast'
@@ -95,9 +97,16 @@ export function useWrldLyricsSource(
   currentTrackFull: FullTrack | null,
   account: AccountUser | null,
 ): { rawLyrics: string | null; isSynced: boolean; isEditor: boolean; syncedLines: ReturnType<typeof parseLrc> } {
+  const activeSongId = radioFmActive
+    ? (radioFmMatchedSong?.songId ?? null)
+    : (currentTrackFull ? userApi.trackIdToSongId(currentTrackFull.id) : null)
+  const localOverride = useLocalSyncedLyrics(activeSongId)
+  const packLrc = usePackSyncedLyrics(activeSongId)
+
+  // Priority: 1. Local user override -> 2. Official API synced_lyrics -> 3. Community pack -> 4. Plain lyrics
   const rawLyrics = radioFmActive
-    ? (radioFmMatchedSong?.syncedLyrics || radioFmMatchedSong?.lyrics || null)
-    : (currentTrackFull?.syncedLyrics || currentTrackFull?.lyrics || null)
+    ? (localOverride || radioFmMatchedSong?.syncedLyrics || packLrc || radioFmMatchedSong?.lyrics || null)
+    : (localOverride || currentTrackFull?.syncedLyrics || packLrc || currentTrackFull?.lyrics || null)
   const isSynced = rawLyrics ? isLrcFormat(rawLyrics) : false
   const isEditor = !!(account?.is_editor || account?.is_administrator)
   // The same lines until the lyrics change: a new array every render set the lyric styles and the lyrics list going

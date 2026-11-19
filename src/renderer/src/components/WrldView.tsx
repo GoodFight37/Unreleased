@@ -4,7 +4,7 @@ import { getFont } from '../lib/fonts'
 import { useAlbumColors } from '../desktop/artColors'
 import { hsbToRgb } from '../desktop/light/engine'
 import LiquidMeshBackdrop from './LiquidMeshBackdrop'
-import StageBouncer from './StageBouncer'
+import StageBouncer, { BOUNCE_ALBUM_MAP, type BounceAlbumId } from './StageBouncer'
 import SongFootagePill from './SongFootagePill'
 import { SwapIcon } from './PlayerMotion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, memo, useCallback } from 'react'
@@ -103,15 +103,23 @@ function WrldPanelLayer({ visible = true, exiting, animateIn, className, childre
 // Local WRLD-only stage themes driven by Album Bounce (Theme sync), so Settings
 // and other windows stay 100% untouched. GB&GR uses a soft misty sky-white look
 // rather than harsh blinding white.
-const BOUNCE_STAGE_PALETTES: Partial<Record<SkinId, {
+interface BounceStagePalette {
   softLight: boolean
   baseBg: string
+  /** Atmospheric radial glow layered above the blurred cover so dark covers like 999 EP stay vividly tinted. */
+  ambientGlow?: string
+  /** Optional calibrated backdrop filter for dark or bright covers in Quiet Glass mode. */
+  backdropFilter?: string
   vars: Record<string, string>
-}>> = {
+}
+
+const BOUNCE_STAGE_PALETTES: Record<BounceAlbumId, BounceStagePalette> = {
   // Only tint local accent so WebGPU glass toolbars stay aligned with the global dark/light glass body (high contrast).
   '999': {
     softLight: false,
-    baseBg: '#120609',
+    baseBg: '#1c0509',
+    ambientGlow: 'radial-gradient(85% 75% at 22% 24%, rgba(217, 38, 56, 0.44), transparent 64%), radial-gradient(80% 75% at 80% 78%, rgba(122, 14, 27, 0.52), transparent 66%)',
+    backdropFilter: 'blur(56px) brightness(0.76) saturate(2.15)',
     vars: {
       '--accent': '#f0404f',
       '--accent-rgb': '240 64 79',
@@ -127,7 +135,9 @@ const BOUNCE_STAGE_PALETTES: Partial<Record<SkinId, {
   },
   drfl: {
     softLight: false,
-    baseBg: '#150a05',
+    baseBg: '#1a0a04',
+    ambientGlow: 'radial-gradient(80% 72% at 24% 28%, rgba(255, 132, 38, 0.30), transparent 64%), radial-gradient(75% 70% at 78% 76%, rgba(168, 46, 12, 0.36), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.56) saturate(1.9)',
     vars: {
       '--accent': '#ff8426',
       '--accent-rgb': '255 132 38',
@@ -135,7 +145,8 @@ const BOUNCE_STAGE_PALETTES: Partial<Record<SkinId, {
   },
   lnd: {
     softLight: false,
-    baseBg: '#140814',
+    baseBg: '#160718',
+    ambientGlow: 'radial-gradient(82% 72% at 26% 24%, rgba(232, 100, 192, 0.28), transparent 64%), radial-gradient(76% 74% at 78% 78%, rgba(114, 46, 166, 0.36), transparent 66%)',
     vars: {
       '--accent': '#e864c0',
       '--accent-rgb': '232 100 192',
@@ -143,10 +154,128 @@ const BOUNCE_STAGE_PALETTES: Partial<Record<SkinId, {
   },
   fd: {
     softLight: false,
-    baseBg: '#071016',
+    baseBg: '#071218',
+    ambientGlow: 'radial-gradient(82% 72% at 24% 26%, rgba(76, 228, 235, 0.24), transparent 64%), radial-gradient(76% 74% at 78% 78%, rgba(18, 72, 108, 0.42), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.58) saturate(1.85)',
     vars: {
       '--accent': '#4ce4eb',
       '--accent-rgb': '76 228 235',
+    },
+  },
+  lnd_5yae: {
+    softLight: false,
+    baseBg: '#1d0c04',
+    ambientGlow: 'radial-gradient(84% 74% at 22% 24%, rgba(255, 147, 48, 0.38), transparent 64%), radial-gradient(80% 74% at 80% 78%, rgba(196, 84, 18, 0.42), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.62) saturate(2.0)',
+    vars: {
+      '--accent': '#ff9330',
+      '--accent-rgb': '255 147 48',
+    },
+  },
+  wod: {
+    softLight: false,
+    baseBg: '#0d1409',
+    ambientGlow: 'radial-gradient(82% 74% at 24% 24%, rgba(168, 224, 72, 0.26), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(124, 58, 237, 0.34), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.56) saturate(1.95)',
+    vars: {
+      '--accent': '#a8e048',
+      '--accent-rgb': '168 224 72',
+    },
+  },
+  tpne: {
+    softLight: false,
+    baseBg: '#0a0e1a',
+    ambientGlow: 'radial-gradient(82% 74% at 24% 24%, rgba(242, 185, 73, 0.28), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(45, 78, 168, 0.38), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.58) saturate(1.9)',
+    vars: {
+      '--accent': '#f2b949',
+      '--accent-rgb': '242 185 73',
+    },
+  },
+  tpp: {
+    softLight: false,
+    baseBg: '#1a0814',
+    ambientGlow: 'radial-gradient(82% 74% at 24% 24%, rgba(255, 92, 138, 0.34), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(132, 24, 78, 0.42), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.62) saturate(2.0)',
+    vars: {
+      '--accent': '#ff5c8a',
+      '--accent-rgb': '255 92 138',
+    },
+  },
+  tpp_ee: {
+    softLight: false,
+    baseBg: '#1c0a07',
+    ambientGlow: 'radial-gradient(82% 74% at 24% 24%, rgba(255, 122, 89, 0.34), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(154, 42, 34, 0.40), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.62) saturate(2.0)',
+    vars: {
+      '--accent': '#ff7a59',
+      '--accent-rgb': '255 122 89',
+    },
+  },
+  gbgr_ae: {
+    softLight: true,
+    baseBg: '#d8e6f5',
+    vars: {
+      '--accent': '#1d6fe0',
+      '--accent-rgb': '29 111 224',
+    },
+  },
+  gbgr_5yae: {
+    softLight: true,
+    baseBg: '#d4e4f7',
+    vars: {
+      '--accent': '#1e64d8',
+      '--accent-rgb': '30 100 216',
+    },
+  },
+  nd: {
+    softLight: false,
+    baseBg: '#19060c',
+    ambientGlow: 'radial-gradient(82% 74% at 24% 24%, rgba(224, 72, 104, 0.38), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(118, 16, 44, 0.46), transparent 66%)',
+    backdropFilter: 'blur(56px) brightness(0.70) saturate(2.05)',
+    vars: {
+      '--accent': '#e04868',
+      '--accent-rgb': '224 72 104',
+    },
+  },
+  bdm: {
+    softLight: false,
+    baseBg: '#11081c',
+    ambientGlow: 'radial-gradient(82% 74% at 24% 24%, rgba(156, 107, 255, 0.34), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(76, 29, 149, 0.44), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.64) saturate(2.0)',
+    vars: {
+      '--accent': '#9c6bff',
+      '--accent-rgb': '156 107 255',
+    },
+  },
+  hih_999: {
+    softLight: false,
+    baseBg: '#1b060d',
+    ambientGlow: 'radial-gradient(84% 74% at 24% 24%, rgba(255, 77, 109, 0.40), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(136, 19, 55, 0.46), transparent 66%)',
+    backdropFilter: 'blur(56px) brightness(0.72) saturate(2.1)',
+    vars: {
+      '--accent': '#ff4d6d',
+      '--accent-rgb': '255 77 109',
+    },
+  },
+  aff: {
+    softLight: false,
+    baseBg: '#13091a',
+    ambientGlow: 'radial-gradient(82% 74% at 24% 24%, rgba(192, 132, 252, 0.32), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(91, 33, 182, 0.42), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.66) saturate(1.95)',
+    vars: {
+      '--accent': '#c084fc',
+      '--accent-rgb': '192 132 252',
+    },
+  },
+  jute: {
+    softLight: false,
+    baseBg: '#180f05',
+    ambientGlow: 'radial-gradient(82% 74% at 24% 24%, rgba(245, 158, 11, 0.34), transparent 64%), radial-gradient(78% 74% at 78% 78%, rgba(146, 64, 14, 0.42), transparent 66%)',
+    backdropFilter: 'blur(58px) brightness(0.64) saturate(2.0)',
+    vars: {
+      '--accent': '#f59e0b',
+      '--accent-rgb': '245 158 11',
     },
   },
 }
@@ -375,19 +504,20 @@ export default function WrldView(): JSX.Element {
 
   const videoShown = useVizStore(s => s.wrldVideoShown)
   const { reducedMotion, gameMode } = useEffectsState()
-  const { wrldAtmosphere, wrldAnimations, wrldCleanView, wrldDvdBouncer, wrldDvdLogo, wrldDvdThemeSync, footageModalOpen } = useVizStore(useShallow(s => ({
+  const { wrldAtmosphere, wrldAnimations, wrldCleanView, wrldDvdBouncer, wrldDvdLogo, wrldDvdCatalog, wrldDvdThemeSync, footageModalOpen } = useVizStore(useShallow(s => ({
     wrldAtmosphere: s.wrldAtmosphere,
     wrldAnimations: s.wrldAnimations,
     wrldCleanView: s.wrldCleanView,
     wrldDvdBouncer: s.wrldDvdBouncer,
     wrldDvdLogo: s.wrldDvdLogo,
+    wrldDvdCatalog: s.wrldDvdCatalog,
     wrldDvdThemeSync: s.wrldDvdThemeSync,
     footageModalOpen: s.footageModalCount > 0,
   })))
   const stageAnimated = wrldAnimations && !reducedMotion && !gameMode && !videoShown && wrldAtmosphere !== 'off'
   const dvdControlsStage = wrldDvdBouncer && wrldDvdLogo === 'albums' && wrldDvdThemeSync
   // Ephemeral WRLD-only album theme updated on each Album Bounce impact (never mutates global app theme).
-  const [bouncedAlbumId, setBouncedAlbumId] = useState<SkinId | null>(null)
+  const [bouncedAlbumId, setBouncedAlbumId] = useState<BounceAlbumId | null>(null)
   useEffect(() => { if (!dvdControlsStage) setBouncedAlbumId(null) }, [dvdControlsStage])
   const activeBounceId = dvdControlsStage ? bouncedAlbumId : null
   const bouncePalette = activeBounceId ? (BOUNCE_STAGE_PALETTES[activeBounceId] ?? null) : null
@@ -585,16 +715,9 @@ export default function WrldView(): JSX.Element {
     if (songId != null) void addSongsInBackground(playlistId, [songId])
   }
 
-  type NotchCategory = 'albums' | 'mixtapes' | 'unreleased' | 'playlists'
+  type NotchCategory = 'albums' | 'playlists'
   const [notchCategory, setNotchCategory] = useState<NotchCategory>('albums')
-  const [notchDropdownOpen, setNotchDropdownOpen] = useState(false)
-  const NOTCH_LABELS: Record<NotchCategory, string> = { albums: 'Released Albums', mixtapes: 'Mixtapes & Singles', unreleased: 'Unreleased', playlists: 'Playlists' }
-  const NOTCH_OPTIONS: { value: NotchCategory; label: string }[] = [
-    { value: 'albums', label: 'Released Albums' },
-    { value: 'mixtapes', label: 'Mixtapes & Singles' },
-    { value: 'unreleased', label: 'Unreleased' },
-    { value: 'playlists', label: 'Playlists' },
-  ]
+  const [notchOpen, setNotchOpen] = useState(false)
 
   const fmLabel    = radioFmActive
     ? (radioFmIsLive ? '999 FM · LIVE' : '999 FM · OFF')
@@ -605,13 +728,13 @@ export default function WrldView(): JSX.Element {
   )
   const stageBackdropArt = useMemo(() => {
     if (activeBounceId) {
-      const themeArt = buildImageUrl(backdropArt(activeBounceId, false, null))
-      if (themeArt) return themeArt
+      const bounceArt = BOUNCE_ALBUM_MAP[activeBounceId]?.art
+      if (bounceArt) return bounceArt
     }
     return artSrc && !artError ? artSrc : null
   }, [activeBounceId, artSrc, artError])
   const stageEra = useMemo(
-    () => resolveWrldEra(stageBackdropArt, activeBounceId ? getSkin(activeBounceId).name : (displayAlbum ?? null)),
+    () => resolveWrldEra(stageBackdropArt, activeBounceId ? BOUNCE_ALBUM_MAP[activeBounceId].name : (displayAlbum ?? null)),
     [stageBackdropArt, activeBounceId, displayAlbum],
   )
   const titleBeatRef = useRef<HTMLParagraphElement>(null)
@@ -920,9 +1043,10 @@ export default function WrldView(): JSX.Element {
                 sources={[smallCoverUrl(stageBackdropArt), fullCoverUrl(stageBackdropArt), stageBackdropArt]}
                 className={`${stageAnimated ? 'wrld-drift ' : ''}absolute inset-0 w-full h-full object-cover transition-opacity duration-500`}
                 style={{
-                  filter: bouncedIsSoftLight
-                    ? 'blur(64px) brightness(0.92) saturate(1.25)'
-                    : `blur(60px) brightness(${isDarkSkin ? 0.42 : 0.52}) saturate(1.75)`,
+                  filter: bouncePalette?.backdropFilter
+                    ?? (bouncedIsSoftLight
+                      ? 'blur(64px) brightness(0.92) saturate(1.25)'
+                      : `blur(60px) brightness(${isDarkSkin ? 0.42 : 0.52}) saturate(1.75)`),
                   willChange: stageAnimated ? 'transform' : undefined,
                 }}
                 onError={() => { if (!activeBounceId) setArtError(true) }}
@@ -935,6 +1059,13 @@ export default function WrldView(): JSX.Element {
                 isDark={bouncedIsSoftLight ? false : (postOn || !textIsDark)}
                 playing={playbackActive}
                 animated={stageAnimated && wrldAtmosphere === 'mesh'}
+              />
+            )}
+            {/* Calibrated atmospheric glow so dark covers like 999 EP radiate their signature color instead of looking like dark mode */}
+            {bouncePalette?.ambientGlow && (
+              <div
+                className="absolute inset-0 pointer-events-none transition-opacity duration-500"
+                style={{ background: bouncePalette.ambientGlow }}
               />
             )}
             {/* Soft misty veil when GB&GR lands in soft-light bounce mode so text stays calm and never blinding */}
@@ -956,6 +1087,7 @@ export default function WrldView(): JSX.Element {
               <StageBouncer
                 enabled={wrldDvdBouncer && wrldAnimations && !footageModalOpen}
                 logo={wrldDvdLogo}
+                catalog={wrldDvdCatalog}
                 reducedMotion={reducedMotion || gameMode}
                 playingCoverUrl={artSrc && !artError ? artSrc : null}
                 themeSync={wrldDvdThemeSync}
@@ -971,7 +1103,7 @@ export default function WrldView(): JSX.Element {
               rootRef={pageRef}
               fullscreen={fullscreen}
               artUrl={stageBackdropArt}
-              albumName={activeBounceId ? getSkin(activeBounceId).name : (displayAlbum ?? null)}
+              albumName={activeBounceId ? BOUNCE_ALBUM_MAP[activeBounceId].name : (displayAlbum ?? null)}
               trackKey={radioFmActive ? (radioFmNowPlaying?.title ?? null) : (currentTrack?.id ?? null)}
               albumKey={displayAlbum ?? null}
               // The held value, not !!rawLyrics: the toolbar derives its own
@@ -1612,99 +1744,114 @@ export default function WrldView(): JSX.Element {
 
       </>
 
-      {/* ── Notch menu ── */}
-      <div className="group absolute right-0 top-0 bottom-0 z-20 flex items-center" style={hideForViz}>
-
-        {/* Expanded panel - slides in on hover */}
-        {/* Clip width is in rem (17rem = 272px at scale 1) so it grows together
-            with the rem-based `w-64` panel inside - a fixed px clamp here chopped
-            off the right column of album covers at UI scales above normal. */}
-        <div className="overflow-hidden max-w-0 group-hover:max-w-[17rem] transition-[max-width] duration-200 ease-out">
+      {/* ── Quick shelf (click-to-toggle Liquid Glass: Albums & Playlists only, zero "Coming soon") ── */}
+      <div className="absolute right-0 top-0 bottom-0 z-20 flex items-center pointer-events-none" style={hideForViz}>
+        {/* Expanded panel - slides in only on click so hovering right never obscures lyrics */}
+        <div
+          className={`overflow-hidden transition-[max-width,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            notchOpen ? 'max-w-[17rem] opacity-100 pointer-events-auto' : 'max-w-0 opacity-0 pointer-events-none'
+          }`}
+        >
           <div
-            className="w-64 opacity-0 group-hover:opacity-100 transition-opacity duration-150 delay-75
-              bg-black/85 backdrop-blur-2xl rounded-l-2xl border-l border-t border-b border-white/[0.07]
-              flex flex-col overflow-hidden"
-            style={{ height: 'calc(100vh - 180px)', maxHeight: 560 }}
+            className="w-64 rounded-l-2xl border-l border-t border-b border-white/[0.14] shadow-2xl flex flex-col overflow-hidden"
+            style={{
+              height: 'calc(100vh - 180px)',
+              maxHeight: 560,
+              background: 'rgba(18, 20, 26, 0.56)',
+              backdropFilter: 'blur(36px) saturate(1.7)',
+              WebkitBackdropFilter: 'blur(36px) saturate(1.7)',
+            }}
           >
-
-            {/* Category selector */}
-            <div className="relative px-3 pt-3 pb-2 shrink-0">
-              <button
-                onClick={() => setNotchDropdownOpen(o => !o)}
-                className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] transition-colors"
-              >
-                <span className="text-white/60 text-[10px] font-semibold tracking-wide truncate leading-none">
-                  {NOTCH_LABELS[notchCategory]}
-                </span>
-                <ChevronDown size={10} className={`text-white/30 shrink-0 transition-transform duration-150 ${notchDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-              {notchDropdownOpen && (
-                <div className="absolute top-full left-3 right-3 mt-1 z-10 bg-black/95 backdrop-blur-xl rounded-xl border border-white/10 overflow-hidden py-1 shadow-2xl">
-                  {(account ? NOTCH_OPTIONS : NOTCH_OPTIONS.filter(o => o.value !== 'playlists')).map(opt => (
-                    <button key={opt.value}
+            {/* Clean 2-tab switcher: Albums & Playlists */}
+            <div className="flex items-center gap-1 px-3 pt-3 pb-2 shrink-0">
+              <div className="flex-1 grid grid-cols-2 gap-1 p-0.5 rounded-xl bg-white/[0.06] border border-white/[0.08]">
+                {([
+                  { value: 'albums', label: 'Albums' },
+                  { value: 'playlists', label: 'Playlists' },
+                ] as const).map((tab) => {
+                  const active = notchCategory === tab.value
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
                       onClick={() => {
-                        setNotchCategory(opt.value)
-                        setNotchDropdownOpen(false)
+                        setNotchCategory(tab.value)
                         setSelectedAlbumId(null)
                       }}
-                      className={`w-full px-3 py-2 text-left text-[10px] font-medium transition-colors ${
-                        notchCategory === opt.value
-                          ? 'text-white/90 bg-white/[0.08]'
-                          : 'text-white/45 hover:text-white/80 hover:bg-white/[0.05]'
+                      className={`py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                        active
+                          ? 'bg-white/[0.16] text-white shadow-sm'
+                          : 'text-white/55 hover:text-white/85'
                       }`}
                     >
-                      {opt.label}
+                      {tab.label}
                     </button>
-                  ))}
-                </div>
-              )}
+                  )
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotchOpen(false)}
+                title="Close"
+                aria-label="Close quick shelf"
+                className="p-1.5 rounded-lg text-white/50 hover:text-white/90 hover:bg-white/[0.08] transition-colors"
+              >
+                <X size={13} />
+              </button>
             </div>
 
-            {/* Thin separator */}
-            <div className="h-px bg-white/[0.06] mx-3 shrink-0" />
+            <div className="h-px bg-white/[0.08] mx-3 shrink-0" />
 
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto px-3 py-3" style={{ scrollbarWidth: 'none' }}>
-
-              {/* ── Albums ── */}
               {notchCategory === 'albums' ? (
                 selectedAlbumId !== null
                   ? AlbumDetail({ albumId: selectedAlbumId })
                   : AlbumsGrid()
-
-              /* ── Playlists ── */
-              ) : notchCategory === 'playlists' && account && playlists.length > 0 ? (
+              ) : account && playlists.length > 0 ? (
                 <div className="grid grid-cols-2 gap-2.5">
-                  {playlists.slice(0, 6).map(pl => (
-                    <button key={pl.id} onClick={() => handleAddToPlaylist(pl.id)} title={pl.name}
+                  {playlists.map(pl => (
+                    <button key={pl.id} onClick={() => handleAddToPlaylist(pl.id)} title={`Add current song to ${pl.name}`}
                       className="flex flex-col gap-1.5 text-left group/pl">
-                      <div className="w-full aspect-square rounded-xl overflow-hidden ring-1 ring-white/[0.06] group-hover/pl:ring-white/25 transition shadow-md">
+                      <div className="w-full aspect-square rounded-xl overflow-hidden ring-1 ring-white/[0.08] group-hover/pl:ring-white/30 transition shadow-md">
                         {playlistCoverUrl(pl)
                           ? <img src={playlistCoverUrl(pl)} className="w-full h-full object-cover" />
                           : <div className="w-full h-full bg-white/[0.06] flex items-center justify-center">
-                              <Music size={18} className="text-white/15" />
+                              <Music size={18} className="text-white/25" />
                             </div>}
                       </div>
-                      <p className="text-white/55 text-[9px] font-medium truncate px-0.5">{pl.name}</p>
+                      <p className="text-white/75 text-[10px] font-medium truncate px-0.5">{pl.name}</p>
                     </button>
                   ))}
                 </div>
-
               ) : (
-                <div className="flex flex-col items-center justify-center h-full gap-2 py-8">
-                  <div className="w-10 h-10 rounded-xl bg-white/[0.04] flex items-center justify-center">
-                    <Music size={16} className="text-white/15" />
+                <div className="flex flex-col items-center justify-center h-full gap-2 py-8 px-4 text-center">
+                  <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center">
+                    <Music size={16} className="text-white/30" />
                   </div>
-                  <p className="text-white/20 text-[10px] text-center">Coming soon</p>
+                  <p className="text-white/50 text-[11px]">
+                    {account ? 'No playlists yet' : 'Sign in to access your playlists'}
+                  </p>
                 </div>
               )}
-
             </div>
           </div>
         </div>
 
-        {/* Notch handle - pill tab */}
-        <div className="w-[5px] group-hover:w-[3px] h-16 group-hover:h-24 rounded-l-full bg-white/20 group-hover:bg-white/50 transition-[width,height,background-color] duration-200 ease-out shrink-0" />
+        {/* Click-to-toggle edge handle */}
+        <button
+          type="button"
+          onClick={() => setNotchOpen(o => !o)}
+          aria-expanded={notchOpen}
+          title={notchOpen ? 'Hide quick shelf' : 'Albums & Playlists'}
+          className="pointer-events-auto pl-2 py-6 flex items-center group"
+        >
+          <span className={`rounded-l-full transition-[width,height,background-color] duration-200 ease-out shrink-0 ${
+            notchOpen
+              ? 'w-[4px] h-20 bg-white/55'
+              : 'w-[4px] group-hover:w-[5px] h-14 group-hover:h-20 bg-white/22 group-hover:bg-white/55'
+          }`} />
+        </button>
       </div>
 
       {/* Mobile queue - full-screen sheet (there's no side-by-side room for
@@ -2483,6 +2630,7 @@ const LyricsPanel = memo(function LyricsPanel({
   const developerMode = useStore((s) => s.developerMode)
   const wrldLyricLook = useVizStore((s) => s.wrldLyricLook)
   const wrldCoverLyricColors = useVizStore((s) => s.wrldCoverLyricColors)
+  const wrldLyricKeywords = useVizStore((s) => s.wrldLyricKeywords)
   const radioFmPaused = useStore((s) => s.radioFmPaused)
   const lyricsPaused = radioFmActive && radioFmPaused
   const lyricLook = developerMode ? savedLyricLook : (isWrldFanLyricId(wrldLyricLook) ? wrldLyricLook : 'classic')
@@ -2790,14 +2938,26 @@ const LyricsPanel = memo(function LyricsPanel({
             }}
           >
             {activeLine.words && activeLine.words.length > 0 ? (
-              <WordLyricLine words={activeLine.words} active getTime={getLyricTime} offset={effectiveOffset} fill />
+              <WordLyricLine
+                words={activeLine.words}
+                active
+                getTime={getLyricTime}
+                offset={effectiveOffset}
+                fill
+                light={isLightLyrics}
+                colorKeywords={wrldLyricKeywords}
+              />
             ) : (
               splitAdLibs(activeLine.text).map((seg, si) => (
                 <span
                   key={si}
                   style={seg.adLib ? { color: coverTint?.secondary.css ?? inactiveColor, opacity: 0.78, fontStyle: 'italic' } : undefined}
                 >
-                  {seg.text}
+                  {splitColorWords(seg.text, undefined, { light: isLightLyrics, enabled: wrldLyricKeywords }).map((cseg, ci) => (
+                    cseg.color
+                      ? <span key={ci} style={{ color: cseg.color }}>{cseg.text}</span>
+                      : cseg.text
+                  ))}
                 </span>
               ))
             )}
@@ -2928,10 +3088,17 @@ const LyricsPanel = memo(function LyricsPanel({
                 }}
               >
                 {line.words ? (
-                  <WordLyricLine words={line.words} active={isActive} getTime={getLyricTime} offset={lyricsOffset} />
+                  <WordLyricLine
+                    words={line.words}
+                    active={isActive}
+                    getTime={getLyricTime}
+                    offset={lyricsOffset}
+                    light={isLightLyrics}
+                    colorKeywords={wrldLyricKeywords}
+                  />
                 ) : splitAdLibs(line.text).map((seg, si) => (
                   <span key={si} style={seg.adLib ? { opacity: ADLIB_OPACITY } : undefined}>
-                    {splitColorWords(seg.text).map((cseg, ci) => (
+                    {splitColorWords(seg.text, undefined, { light: isLightLyrics, enabled: wrldLyricKeywords }).map((cseg, ci) => (
                       cseg.color
                         ? <span key={ci} style={{ color: cseg.color }}>{cseg.text}</span>
                         : cseg.text

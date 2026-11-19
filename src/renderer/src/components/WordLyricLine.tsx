@@ -17,6 +17,10 @@ interface Props {
   offset: number
   /** Keep the sung word's fill when game mode or reduced motion turns the lift off (WRLD's Post frames). */
   fill?: boolean
+  /** Use light-backdrop WCAG AA keyword colors (e.g., GB&GR soft sky). */
+  light?: boolean
+  /** Highlight thematic Juice WRLD keywords. Defaults to true. */
+  colorKeywords?: boolean
 }
 
 /**
@@ -24,12 +28,15 @@ interface Props {
  * word reveals with a damped spring and sweeps with an accent-kissed luminous
  * gradient across the active syllable without causing layout reflow.
  */
-export default memo(function WordLyricLine({ words, active, getTime, offset, fill }: Props): JSX.Element {
+export default memo(function WordLyricLine({ words, active, getTime, offset, fill, light, colorKeywords = true }: Props): JSX.Element {
   const { reducedMotion, gameMode } = useEffectsState()
   const wrldAnimations = useVizStore((s) => s.wrldAnimations)
   const liftWords = active && !reducedMotion && !gameMode && wrldAnimations
   const fillWord = liftWords || (active && !!fill)
-  const runs = useMemo(() => wordRuns(words), [words])
+  const runs = useMemo(
+    () => wordRuns(words, undefined, { light, enabled: colorKeywords }),
+    [words, light, colorKeywords],
+  )
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([])
 
   const sungAt = (): number => {

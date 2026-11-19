@@ -145,9 +145,13 @@ interface VizState {
   wrldCutAccent: 'juice' | 'cover'
   /** Applies cover-derived primary/secondary colors to lyrics across all WRLD lyric styles. */
   wrldCoverLyricColors: boolean
+  /** Highlights thematic Juice WRLD keywords in WRLD lyrics (Focus, Classic & word-timed). */
+  wrldLyricKeywords: boolean
   /** Optional kinetic Album Covers / Playing Cover / LND Butterfly bouncer behind WRLD lyrics. */
   wrldDvdBouncer: boolean
   wrldDvdLogo: 'albums' | 'cover' | 'butterfly'
+  /** Which album cover set StageBouncer rotates through: 'core' (5 studio albums) or 'all' (full discography & Deluxe). */
+  wrldDvdCatalog: 'all' | 'core'
   /** When true in Album Covers mode, every wall bounce switches the active Ambience album theme. */
   wrldDvdThemeSync: boolean
   /** Hides chrome and playback controls in WRLD for clean screen-recording/captures. */
@@ -170,8 +174,10 @@ interface VizState {
   setWrldLyricLook: (look: WrldCuratedLyricId) => void
   setWrldCutAccent: (accent: 'juice' | 'cover') => void
   setWrldCoverLyricColors: (on: boolean) => void
+  setWrldLyricKeywords: (on: boolean) => void
   setWrldDvdBouncer: (on: boolean) => void
   setWrldDvdLogo: (logo: 'albums' | 'cover' | 'butterfly') => void
+  setWrldDvdCatalog: (catalog: 'all' | 'core') => void
   setWrldDvdThemeSync: (on: boolean) => void
   setWrldCleanView: (on: boolean) => void
   setWrldVideos: (choice: MusicVideoChoice) => void
@@ -209,8 +215,10 @@ export const useVizStore = create<VizState>((set) => ({
   wrldCleanView: false,
   wrldCutAccent: ls.get('wrldCutAccent') === 'cover' ? 'cover' : 'juice',
   wrldCoverLyricColors: ls.get<boolean>('wrldCoverLyricColors') ?? true,
+  wrldLyricKeywords: ls.get<boolean>('wrldLyricKeywords') ?? true,
   wrldDvdBouncer: ls.get<boolean>('wrldDvdBouncer') === true,
   wrldDvdLogo: pick(ls.get('wrldDvdLogo'), ['albums', 'cover', 'butterfly'] as const, 'albums'),
+  wrldDvdCatalog: ls.get('wrldDvdCatalog') === 'core' ? 'core' : 'all',
   wrldDvdThemeSync: ls.get<boolean>('wrldDvdThemeSync') ?? true,
   wrldFrame: normalizeWrldFrame(ls.get<unknown>('wrldFrame')),
   wrldInk: normalizeWrldInk(ls.get<unknown>('wrldInk')),
@@ -275,6 +283,10 @@ export const useVizStore = create<VizState>((set) => ({
     set({ wrldCoverLyricColors })
     ls.set('wrldCoverLyricColors', wrldCoverLyricColors)
   },
+  setWrldLyricKeywords: (wrldLyricKeywords) => {
+    set({ wrldLyricKeywords })
+    ls.set('wrldLyricKeywords', wrldLyricKeywords)
+  },
   setWrldDvdBouncer: (wrldDvdBouncer) => {
     set({ wrldDvdBouncer })
     ls.set('wrldDvdBouncer', wrldDvdBouncer)
@@ -282,6 +294,10 @@ export const useVizStore = create<VizState>((set) => ({
   setWrldDvdLogo: (wrldDvdLogo) => {
     set({ wrldDvdLogo })
     ls.set('wrldDvdLogo', wrldDvdLogo)
+  },
+  setWrldDvdCatalog: (wrldDvdCatalog) => {
+    set({ wrldDvdCatalog })
+    ls.set('wrldDvdCatalog', wrldDvdCatalog)
   },
   setWrldDvdThemeSync: (wrldDvdThemeSync) => {
     set({ wrldDvdThemeSync })
@@ -333,6 +349,10 @@ if (typeof window !== 'undefined') {
       case 'wrldAnimations': useVizStore.setState({ wrldAnimations: value !== false }); break
       case 'wrldLyricLook': if (isWrldCuratedLyricId(value)) useVizStore.setState({ wrldLyricLook: value }); break
       case 'wrldCutAccent': useVizStore.setState({ wrldCutAccent: value === 'cover' ? 'cover' : 'juice' }); break
+      case 'wrldCoverLyricColors': useVizStore.setState({ wrldCoverLyricColors: value !== false }); break
+      case 'wrldLyricKeywords': useVizStore.setState({ wrldLyricKeywords: value !== false }); break
+      case 'wrldDvdCatalog': useVizStore.setState({ wrldDvdCatalog: value === 'core' ? 'core' : 'all' }); break
+      case 'wrldDvdThemeSync': useVizStore.setState({ wrldDvdThemeSync: value !== false }); break
       case 'wrldFrame': useVizStore.setState({ wrldFrame: normalizeWrldFrame(value) }); break
       case 'wrldInk': useVizStore.setState({ wrldInk: normalizeWrldInk(value) }); break
       case 'wrldPostFont': useVizStore.setState({ wrldPostFont: typeof value === 'string' ? value : null }); break

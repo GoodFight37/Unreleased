@@ -1874,6 +1874,111 @@ ipcMain.handle('read-text-file', async (_, filePath) => {
   }
 })
 
+// Local synced-lyrics overrides (`userData/synced-lyrics/<songId>.lrc`) and
+// community pack cache (`userData/synced-lyrics-pack.json.gz`).
+const SYNCED_LYRICS_MAX = 512 * 1024
+const SYNCED_PACK_MAX = 32 * 1024 * 1024
+
+function validSongId(songId) {
+  const n = Number(songId)
+  return Number.isInteger(n) && n > 0 && n < 2147483647 ? n : null
+}
+
+function syncedLyricsFilePath(songId) {
+  const id = validSongId(songId)
+  if (!id) return null
+  const dir = path.join(app.getPath('userData'), 'synced-lyrics')
+  return { dir, file: path.join(dir, `${id}.lrc`) }
+}
+
+ipcMain.handle('synced-lyrics-read', async (_, songId) => {
+  const target = syncedLyricsFilePath(songId)
+  if (!target) return { ok: false, error: 'Invalid songId' }
+  try {
+    const text = fs.readFileSync(target.file, 'utf8')
+    return { ok: true, lrc: text }
+  } catch (e) {
+    if (e.code === 'ENOENT') return { ok: true, lrc: null }
+    return { ok: false, error: e.message }
+  }
+})
+
+ipcMain.handle('synced-lyrics-write', async (_, songId, lrc) => {
+  const target = syncedLyricsFilePath(songId)
+  if (!target) return { ok: false, error: 'Invalid songId' }
+  if (typeof lrc !== 'string' || !lrc.trim() || Buffer.byteLength(lrc, 'utf8') > SYNCED_LYRICS_MAX) {
+    return { ok: false, error: 'Invalid LRC payload' }
+  }
+  try {
+    fs.mkdirSync(target.dir, { recursive: true })
+    const tmp = `${target.file}.${process.pid}.${Date.now()}.tmp`
+    fs.writeFileSync(tmp, lrc, 'utf8')
+    fs.renameSync(tmp, target.file)
+    return { ok: true, path: target.file }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+})
+
+ipcMain.handle('synced-lyrics-delete', async (_, songId) => {
+  const target = syncedLyricsFilePath(songId)
+  if (!target) return { ok: false, error: 'Invalid songId' }
+  try {
+    fs.unlinkSync(target.file)
+    return { ok: true }
+  } catch (e) {
+    if (e.code === 'ENOENT') return { ok: true }
+    return { ok: false, error: e.message }
+  }
+})
+
+ipcMain.handle('synced-lyrics-pack-read', async () => {
+  const baseDir = app.getPath('userData')
+  const packPath = path.join(baseDir, 'synced-lyrics-pack.json.gz')
+  const metaPath = path.join(baseDir, 'synced-lyrics-pack.meta.json')
+  try {
+    const gz = fs.readFileSync(packPath)
+    if (gz.length > SYNCED_PACK_MAX) return { ok: false, error: 'Pack too large' }
+    const raw = require('zlib').gunzipSync(gz).toString('utf8')
+    const data = JSON.parse(raw)
+    let meta = null
+    try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) } catch { /* optional */ }
+    return { ok: true, data, meta }
+  } catch (e) {
+    if (e.code === 'ENOENT') return { ok: true, data: null, meta: null }
+    return { ok: false, error: e.message }
+  }
+})
+
+ipcMain.handle('synced-lyrics-pack-write', async (_, gzBytes, meta) => {
+  if (!(gzBytes instanceof Uint8Array) && !Buffer.isBuffer(gzBytes)) {
+    return { ok: false, error: 'Invalid pack buffer' }
+  }
+  const buf = Buffer.from(gzBytes)
+  if (buf.length === 0 || buf.length > SYNCED_PACK_MAX) {
+    return { ok: false, error: 'Pack size out of bounds' }
+  }
+  try {
+    const raw = require('zlib').gunzipSync(buf).toString('utf8')
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return { ok: false, error: 'Invalid pack JSON' }
+    const baseDir = app.getPath('userData')
+    const packPath = path.join(baseDir, 'synced-lyrics-pack.json.gz')
+    const metaPath = path.join(baseDir, 'synced-lyrics-pack.meta.json')
+    const tmpPack = `${packPath}.${process.pid}.${Date.now()}.tmp`
+    fs.writeFileSync(tmpPack, buf)
+    fs.renameSync(tmpPack, packPath)
+    if (meta && typeof meta === 'object') {
+      const tmpMeta = `${metaPath}.${process.pid}.${Date.now()}.tmp`
+      fs.writeFileSync(tmpMeta, JSON.stringify(meta), 'utf8')
+      fs.renameSync(tmpMeta, metaPath)
+    }
+    return { ok: true, count: Object.keys(parsed.songs ?? parsed).length }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+})
+
 // ── IPC: local file management (create / rename / delete) ───────────────────
 // These act on the user's own filesystem from the Files > Local browser, so
 // they share the same rules as the copy/move handlers further down: a name is

@@ -128,10 +128,10 @@ export default function WrldVisualizer({
   const { reducedMotion, gameMode } = useEffectsState()
   const {
     activeMode, vizQuality, vizUseArtwork, vizBoost, covered,
-    wrldAtmosphere, wrldAnimations, wrldLyricLook, wrldCleanView, wrldCutAccent, wrldCoverLyricColors,
-    wrldDvdBouncer, wrldDvdLogo, wrldDvdThemeSync,
-    setWrldAtmosphere, setWrldAnimations, setWrldLyricLook, setWrldCleanView, setWrldCutAccent, setWrldCoverLyricColors,
-    setWrldDvdBouncer, setWrldDvdLogo, setWrldDvdThemeSync,
+    wrldAtmosphere, wrldAnimations, wrldLyricLook, wrldCleanView, wrldCutAccent, wrldCoverLyricColors, wrldLyricKeywords,
+    wrldDvdBouncer, wrldDvdLogo, wrldDvdCatalog, wrldDvdThemeSync,
+    setWrldAtmosphere, setWrldAnimations, setWrldLyricLook, setWrldCleanView, setWrldCutAccent, setWrldCoverLyricColors, setWrldLyricKeywords,
+    setWrldDvdBouncer, setWrldDvdLogo, setWrldDvdCatalog, setWrldDvdThemeSync,
   } = useVizStore(useShallow((s) => ({
     activeMode: s.activeMode,
     vizQuality: s.vizQuality,
@@ -144,8 +144,10 @@ export default function WrldVisualizer({
     wrldCleanView: s.wrldCleanView,
     wrldCutAccent: s.wrldCutAccent,
     wrldCoverLyricColors: s.wrldCoverLyricColors,
+    wrldLyricKeywords: s.wrldLyricKeywords,
     wrldDvdBouncer: s.wrldDvdBouncer,
     wrldDvdLogo: s.wrldDvdLogo,
+    wrldDvdCatalog: s.wrldDvdCatalog,
     wrldDvdThemeSync: s.wrldDvdThemeSync,
     setWrldAtmosphere: s.setWrldAtmosphere,
     setWrldAnimations: s.setWrldAnimations,
@@ -153,8 +155,10 @@ export default function WrldVisualizer({
     setWrldCleanView: s.setWrldCleanView,
     setWrldCutAccent: s.setWrldCutAccent,
     setWrldCoverLyricColors: s.setWrldCoverLyricColors,
+    setWrldLyricKeywords: s.setWrldLyricKeywords,
     setWrldDvdBouncer: s.setWrldDvdBouncer,
     setWrldDvdLogo: s.setWrldDvdLogo,
+    setWrldDvdCatalog: s.setWrldDvdCatalog,
     setWrldDvdThemeSync: s.setWrldDvdThemeSync,
   })))
   const [ambienceOpen, setAmbienceOpen] = useState(false)
@@ -951,6 +955,20 @@ export default function WrldVisualizer({
                   }}
                 />
               </div>
+              <div className="flex items-center justify-between gap-3 mb-2.5">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-text-primary leading-tight">Accent keywords</div>
+                  <div className="text-[10px] text-text-muted leading-tight mt-0.5">Highlight thematic Juice WRLD words in Focus & Classic</div>
+                </div>
+                <Toggle
+                  on={wrldLyricKeywords}
+                  onClick={() => {
+                    const next = !wrldLyricKeywords
+                    setWrldLyricKeywords(next)
+                    announce(next ? 'Accent keywords on' : 'Accent keywords off')
+                  }}
+                />
+              </div>
               <p className="text-text-secondary text-xs font-semibold mb-2">Lyric presentation</p>
               <div className="grid grid-cols-3 gap-1.5">
                 {(developerMode ? WRLD_CURATED_LYRICS : WRLD_FAN_LYRICS).map((style) => {
@@ -1011,22 +1029,50 @@ export default function WrldVisualizer({
                     ))}
                   </div>
                   {wrldDvdLogo === 'albums' && (
-                    <div className="flex items-center justify-between gap-3 mt-3 pt-2.5 border-t border-[var(--border)]/60">
-                      <div className="min-w-0">
-                        <div className="text-[11px] font-semibold text-text-primary leading-tight">Sync WRLD stage theme</div>
-                        <div className="text-[10px] text-text-muted leading-tight mt-0.5">
-                          {wrldDvdThemeSync ? 'Every bounce shifts WRLD stage only (keeps Settings untouched)' : 'Bounces freely without changing the stage'}
+                    <>
+                      <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-[var(--border)]/60">
+                        <span className="text-[11px] font-semibold text-text-primary">Cover set</span>
+                        <div className="flex gap-1">
+                          {([
+                            { id: 'core', label: 'Core 5' },
+                            { id: 'all', label: 'All Albums & Deluxe' },
+                          ] as const).map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setWrldDvdCatalog(opt.id)
+                                announce(opt.id === 'all' ? 'All Albums & Deluxe' : 'Core 5 albums')
+                              }}
+                              aria-pressed={wrldDvdCatalog === opt.id}
+                              className={`px-2 py-1 rounded-lg border text-[10px] font-semibold transition-colors ${
+                                wrldDvdCatalog === opt.id
+                                  ? 'bg-accent/15 border-[var(--accent)] text-text-primary'
+                                  : 'border-[var(--border)] text-text-muted hover:text-text-primary hover:bg-[var(--surface-overlay)]'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      <Toggle
-                        on={wrldDvdThemeSync}
-                        onClick={() => {
-                          const next = !wrldDvdThemeSync
-                          setWrldDvdThemeSync(next)
-                          announce(next ? 'Theme sync on bounce: ON' : 'Theme sync on bounce: OFF')
-                        }}
-                      />
-                    </div>
+                      <div className="flex items-center justify-between gap-3 mt-2.5 pt-2.5 border-t border-[var(--border)]/60">
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-semibold text-text-primary leading-tight">Sync WRLD stage theme</div>
+                          <div className="text-[10px] text-text-muted leading-tight mt-0.5">
+                            {wrldDvdThemeSync ? 'Every bounce shifts WRLD stage only (keeps Settings untouched)' : 'Bounces freely without changing the stage'}
+                          </div>
+                        </div>
+                        <Toggle
+                          on={wrldDvdThemeSync}
+                          onClick={() => {
+                            const next = !wrldDvdThemeSync
+                            setWrldDvdThemeSync(next)
+                            announce(next ? 'Theme sync on bounce: ON' : 'Theme sync on bounce: OFF')
+                          }}
+                        />
+                      </div>
+                    </>
                   )}
                 </>
               )}

@@ -48,6 +48,8 @@ release_err.txt
 # Python
 __pycache__/
 *.pyc
+tools/sync-lyrics-pack/.venv/
+tools/sync-lyrics-pack/out/
 
 # Runtime data
 *.pid

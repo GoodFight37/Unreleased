@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import {
   AlertCircle, AudioLines, Check, Clock, Copy, Download, FileText, Heart, ListChecks, Loader2, LogIn, Maximize2, MicVocal, Minimize2, Music2, Plus,
-  ShieldCheck, Sparkles,
+  RotateCcw, Save, ShieldCheck, Sparkles,
   Upload, X,
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
@@ -14,6 +14,7 @@ import {
 } from '../lib/lyricsGenApi'
 import { jobTiming, timingOutput } from '../lib/lyricsTiming'
 import { hasWordTiming, linesFromPlain, parseSyncedLyrics, plainOf, serializeSyncedLyrics, syncProgress } from '../lib/syncedLyrics'
+import { deleteLocalSyncedLyrics, saveLocalSyncedLyrics, useLocalSyncedLyrics } from '../lib/localSyncedLyrics'
 import { getSongById } from '../lib/juicewrldApi'
 import { trackIdToSongId } from '../lib/userApi'
 import { extensionOf } from '../lib/donorFilesApi'
@@ -122,6 +123,13 @@ function LyricsGenDialog({ target }: { target: LyricsGenTarget }): JSX.Element {
   const setShowUserAuth = useStore((s) => s.setShowUserAuth)
   const isDonor = !!account?.is_donor
   const isAdmin = !!account?.is_administrator
+
+  // Safety guard: ensure DOM fullscreen (e.g. WRLD fullscreen) never hides this #root modal.
+  useEffect(() => {
+    if (typeof document !== 'undefined' && document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {})
+    }
+  }, [])
 
   const [tab, setTab] = useState<Tab>(target.tab ?? 'sync')
   const [openJob, setOpenJob] = useState<{ id: string; admin: boolean } | null>(target.jobId ? { id: target.jobId, admin: false } : null)
@@ -445,6 +453,34 @@ function LyricsGenDialog({ target }: { target: LyricsGenTarget }): JSX.Element {
       showAppToast('In the song editor now. Check it there, then submit', { tone: 'info' })
       close()
     } else showAppToast('The song editor has moved on to another song')
+  }
+
+  const localSongId = target.songId ?? (suggested ? trackIdToSongId(suggested.id) : null) ?? (currentTrack ? trackIdToSongId(currentTrack.id) : null)
+  const existingLocalLrc = useLocalSyncedLyrics(localSongId)
+  const [savingLocal, setSavingLocal] = useState(false)
+
+  const saveLocallyAndApply = async (): Promise<void> => {
+    if (!localSongId) {
+      showAppToast('Select a library song first to save synced lyrics locally', { tone: 'error' })
+      return
+    }
+    if (!syncLrc.trim()) return
+    setSavingLocal(true)
+    const res = await saveLocalSyncedLyrics(localSongId, syncLrc)
+    setSavingLocal(false)
+    if (res.ok) {
+      showAppToast('Saved locally & applied in WRLD', { tone: 'info' })
+      close()
+    } else {
+      showAppToast(res.error ?? 'Could not save synced lyrics locally', { tone: 'error' })
+    }
+  }
+
+  const resetLocalOverride = async (): Promise<void> => {
+    if (!localSongId) return
+    const res = await deleteLocalSyncedLyrics(localSongId)
+    if (res.ok) showAppToast('Removed local synced lyrics override', { tone: 'info' })
+    else showAppToast(res.error ?? 'Could not remove local lyrics', { tone: 'error' })
   }
 
   const trimmed = text.trim()
@@ -877,6 +913,25 @@ function LyricsGenDialog({ target }: { target: LyricsGenTarget }): JSX.Element {
               >
                 <Download size={13} /> {syncWords ? '.words.lrc' : '.lrc'}
               </button>
+              {localSongId && existingLocalLrc && (
+                <button
+                  onClick={() => void resetLocalOverride()}
+                  title="Remove your saved local synced lyrics for this song"
+                  className={SMALL_BTN}
+                >
+                  <RotateCcw size={13} /> Reset local
+                </button>
+              )}
+              {localSongId && !target.apply && (
+                <button
+                  onClick={() => void saveLocallyAndApply()}
+                  disabled={savingLocal || syncDone.done === 0}
+                  title="Save to userData/synced-lyrics and apply immediately in WRLD"
+                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-xs font-bold bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {savingLocal ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save locally & apply
+                </button>
+              )}
               {target.apply && (
                 <button onClick={() => applyLrc(syncLrc)} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-xs font-bold bg-accent text-white hover:bg-accent/90 transition-colors">
                   <Check size={13} /> {target.apply.label}

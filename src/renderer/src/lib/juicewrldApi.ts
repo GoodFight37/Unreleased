@@ -3,6 +3,7 @@ import { apiRequest, untilAborted } from './apiClient'
 import { cacheGet } from './apiCache'
 import { peekSongPref } from './songPrefs'
 import { peekRotatedCover } from './coverRotation'
+import { peekUnreleasedCoverMode, peekFanCoverForSong } from './fanCovers'
 import { peekEraCover } from './eraCovers'
 import { createTtlCache } from './ttlCache'
 import { peekSessionEditOverride } from './sessionEditOverrides'
@@ -1076,9 +1077,18 @@ export function overrideCoverUrl(
   category: string | null | undefined,
   era: string | null | undefined,
   eraCoverOf: (era: string | null | undefined) => string | undefined = peekEraCover,
+  title?: string | null,
 ): string | undefined {
-  return resolvePrefCoverUrl(prefCover)
-    ?? (songId != null ? peekRotatedCover(songId) : undefined)
+  const manual = resolvePrefCoverUrl(prefCover)
+  if (manual) return manual
+  const mode = peekUnreleasedCoverMode()
+  if (mode === 'manual_only') return undefined
+  if (mode === 'fan_era' && songId != null && category !== 'released') {
+    const fan = peekFanCoverForSong(songId, era, title)
+    if (fan) return fan
+    return era ? resolvePrefCoverUrl(eraCoverOf(era)) : undefined
+  }
+  return (songId != null ? peekRotatedCover(songId) : undefined)
     ?? (songId != null && category !== 'released' && era ? resolvePrefCoverUrl(eraCoverOf(era)) : undefined)
 }
 
@@ -1086,7 +1096,7 @@ export function songToTrack(song: JWApiSong): Track {
   const apiTitle = song.name
   const apiImageUrl = buildImageUrl(song.image_url)
   const pref = peekSongPref(song.id)
-  const coverUrl = overrideCoverUrl(song.id, pref?.cover_url, song.category, song.era?.name)
+  const coverUrl = overrideCoverUrl(song.id, pref?.cover_url, song.category, song.era?.name, undefined, song.name)
   const { path: resolvedPath, length: resolvedLength, channel: streamChannel } = resolveSessionEditSource(song)
   return {
     id: `jw-${song.id}`,

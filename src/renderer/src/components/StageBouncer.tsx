@@ -1,10 +1,29 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
-import { getSkin, type SkinId } from '../lib/skins'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { buildImageUrl } from '../lib/juicewrldApi'
 import { listenToMeter } from '../desktop/meter'
 
 export type BounceSpriteId = 'albums' | 'cover' | 'butterfly'
 export type DvdLogoId = BounceSpriteId
+export type BounceAlbumCatalog = 'all' | 'core'
+
+export type BounceAlbumId =
+  | '999'
+  | 'gbgr'
+  | 'drfl'
+  | 'lnd'
+  | 'fd'
+  | 'lnd_5yae'
+  | 'wod'
+  | 'tpne'
+  | 'tpp'
+  | 'tpp_ee'
+  | 'gbgr_ae'
+  | 'gbgr_5yae'
+  | 'nd'
+  | 'bdm'
+  | 'hih_999'
+  | 'aff'
+  | 'jute'
 
 export const BOUNCE_SPRITE_OPTIONS: ReadonlyArray<{ id: BounceSpriteId; label: string }> = [
   { id: 'albums', label: 'Album Covers' },
@@ -20,30 +39,53 @@ export function normalizeBounceSprite(value: unknown): BounceSpriteId {
 
 export const normalizeDvdLogo = normalizeBounceSprite
 
-interface AlbumBounceItem {
-  id: SkinId
+export interface AlbumBounceItem {
+  id: BounceAlbumId
   name: string
   color: string
   art: string
+  core?: boolean
 }
 
-const ALBUM_BOUNCE_SPECS: ReadonlyArray<{ id: SkinId; color: string }> = [
-  { id: '999', color: '#f0404f' },
-  { id: 'gbgr', color: '#4da6ff' },
-  { id: 'drfl', color: '#ff8426' },
-  { id: 'lnd', color: '#e864c0' },
-  { id: 'fd', color: '#4ce4eb' },
+const ALBUM_BOUNCE_SPECS: ReadonlyArray<{
+  id: BounceAlbumId
+  name: string
+  color: string
+  asset: string
+  core?: boolean
+}> = [
+  { id: '999', name: 'JuiceWRLD 9 9 9', color: '#f0404f', asset: '/assets/999.webp', core: true },
+  { id: 'gbgr', name: 'Goodbye & Good Riddance', color: '#4da6ff', asset: '/assets/gbgr.webp', core: true },
+  { id: 'drfl', name: 'Death Race for Love', color: '#ff8426', asset: '/assets/drfl.webp', core: true },
+  { id: 'lnd', name: 'Legends Never Die', color: '#e864c0', asset: '/assets/lnd.webp', core: true },
+  { id: 'fd', name: 'Fighting Demons', color: '#4ce4eb', asset: '/assets/fd.webp', core: true },
+  { id: 'lnd_5yae', name: 'Legends Never Die (5 Year Anniversary)', color: '#ff9330', asset: '/assets/lnd_5yae.webp' },
+  { id: 'wod', name: 'WRLD ON DRUGS', color: '#a8e048', asset: '/assets/wod.webp' },
+  { id: 'tpne', name: 'The Party Never Ends', color: '#f2b949', asset: '/assets/tpne.webp' },
+  { id: 'tpp', name: 'The Pre-Party', color: '#ff5c8a', asset: '/assets/tpp.webp' },
+  { id: 'tpp_ee', name: 'The Pre-Party (Extended)', color: '#ff7a59', asset: '/assets/tpp_ee.webp' },
+  { id: 'gbgr_ae', name: 'GB&GR (Anniversary)', color: '#5bb8ff', asset: '/assets/gbgr_ae.webp' },
+  { id: 'gbgr_5yae', name: 'GB&GR (5 Year Anniversary)', color: '#3b8ef3', asset: '/assets/gbgr_5yae.webp' },
+  { id: 'nd', name: "NOTHING'S DIFFERENT </3", color: '#e04868', asset: '/assets/nd.webp' },
+  { id: 'bdm', name: 'BINGEDRINKINGMUSIC', color: '#9c6bff', asset: '/assets/bdm.webp' },
+  { id: 'hih_999', name: 'Heartbroken In Hollywood 9 9 9', color: '#ff4d6d', asset: '/assets/hih_999.webp' },
+  { id: 'aff', name: 'Affliction', color: '#c084fc', asset: '/assets/aff.webp' },
+  { id: 'jute', name: 'JUICED UP THE EP', color: '#f59e0b', asset: '/assets/jute.webp' },
 ]
 
-const ALBUM_ITEMS: ReadonlyArray<AlbumBounceItem> = ALBUM_BOUNCE_SPECS.map(({ id, color }) => {
-  const skin = getSkin(id)
-  return {
-    id,
-    name: skin.name,
-    color,
-    art: buildImageUrl(skin.art ?? `/assets/${id}.webp`) ?? '',
-  }
-})
+export const ALL_BOUNCE_ALBUMS: ReadonlyArray<AlbumBounceItem> = ALBUM_BOUNCE_SPECS.map((spec) => ({
+  id: spec.id,
+  name: spec.name,
+  color: spec.color,
+  art: buildImageUrl(spec.asset) ?? '',
+  core: spec.core,
+}))
+
+export const CORE_BOUNCE_ALBUMS: ReadonlyArray<AlbumBounceItem> = ALL_BOUNCE_ALBUMS.filter((a) => a.core)
+
+export const BOUNCE_ALBUM_MAP: Readonly<Record<BounceAlbumId, AlbumBounceItem>> = Object.fromEntries(
+  ALL_BOUNCE_ALBUMS.map((item) => [item.id, item]),
+) as Record<BounceAlbumId, AlbumBounceItem>
 
 const ALBUM_BOX = 108
 const BUTTERFLY_BOX = 94
@@ -236,6 +278,7 @@ function pickSpawnOutside(hostW: number, hostH: number, size: number, obs: Obsta
 export default function StageBouncer({
   enabled,
   logo,
+  catalog = 'all',
   reducedMotion,
   playingCoverUrl,
   themeSync = false,
@@ -246,6 +289,8 @@ export default function StageBouncer({
 }: {
   enabled: boolean
   logo: BounceSpriteId
+  /** Which album cover set to cycle through: 'core' (5 studio albums) or 'all' (full discography & Deluxe). */
+  catalog?: BounceAlbumCatalog
   reducedMotion: boolean
   /** Current track cover art, used in 'cover' mode (falls back to album covers if absent). */
   playingCoverUrl?: string | null
@@ -255,9 +300,16 @@ export default function StageBouncer({
   obstacleRef?: RefObject<HTMLElement | null>
   onCornerHit?: () => void
   /** Fires on every wall bounce in Album Covers mode when themeSync is enabled. */
-  onBounceAlbumChange?: (albumId: SkinId, albumName: string, isCorner: boolean) => void
+  onBounceAlbumChange?: (albumId: BounceAlbumId, albumName: string, isCorner: boolean) => void
   className?: string
 }): JSX.Element | null {
+  const albumItems = useMemo(
+    () => (catalog === 'core' ? CORE_BOUNCE_ALBUMS : ALL_BOUNCE_ALBUMS),
+    [catalog],
+  )
+  const albumItemsRef = useRef<ReadonlyArray<AlbumBounceItem>>(albumItems)
+  albumItemsRef.current = albumItems
+
   const hostRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const trailRefs = useRef<Array<HTMLDivElement | null>>([])
@@ -277,7 +329,7 @@ export default function StageBouncer({
   const [albumIdx, setAlbumIdx] = useState(0)
   const [swapCount, setSwapCount] = useState(0)
   const [edgeWash, setEdgeWash] = useState<{ color: string; xPct: number; yPct: number; side: EdgeSide; active: boolean }>({
-    color: ALBUM_ITEMS[0].color,
+    color: ALL_BOUNCE_ALBUMS[0].color,
     xPct: 50,
     yPct: 50,
     side: 'left',
@@ -337,7 +389,7 @@ export default function StageBouncer({
 
     // Pooled GPU impact sparks (zero React state updates)
     const sparks: SparkState[] = Array.from({ length: SPARK_COUNT }, () => ({
-      active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0.45, size: 6, color: ALBUM_ITEMS[0].color,
+      active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0.45, size: 6, color: ALL_BOUNCE_ALBUMS[0].color,
     }))
 
     let last = performance.now()
@@ -498,9 +550,10 @@ export default function StageBouncer({
             (hitY && (x <= CORNER_TOLERANCE || x >= maxX - CORNER_TOLERANCE))
 
         const mode = logoRef.current
-        const nextAlbumIdx = (albumIdxRef.current + 1) % ALBUM_ITEMS.length
+        const items = albumItemsRef.current
+        const nextAlbumIdx = (albumIdxRef.current + 1) % items.length
         albumIdxRef.current = nextAlbumIdx
-        const nextAlbum = ALBUM_ITEMS[nextAlbumIdx]
+        const nextAlbum = items[nextAlbumIdx]
 
         setAlbumIdx(nextAlbumIdx)
         if (mode === 'albums') setSwapCount((c) => c + 1)
@@ -570,7 +623,8 @@ export default function StageBouncer({
       // Update 6-node luminous motion trail directly in DOM (0 React renders)
       trailHistory[trailHead] = { x: x + size * 0.5, y: y + size * 0.5 }
       trailHead = (trailHead + 1) % trailHistory.length
-      const activeCol = ALBUM_ITEMS[albumIdxRef.current % ALBUM_ITEMS.length].color
+      const items = albumItemsRef.current
+      const activeCol = items[albumIdxRef.current % items.length].color
       for (let i = 0; i < TRAIL_COUNT; i++) {
         const el = trailRefs.current[i]
         if (!el) continue
@@ -625,7 +679,7 @@ export default function StageBouncer({
 
   if (!enabled || reducedMotion) return null
 
-  const activeAlbum = ALBUM_ITEMS[albumIdx % ALBUM_ITEMS.length]
+  const activeAlbum = albumItems[albumIdx % albumItems.length]
   const sleeveArt = safeLogo === 'cover' && playingCoverUrl ? playingCoverUrl : activeAlbum.art
 
   return (

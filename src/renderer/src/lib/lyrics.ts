@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FullTrack, SyncedLyricLine, SyncedLyricWord, Track } from '../types'
+import type { FullTrack, SyncedLyricLine, SyncedLyricWord, Track } from '../types'
 
 /**
  * True while the playing track's lyrics aren't known yet: Player hasn't built
@@ -202,19 +202,47 @@ export function splitAdLibs(text: string): { text: string; adLib: boolean }[] {
 
 export interface WordRun { text: string; start: number; adLib: boolean; color?: string }
 
+export interface ColorWordRule {
+  phrase: string
+  /** High-contrast color on dark WRLD backdrops (WCAG AA >= 4.5:1). */
+  color: string
+  /** High-contrast color on light backdrops like GB&GR soft sky (WCAG AA >= 4.5:1). */
+  lightColor?: string
+}
+
+export interface ColorWordOptions {
+  light?: boolean
+  enabled?: boolean
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function ruleColor(rule: ColorWordRule, light?: boolean): string {
+  return light ? (rule.lightColor ?? rule.color) : rule.color
+}
+
 /**
- * A word-timed line's words with the same ad-lib dimming and color easter
- * eggs the plain renderers apply (see splitAdLibs / splitColorWords), worked
- * out on the joined text so phrases spanning words still match.
+ * A word-timed line's words with the same ad-lib dimming and color keyword
+ * highlights the plain renderers apply (see splitAdLibs / splitColorWords),
+ * worked out on the joined text so phrases spanning words still match.
  */
-export function wordRuns(words: SyncedLyricWord[], rules: ColorWordRule[] = LYRIC_COLOR_WORDS): WordRun[] {
+export function wordRuns(
+  words: SyncedLyricWord[],
+  rules: ColorWordRule[] = LYRIC_COLOR_WORDS,
+  options?: ColorWordOptions,
+): WordRun[] {
   const text = words.map(w => w.text).join(' ')
   const adLibAt = new Array<boolean>(text.length).fill(false)
   for (const m of text.matchAll(/\([^)\r\n]*\)/g)) adLibAt.fill(true, m.index ?? 0, (m.index ?? 0) + m[0].length)
   const colorAt = new Array<string | undefined>(text.length).fill(undefined)
-  for (const rule of rules) {
-    const re = new RegExp(rule.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
-    for (const m of text.matchAll(re)) colorAt.fill(rule.color, m.index ?? 0, (m.index ?? 0) + m[0].length)
+  if (options?.enabled !== false) {
+    for (const rule of rules) {
+      const re = new RegExp(`(?<![A-Za-z0-9])${escapeRegex(rule.phrase)}(?![A-Za-z0-9])`, 'gi')
+      const col = ruleColor(rule, options?.light)
+      for (const m of text.matchAll(re)) colorAt.fill(col, m.index ?? 0, (m.index ?? 0) + m[0].length)
+    }
   }
   let pos = 0
   return words.map(w => {
@@ -224,28 +252,73 @@ export function wordRuns(words: SyncedLyricWord[], rules: ColorWordRule[] = LYRI
   })
 }
 
-export interface ColorWordRule { phrase: string; color: string }
-
-/** Hardcoded word/phrase -> color easter egg for the synced lyrics view.
- *  Edit this list directly to add or change pairs. */
+/** Thematic Juice WRLD keyword -> color rules for synced lyrics (WCAG AA on dark and light backdrops). */
 export const LYRIC_COLOR_WORDS: ColorWordRule[] = [
-  { phrase: 'R Kelly', color: '#fcba03' },
-    { phrase: 'R. Kelly', color: '#fcba03' },
+  // Signature Juice WRLD / 999 gold
+  { phrase: '999', color: '#ffd166', lightColor: '#9a5b00' },
+  { phrase: 'Juice WRLD', color: '#ffd166', lightColor: '#9a5b00' },
+  { phrase: 'Juice', color: '#ffd166', lightColor: '#9a5b00' },
+  { phrase: 'WRLD', color: '#ffd166', lightColor: '#9a5b00' },
+  // Ice / cold / blue
+  { phrase: 'cold', color: '#7dd3fc', lightColor: '#0369a1' },
+  { phrase: 'winter', color: '#7dd3fc', lightColor: '#0369a1' },
+  { phrase: 'ice', color: '#7dd3fc', lightColor: '#0369a1' },
+  { phrase: 'frozen', color: '#7dd3fc', lightColor: '#0369a1' },
+  { phrase: 'blue', color: '#7dd3fc', lightColor: '#0369a1' },
+  // Lean / purple / codeine
+  { phrase: 'lean', color: '#d8b4fe', lightColor: '#6d28d9' },
+  { phrase: 'Wock', color: '#d8b4fe', lightColor: '#6d28d9' },
+  { phrase: 'purple', color: '#d8b4fe', lightColor: '#6d28d9' },
+  { phrase: 'codeine', color: '#d8b4fe', lightColor: '#6d28d9' },
+  // Fire / hell / demons / red
+  { phrase: 'fire', color: '#fb7185', lightColor: '#be123c' },
+  { phrase: 'hell', color: '#fb7185', lightColor: '#be123c' },
+  { phrase: 'blood', color: '#fb7185', lightColor: '#be123c' },
+  { phrase: 'demons', color: '#fb7185', lightColor: '#be123c' },
+  { phrase: 'demon', color: '#fb7185', lightColor: '#be123c' },
+  { phrase: 'red', color: '#fb7185', lightColor: '#be123c' },
+  // Love / heart / angel / heaven
+  { phrase: 'love', color: '#f9a8d4', lightColor: '#be185d' },
+  { phrase: 'heart', color: '#f9a8d4', lightColor: '#be185d' },
+  { phrase: 'angel', color: '#f9a8d4', lightColor: '#be185d' },
+  { phrase: 'heaven', color: '#f9a8d4', lightColor: '#be185d' },
+  // Gold / diamonds / money / rich
+  { phrase: 'gold', color: '#fde047', lightColor: '#854d0e' },
+  { phrase: 'diamonds', color: '#6ee7b7', lightColor: '#047857' },
+  { phrase: 'money', color: '#6ee7b7', lightColor: '#047857' },
+  { phrase: 'rich', color: '#6ee7b7', lightColor: '#047857' },
+  // Existing easter egg
+  { phrase: 'R Kelly', color: '#fcba03', lightColor: '#9a5b00' },
+  { phrase: 'R. Kelly', color: '#fcba03', lightColor: '#9a5b00' },
 ]
 
 /**
  * Split a run of lyric text around any configured color-word phrases, so the
  * renderer can color just the matched text and leave the rest untouched.
- * Case-insensitive; matched phrases keep their original casing in the output.
+ * Case-insensitive with word boundaries; matched phrases keep their original casing.
  */
-export function splitColorWords(text: string, rules: ColorWordRule[] = LYRIC_COLOR_WORDS): { text: string; color?: string }[] {
-  if (rules.length === 0 || !text) return [{ text }]
-  const pattern = rules.map(r => r.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
-  const parts = text.split(new RegExp(`(${pattern})`, 'gi')).filter(p => p !== undefined && p !== '')
-  return parts.map(part => {
-    const rule = rules.find(r => r.phrase.toLowerCase() === part.toLowerCase())
-    return rule ? { text: part, color: rule.color } : { text: part }
-  })
+export function splitColorWords(
+  text: string,
+  rules: ColorWordRule[] = LYRIC_COLOR_WORDS,
+  options?: ColorWordOptions,
+): { text: string; color?: string }[] {
+  if (options?.enabled === false || rules.length === 0 || !text) return [{ text }]
+  // Match longer phrases first so "Juice WRLD" wins before "Juice".
+  const ordered = [...rules].sort((a, b) => b.phrase.length - a.phrase.length)
+  const pattern = ordered.map(r => escapeRegex(r.phrase)).join('|')
+  const re = new RegExp(`(?<![A-Za-z0-9])(?:${pattern})(?![A-Za-z0-9])`, 'gi')
+  const out: { text: string; color?: string }[] = []
+  let last = 0
+  for (const m of text.matchAll(re)) {
+    const idx = m.index ?? 0
+    if (idx > last) out.push({ text: text.slice(last, idx) })
+    const matched = m[0]
+    const rule = ordered.find(r => r.phrase.toLowerCase() === matched.toLowerCase())
+    out.push(rule ? { text: matched, color: ruleColor(rule, options?.light) } : { text: matched })
+    last = idx + matched.length
+  }
+  if (last < text.length) out.push({ text: text.slice(last) })
+  return out.length > 0 ? out : [{ text }]
 }
 
 /**

@@ -101,6 +101,11 @@ contextBridge.exposeInMainWorld('electron', {
   // Reads a text file for the in-app viewer, capped at 2 MB. Resolves
   // { ok, text, truncated, size } | { error }.
   readTextFile: (filePath)           => ipcRenderer.invoke('read-text-file', filePath),
+  readLocalSyncedLyrics: (songId)    => ipcRenderer.invoke('synced-lyrics-read', songId),
+  writeLocalSyncedLyrics: (songId, lrc) => ipcRenderer.invoke('synced-lyrics-write', songId, lrc),
+  deleteLocalSyncedLyrics: (songId)  => ipcRenderer.invoke('synced-lyrics-delete', songId),
+  readSyncedLyricsPack: ()           => ipcRenderer.invoke('synced-lyrics-pack-read'),
+  writeSyncedLyricsPack: (gzBytes, meta) => ipcRenderer.invoke('synced-lyrics-pack-write', gzBytes, meta),
   localCreate: (dirPath, name, kind) => ipcRenderer.invoke('local-create', dirPath, name, kind),
   localRename: (filePath, name)      => ipcRenderer.invoke('local-rename', filePath, name),
   localDelete: (paths)               => ipcRenderer.invoke('local-delete', paths),
