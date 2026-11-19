@@ -72,6 +72,20 @@ def clean_plain_lyrics(raw: str) -> list[str]:
     return lines
 
 
+def lyrics_hash(lines: list[str]) -> str:
+    norm = "\n".join(re.sub(r"\s+", " ", ln.lower()).strip() for ln in lines if ln.strip())
+    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
+
+
+def dedup_keys(lines: list[str], duration_sec: float | None) -> list[str]:
+    """Return ±2s bucket keys for (cleaned_lyrics_hash, duration) deduplication."""
+    if duration_sec is None or duration_sec < 15.0 or len(lines) < 4:
+        return []
+    h = lyrics_hash(lines)
+    bucket = int(round(duration_sec / 2.0))
+    return [f"{h}:{bucket}", f"{h}:{bucket - 1}", f"{h}:{bucket + 1}"]
+
+
 def parse_lrc_lines(lrc: str) -> list[tuple[float, str]]:
     out: list[tuple[float, str]] = []
     for raw_line in lrc.replace("\r\n", "\n").split("\n"):
@@ -396,6 +410,15 @@ def main() -> int:
     print(f"[pass 0] Loaded {len(catalog)} songs; {len(checkpoint)} already in checkpoint.")
 
     aligner = CtcAlignerRunner(device=args.device)
+    # Cache of (lyrics_hash:duration_bucket) -> (lrc, score) so alternate audio
+    # mixes with identical lyrics & duration (±2s) reuse timestamps instantly.
+    dedup_cache: dict[str, tuple[str, float]] = {}
+    for row in checkpoint.values():
+        fp = row.get("fp")
+        lrc_val = row.get("lrc")
+        if fp and isinstance(lrc_val, str) and lrc_val.strip():
+            dedup_cache[fp] = (lrc_val.strip(), float(row.get("score", 0.5)))
+
     processed = 0
 
     for entry in catalog:
@@ -419,13 +442,42 @@ def main() -> int:
         duration = parse_duration(song.get("length"))
         category = song.get("category")
 
-        # Skip songs that already have official synced_lyrics on the API
+        # Skip songs that already have official synced_lyrics on the API,
+        # but index their fingerprint so identical-length alternate mixes can reuse them.
         if existing_synced:
+            if raw_lyrics:
+                keys = dedup_keys(clean_plain_lyrics(raw_lyrics), duration)
+                if keys:
+                    dedup_cache[keys[0]] = (existing_synced, 1.0)
             append_checkpoint(ckpt_path, {"id": song_id, "name": name, "status": "api_synced", "score": 1.0})
             continue
 
         if not raw_lyrics or not audio_rel:
             append_checkpoint(ckpt_path, {"id": song_id, "name": name, "status": "skipped", "reason": "no_lyrics_or_audio"})
+            continue
+
+        cleaned = clean_plain_lyrics(raw_lyrics)
+        if len(cleaned) < 2:
+            append_checkpoint(ckpt_path, {"id": song_id, "name": name, "status": "skipped", "reason": "too_few_lines"})
+            continue
+
+        # Fast reuse when another version has the exact same lyrics & duration (±2s)
+        keys = dedup_keys(cleaned, duration)
+        reused = next((dedup_cache[k] for k in keys if k in dedup_cache), None)
+        if reused is not None:
+            reused_lrc, reused_score = reused
+            row = {
+                "id": song_id,
+                "name": name,
+                "status": "ok",
+                "source": "dedup_reuse",
+                "score": reused_score,
+                "fp": keys[0],
+                "lrc": reused_lrc,
+            }
+            append_checkpoint(ckpt_path, row)
+            checkpoint[song_id] = row
+            print(f"[reuse] #{song_id} {name} -> {reused_score:.2f} (0.0s)")
             continue
 
         processed += 1
@@ -435,14 +487,13 @@ def main() -> int:
         if category == "released":
             lrclib_lrc = query_lrclib(name, song.get("credited_artists") or "Juice WRLD", duration)
             if lrclib_lrc:
-                append_checkpoint(ckpt_path, {"id": song_id, "name": name, "status": "ok", "source": "lrclib", "score": 0.95, "lrc": lrclib_lrc})
+                if keys:
+                    dedup_cache[keys[0]] = (lrclib_lrc, 0.95)
+                row = {"id": song_id, "name": name, "status": "ok", "source": "lrclib", "score": 0.95, "fp": keys[0] if keys else None, "lrc": lrclib_lrc}
+                append_checkpoint(ckpt_path, row)
+                checkpoint[song_id] = row
                 print(f"[lrclib] #{song_id} {name} -> ok (0.95)")
                 continue
-
-        cleaned = clean_plain_lyrics(raw_lyrics)
-        if len(cleaned) < 2:
-            append_checkpoint(ckpt_path, {"id": song_id, "name": name, "status": "skipped", "reason": "too_few_lines"})
-            continue
 
         # Download audio to a per-song temp directory that is wiped immediately after alignment
         audio_url = f"{API_BASE}/files/download/?path={urllib.parse.quote(audio_rel)}"
@@ -469,7 +520,9 @@ def main() -> int:
 
                 dt = time.time() - t0
                 if lrc and score >= args.min_score:
-                    row = {"id": song_id, "name": name, "status": "ok", "source": source, "score": score, "lrc": lrc}
+                    if keys:
+                        dedup_cache[keys[0]] = (lrc, score)
+                    row = {"id": song_id, "name": name, "status": "ok", "source": source, "score": score, "fp": keys[0] if keys else None, "lrc": lrc}
                     print(f"[{source}] #{song_id} {name} -> {score:.2f} ({dt:.1f}s)")
                 else:
                     row = {"id": song_id, "name": name, "status": "low_confidence", "source": source, "score": score}
